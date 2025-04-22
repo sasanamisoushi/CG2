@@ -237,7 +237,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::string str1{ std::to_string(10) };
 
 	//コマンドキューを生成
-	ID3D12CommandQueue* commandQ
+	ID3D12CommandQueue *commandQueue = nullptr;
+	D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};
+	hr = device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&commandQueue));
+
+	//コマンドキューの生成がうまくいかなかったので起動できない
+	assert(SUCCEEDED(hr));
+
+	//コマンドアロケータを生成する
+	ID3D12CommandAllocator *commandAllocator = nullptr;
+	hr = device->CreateCommandAllocator();
 
 	
 	return 0;
