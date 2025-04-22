@@ -112,8 +112,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::ofstream logStream(logFilePath);
 
 	//Dumpファイル製作用のエラー元
-	uint32_t *p = nullptr;
-	*p = 100;
+	/*uint32_t *p = nullptr;
+	*p = 100;*/
 
 	WNDCLASS wc{};
 	//ウインドウプロシージャ
