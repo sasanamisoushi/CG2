@@ -236,7 +236,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//整数を文字列にする
 	std::string str1{ std::to_string(10) };
 
-	
+	//コマンドキューを生成
+	ID3D12CommandQueue* commandQ
 
 	
 	return 0;
