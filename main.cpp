@@ -218,6 +218,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(device != nullptr);
 	Log(logStream, "Complete create D3D12Device!!!\n");
 
+	//コマンドキューを生成
+	ID3D12CommandQueue *commandQueue = nullptr;
+	D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};
+	hr = device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&commandQueue));
+
+	//コマンドキューの生成がうまくいかなかったので起動できない
+	assert(SUCCEEDED(hr));
+
+	//コマンドアロケータを生成する
+	ID3D12CommandAllocator *commandAllocator = nullptr;
+	hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator));
+	//コマンドアロケータを生成がうまくいかなっかたので起動できない
+	assert(SUCCEEDED(hr));
+
+	ID3D12GraphicsCommandList *commandList = nullptr;
+	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr, IID_PPV_ARGS(&commandList));
+
+	//コマンドリストの生成がうまくいかなかったので起動できない
+	assert(SUCCEEDED(hr));
+
+
 	MSG msg{};
 	while (msg.message !=WM_QUIT) {
 		//WIndowにメッセージが来てたら最優先で処理させる
@@ -236,18 +257,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//整数を文字列にする
 	std::string str1{ std::to_string(10) };
 
-	//コマンドキューを生成
-	ID3D12CommandQueue *commandQueue = nullptr;
-	D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};
-	hr = device->CreateCommandQueue(&commandQueueDesc, IID_PPV_ARGS(&commandQueue));
-
-	//コマンドキューの生成がうまくいかなかったので起動できない
-	assert(SUCCEEDED(hr));
-
-	//コマンドアロケータを生成する
-	ID3D12CommandAllocator *commandAllocator = nullptr;
-	hr = device->CreateCommandAllocator();
-
+	
 	
 	return 0;
 }
