@@ -12,12 +12,15 @@
 #include <strsafe.h>
 #include<dxgidebug.h>
 #pragma comment(lib,"dxguid.lib")
+#include <dxcapi.h>
+#pragma comment(lib,"dxcompiler.lib")
 
 
 
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"Dbghelp.lib")
+
 
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
@@ -90,7 +93,82 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 
+IDxcBlob *CompileShader(
+	//CompilerするShaderファイルへのパス
+	const std::wstring &filePath,
+	//Complerに使用するProfils
+	const wchar_t *profile,
+	//初期化で生成したものを３つ
+	IDxcUtils *dxcUtils,
+	IDxcCompiler3 *CLSID_DxcCompiler,
+	IDxcIncludeHandler *includeHandler,
+	std::ostream& os
+) {
+	//これからシェーダーをコンパイルする旨をログに出す
+	Log(os, ConvertString(std::format(L"Begin CompileShader,path:{},profile:{}\n", filePath, profile)));
+	//hlslファイルを読む
+	IDxcBlobEncoding *shaderSource = nullptr;
+	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+	//読めなかったら止める
+	assert(SUCCEEDED(hr));
+	//読み込んだファイルの内容を設定する
+	DxcBuffer shaderSourceBuffer;
+	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+	shaderSourceBuffer.Encoding = DXC_CP_UTF8;
+	
+	LPCWSTR arguments[] = {
+		//コンパイル対象のhlslファイル名
+		filePath.c_str(),
+		//エントリーポイントの指定。基本的にmain以外にはしない
+		L"-E",L"main",
+		//ShaderProfileの設定
+		L"-T",profile,
+		//デバック用の情報を埋め込む
+		L"-Zi",L"-Qembed_debug",
+		//最適化を外しておく
+		L"-Od",
+		//メモリレイアウトは行優先
+		L"-Zpr",
+	};
+	//実際にShaderをコンパイルする
+	IDxcResult *shaderResult = nullptr;
+	hr = CLSID_DxcCompiler->Compile(
+		//読み込んだファイル
+		&shaderSourceBuffer,
+		//コンパイルオプション
+		arguments,
+		//コンパイルオプションの数
+		_countof(arguments),
+		//includeが含まれた諸々
+		includeHandler,
+		//コンパイル結果
+		IID_PPV_ARGS(&shaderResult)
+	);
+	//コンパイルエラーではなくdxcが起動できないなど致命的な状況
+	assert(SUCCEEDED(hr));
 
+	//警告・エラーが出てたらログに出して止める
+	IDxcBlobUtf8 *shaderError = nullptr;
+	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+	if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
+		Log(os,shaderError->GetStringPointer());
+		//警告・エラーダメゼッタイ
+		assert(false);
+	}
+	
+	//コンパイル結果から実行用のバイナリ部分を取得
+	IDxcBlob *shaderBlob = nullptr;
+	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+	assert(SUCCEEDED(hr));
+	//成功したらログを出す
+	Log(os, ConvertString(std::format(L"Compile Succeeded,path:{},profile:{}_n", filePath, profile)));
+	//もう使わないリソースを解放
+	shaderSource->Release();
+	shaderResult->Release();
+	//実行用のバイナリを返却
+	return shaderBlob;
+}
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -343,6 +421,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
 
+	//dxcCompilerを初期化
+	IDxcUtils *dxcUtils = nullptr;
+	IDxcCompiler3 *dxcCompiler = nullptr;
+	hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+	assert(SUCCEEDED(hr));
+	hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+	assert(SUCCEEDED(hr));
+
+	//現時点でincludはしないが、includeに対応するための設定を行っておく
+	IDxcIncludeHandler *includeHandler = nullptr;
+	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+	assert(SUCCEEDED(hr));
+
+	//RootSignature作成
+	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
+	descriptionRootSignature.Flags =
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	//シリアライズしてバイナルにする
+
+
+
+
 	//メインループ
 	
 	MSG msg{};
@@ -427,6 +527,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//解放処理
 	CloseHandle(fenceEvent);
+	includeHandler->Release();
+	dxcCompiler->Release();
+	dxcUtils->Release();
 	fence->Release();
 	rtvDescriptorHeap->Release();
 	swapChainResources[0]->Release();
