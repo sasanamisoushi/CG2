@@ -178,6 +178,48 @@ IDxcBlob *CompileShader(
 	return shaderBlob;
 }
 
+
+ID3D12Resource *CreateBufferResource(ID3D12Device *device, size_t sizeInBytes) {
+	//頂点リソース用のヒープの設定
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+	//頂点リソースの設定
+	D3D12_RESOURCE_DESC vertexResourceDesc{};
+
+	//バッファリソース。テクスチャの場合はまた別の設定をする
+	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	vertexResourceDesc.Width = sizeof(Vector4) * 3;   //リソースのサイズ。今回はVector4を3頂点分
+
+	//バッファの場合はこれらほ１にする決まり
+	vertexResourceDesc.Height = 1;
+	vertexResourceDesc.DepthOrArraySize = 1;
+	vertexResourceDesc.MipLevels = 1;
+	vertexResourceDesc.SampleDesc.Count = 1;
+
+	//バッファの場合はこれにする決まり
+	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	//実際に頂点リソースを作る
+	ID3D12Resource *vertexResource = nullptr;
+	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+		&vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+		IID_PPV_ARGS(&vertexResource));
+	assert(SUCCEEDED(hr));
+
+	//頂点バッファビューを作成
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+
+	//リリースの先頭のアドレスから使う
+	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+
+	//使用するリソースのサイズは頂点が3つ分のサイズ
+	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+
+	//1頂点あたりのサイズ
+	vertexBufferView.StrideInBytes = sizeof(Vector4);
+}
+
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	
@@ -446,6 +488,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	descriptionRootSignature.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	
+	//RootParameter作成。複製設定できるので配列
+	D3D12_ROOT_PARAMETER rootParamerers[1] = {};
+	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
+	descriptionRootSignature.pParameters = rootParamerers;//ルートパラメータ配列のポインタ
+	descriptionRootSignature.NumParameters = _countof(rootParamerers);//配列の長さ
+	
+	
+	
+	
 	//シリアライズしてバイナルにする
 	ID3DBlob *signatureBlob = nullptr;
 	ID3DBlob *errorBlob = nullptr;
@@ -520,7 +574,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	assert(SUCCEEDED(hr));
 
 
-	//頂点リソース用のヒープ
+	//頂点リソース用のヒープの設定
 	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
 	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; 
 
