@@ -183,7 +183,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	
 	//誰も捕捉しなかった場合に補足する関数の登録
 	SetUnhandledExceptionFilter(ExportDump);
-
+	
 	//ログの出力用のフォルダ
 	std::filesystem::create_directory("logs");
 	//現在時刻を取得
