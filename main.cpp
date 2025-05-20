@@ -571,16 +571,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource *matetialResource = CreateBufferResource(device, sizeof(Vector4));
 	//マテリアルにデータを書き込む
 	Vector4 *materialData = nullptr;
-	//書き込むためのアドレスを取得
-	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
-	//今回は赤を書き込んで見る
-	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+	
 
 	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
 
 	
-
-
 	//頂点バッファビューを作成
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 
@@ -597,7 +592,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector4 *vertexData = nullptr;
 
 	//書き込むためのアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
+	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
+	//今回は赤を書き込んで見る
+	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	//左下
 	vertexData[0] = { -0.5f,-0.5f,0.0f,1.0f };
