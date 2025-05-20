@@ -483,10 +483,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	
 	//RootParameter作成。複製設定できるので配列
-	D3D12_ROOT_PARAMETER rootParamerers[1] = {};
+	D3D12_ROOT_PARAMETER rootParamerers[2] = {};
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
+	rootParamerers[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
 	descriptionRootSignature.pParameters = rootParamerers;//ルートパラメータ配列のポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);//配列の長さ
 	
@@ -571,7 +574,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource *matetialResource = CreateBufferResource(device, sizeof(Vector4));
 	//マテリアルにデータを書き込む
 	Vector4 *materialData = nullptr;
-	
+	//書き込むためのアドレスを取得
+	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
+	//今回は赤を書き込んで見る
+	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
 	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
 
@@ -592,9 +598,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector4 *vertexData = nullptr;
 
 	//書き込むためのアドレスを取得
-	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
-	//今回は赤を書き込んで見る
-	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
+	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
+
+	
 
 	//左下
 	vertexData[0] = { -0.5f,-0.5f,0.0f,1.0f };
