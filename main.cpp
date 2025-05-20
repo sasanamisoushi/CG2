@@ -29,6 +29,10 @@ struct Vector4 final {
 	float w;
 };
 
+struct Matrix4x4 {
+	float m[4][4];
+};
+
 
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
@@ -191,7 +195,7 @@ ID3D12Resource *CreateBufferResource(ID3D12Device *device, size_t sizeInBytes) {
 
 	//バッファリソース。テクスチャの場合はまた別の設定をする
 	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	vertexResourceDesc.Width = sizeof(Vector4) * 3;   //リソースのサイズ。今回はVector4を3頂点分
+	vertexResourceDesc.Width = sizeInBytes;   //リソースのサイズ。今回はVector4を3頂点分
 
 	//バッファの場合はこれらほ１にする決まり
 	vertexResourceDesc.Height = 1;
@@ -489,7 +493,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
 	rootParamerers[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-
+	rootParamerers[1].Descriptor.ShaderRegister = 0;
 	descriptionRootSignature.pParameters = rootParamerers;//ルートパラメータ配列のポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);//配列の長さ
 	
@@ -610,6 +614,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//右下
 	vertexData[2] = { 0.5f,-0.5f,0.0f,1.0f };
+
+
+	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
+	ID3D12Resource *wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	//データを書(き込む
+	Matrix4x4 *wvpData = nullptr;
+	//書き込むためのアドレスを取得
+	wvpResource->Map(0, nullptr, reinterpret_cast<void **>(&wvpData));
+	//単位行列を書き込んでおく
+	*wvpData = MakeIndentity4x4();
 
 
 	//ビューポート
