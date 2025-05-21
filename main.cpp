@@ -418,6 +418,14 @@ ID3D12Resource *CreateBufferResource(ID3D12Device *device, size_t sizeInBytes) {
 }
 
 
+ID3D12DescriptorHeap *CreateDescriptorHesp(
+	ID3D12Device *device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible
+) {
+	ID3D12DescriptorHeap *descriptorHeapDesc{};
+	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+
+}
+
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -848,6 +856,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRecct.top = 0;
 	scissorRecct.bottom = kClinentHeight;
 
+	
 
 	//Transform変更
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
@@ -864,7 +873,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			DispatchMessage(&msg);
 		} else {
 
+			//Update
+
 			//ゲーム処理
+
+			//Draw
 
 			//Transformの更新
 			transform.rotate.y += 0.03f;
