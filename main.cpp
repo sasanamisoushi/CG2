@@ -21,8 +21,13 @@
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"Dbghelp.lib")
 
+struct Vector3  {
+	float x;
+	float y;
+	float z;
+};
 
-struct Vector4 final {
+struct Vector4  {
 	float x;
 	float y;
 	float z;
@@ -33,7 +38,202 @@ struct Matrix4x4 {
 	float m[4][4];
 };
 
+struct Transform {
+	Vector3 scale;
+	Vector3 rotate;
+	Vector3 translate;
+};
 
+//x軸回転行列
+Matrix4x4 MakeRoteXMatrix(float radian) {
+	Matrix4x4 result = {
+		1,0,0,0,
+		0,cosf(radian),sinf(radian),0,
+		0,-sinf(radian),cosf(radian),0,
+		0,0,0,1,
+	};
+	return result;
+}
+
+//Y軸回転行列
+Matrix4x4 MakeRotateYMatrix(float radian) {
+	Matrix4x4 result = {
+		cosf(radian),0,-sinf(radian),0,
+		0,1,0,0,
+		sinf(radian),0,cosf(radian),0,
+		0,0,0,1,
+	};
+	return result;
+}
+
+//Z軸回転行列
+Matrix4x4 MakeRotateZMatrix(float radian) {
+	Matrix4x4 result = {
+		cosf(radian),sinf(radian),0,0,
+		-sinf(radian),cosf(radian),0,0,
+		0,0,1,0,
+		0,0,0,1,
+	};
+	return result;
+}
+
+//平行移動行列
+Matrix4x4 MakeTranslateMatrix(const Vector3 &translate) {
+	Matrix4x4 result = {
+	  1, 0, 0, 0,
+	  0, 1, 0, 0,
+	  0, 0, 1, 0,
+	 translate.x, translate.y, translate.z, 1
+	};
+	return result;
+}
+
+//積
+Matrix4x4 Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2) {
+	Matrix4x4 result = {};
+	for (int i = 0; i < 4; ++i) {
+		for (int j = 0; j < 4; ++j) {
+			for (int k = 0; k < 4; ++k) {
+				result.m[i][j] += m1.m[i][k] * m2.m[k][j];
+			}
+		}
+	}
+	return result;
+}
+
+//アフィン変換行列
+Matrix4x4 MakeAffineMatrox(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate) {
+	Matrix4x4 result;
+
+	// スケーリング行列
+	Matrix4x4 scaleMat = {
+		scale.x, 0,       0,       0,
+		0,       scale.y, 0,       0,
+		0,       0,       scale.z, 0,
+		0,       0,       0,       1
+	};
+
+	Matrix4x4 rot = Multiply(Multiply(MakeRoteXMatrix(rotate.x), MakeRotateYMatrix(rotate.y)), MakeRotateZMatrix(rotate.z));
+	result = Multiply(Multiply(scaleMat, rot), MakeTranslateMatrix(translate));
+
+	return result;
+}
+
+//単位行列
+Matrix4x4 MakeIdentity4x4() {
+	Matrix4x4 result = {};
+	for (int i = 0; i < 4; ++i) {
+		result.m[i][i] = 1.0f;
+	}
+	return result;
+}
+
+//ビューポート変換行列
+Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth) {
+	Matrix4x4 mat = {};
+
+	float halfWidth = width * 0.5f;
+	float halfHeight = height * 0.5f;
+	float depthRange = maxDepth - minDepth;
+
+	mat.m[0][0] = halfWidth;
+	mat.m[1][1] = -halfHeight; // Y軸が上から下へ向かう場合
+	mat.m[2][2] = depthRange;
+	mat.m[3][0] = left + halfWidth;
+	mat.m[3][1] = top + halfHeight;
+	mat.m[3][2] = minDepth;
+	mat.m[3][3] = 1.0f;
+
+	return mat;
+}
+
+//逆行列
+Matrix4x4 Inverse(const Matrix4x4 &m) {
+	Matrix4x4 result = {};
+	float determinant =
+		m.m[0][0] * m.m[1][1] * m.m[2][2] * m.m[3][3] + m.m[0][0] * m.m[1][2] * m.m[2][3] * m.m[3][1] + m.m[0][0] * m.m[1][3] * m.m[2][1] * m.m[3][2] -
+		m.m[0][0] * m.m[1][3] * m.m[2][2] * m.m[3][1] - m.m[0][0] * m.m[1][2] * m.m[2][1] * m.m[3][3] - m.m[0][0] * m.m[1][1] * m.m[2][3] * m.m[3][2] -
+		m.m[0][1] * m.m[1][0] * m.m[2][2] * m.m[3][3] - m.m[0][2] * m.m[1][0] * m.m[2][3] * m.m[3][1] - m.m[0][3] * m.m[1][0] * m.m[2][1] * m.m[3][2] +
+		m.m[0][3] * m.m[1][0] * m.m[2][2] * m.m[3][1] + m.m[0][2] * m.m[1][0] * m.m[2][1] * m.m[3][3] + m.m[0][1] * m.m[1][0] * m.m[2][3] * m.m[3][2] +
+		m.m[0][1] * m.m[1][2] * m.m[2][0] * m.m[3][3] + m.m[0][2] * m.m[1][3] * m.m[2][0] * m.m[3][1] + m.m[0][3] * m.m[1][1] * m.m[2][0] * m.m[3][2] -
+		m.m[0][3] * m.m[1][2] * m.m[2][0] * m.m[3][1] - m.m[0][2] * m.m[1][1] * m.m[2][0] * m.m[3][3] - m.m[0][1] * m.m[1][3] * m.m[2][0] * m.m[3][2] -
+		m.m[0][1] * m.m[1][2] * m.m[2][3] * m.m[3][0] - m.m[0][2] * m.m[1][3] * m.m[2][1] * m.m[3][0] - m.m[0][3] * m.m[1][1] * m.m[2][2] * m.m[3][0] +
+		m.m[0][3] * m.m[1][2] * m.m[2][1] * m.m[3][0] + m.m[0][2] * m.m[1][1] * m.m[2][3] * m.m[3][0] + m.m[0][1] * m.m[1][3] * m.m[2][2] * m.m[3][0];
+
+
+	if (determinant == 0.0f) {
+		return result;
+	}
+
+	float InDit = 1.0f / determinant;
+
+	result.m[0][0] = InDit * (
+		m.m[1][1] * m.m[2][2] * m.m[3][3] + m.m[1][2] * m.m[2][3] * m.m[3][1] + m.m[1][3] * m.m[2][1] * m.m[3][2] -
+		m.m[1][3] * m.m[2][2] * m.m[3][1] - m.m[1][2] * m.m[2][1] * m.m[3][3] - m.m[1][1] * m.m[2][3] * m.m[3][2]);
+	result.m[0][1] = InDit * (
+		-m.m[0][1] * m.m[2][2] * m.m[3][3] - m.m[0][2] * m.m[2][3] * m.m[3][1] - m.m[0][3] * m.m[2][1] * m.m[3][2] +
+		m.m[0][3] * m.m[2][2] * m.m[3][1] + m.m[0][2] * m.m[2][1] * m.m[3][3] + m.m[0][1] * m.m[2][3] * m.m[3][2]);
+	result.m[0][2] = InDit * (
+		m.m[0][1] * m.m[1][2] * m.m[3][3] + m.m[0][2] * m.m[1][3] * m.m[3][1] + m.m[0][3] * m.m[1][1] * m.m[3][2] -
+		m.m[0][3] * m.m[1][2] * m.m[3][1] - m.m[0][2] * m.m[1][1] * m.m[3][3] - m.m[0][1] * m.m[1][3] * m.m[3][2]);
+	result.m[0][3] = InDit * (
+		-m.m[0][1] * m.m[1][2] * m.m[2][3] - m.m[0][2] * m.m[1][3] * m.m[2][1] - m.m[0][3] * m.m[1][1] * m.m[2][2] +
+		m.m[0][3] * m.m[1][2] * m.m[2][1] + m.m[0][2] * m.m[1][1] * m.m[2][3] + m.m[0][1] * m.m[1][3] * m.m[2][2]);
+	result.m[1][0] = InDit * (
+		-m.m[1][0] * m.m[2][2] * m.m[3][3] - m.m[1][2] * m.m[2][3] * m.m[3][0] - m.m[1][3] * m.m[2][0] * m.m[3][2] +
+		m.m[1][3] * m.m[2][2] * m.m[3][0] + m.m[1][2] * m.m[2][0] * m.m[3][3] + m.m[1][0] * m.m[2][3] * m.m[3][2]);
+	result.m[1][1] = InDit * (
+		m.m[0][0] * m.m[2][2] * m.m[3][3] + m.m[0][2] * m.m[2][3] * m.m[3][0] + m.m[0][3] * m.m[2][0] * m.m[3][2] -
+		m.m[0][3] * m.m[2][2] * m.m[3][0] - m.m[0][2] * m.m[2][0] * m.m[3][3] - m.m[0][0] * m.m[2][3] * m.m[3][2]);
+	result.m[1][2] = InDit * (
+		-m.m[0][0] * m.m[1][2] * m.m[3][3] - m.m[0][2] * m.m[1][3] * m.m[3][0] - m.m[0][3] * m.m[1][0] * m.m[3][2] +
+		m.m[0][3] * m.m[1][2] * m.m[3][0] + m.m[0][2] * m.m[1][0] * m.m[3][3] + m.m[0][0] * m.m[1][3] * m.m[3][2]);
+	result.m[1][3] = InDit * (
+		m.m[0][0] * m.m[1][2] * m.m[2][3] + m.m[0][2] * m.m[1][3] * m.m[2][0] + m.m[0][3] * m.m[1][0] * m.m[2][2] -
+		m.m[0][3] * m.m[1][2] * m.m[2][0] - m.m[0][2] * m.m[1][0] * m.m[2][3] - m.m[0][0] * m.m[1][3] * m.m[2][2]);
+	result.m[2][0] = InDit * (
+		m.m[1][0] * m.m[2][1] * m.m[3][3] + m.m[1][1] * m.m[2][3] * m.m[3][0] + m.m[1][3] * m.m[2][0] * m.m[3][1] -
+		m.m[1][3] * m.m[2][1] * m.m[3][0] - m.m[1][1] * m.m[2][0] * m.m[3][3] - m.m[1][0] * m.m[2][3] * m.m[3][1]);
+	result.m[2][1] = InDit * (
+		-m.m[0][0] * m.m[2][1] * m.m[3][3] - m.m[0][1] * m.m[2][3] * m.m[3][0] - m.m[0][3] * m.m[2][0] * m.m[3][1] +
+		m.m[0][3] * m.m[2][1] * m.m[3][0] + m.m[0][1] * m.m[2][0] * m.m[3][3] + m.m[0][0] * m.m[2][3] * m.m[3][1]);
+	result.m[2][2] = InDit * (
+		m.m[0][0] * m.m[1][1] * m.m[3][3] + m.m[0][1] * m.m[1][3] * m.m[3][0] + m.m[0][3] * m.m[1][0] * m.m[3][1] -
+		m.m[0][3] * m.m[1][1] * m.m[3][0] - m.m[0][1] * m.m[1][0] * m.m[3][3] - m.m[0][0] * m.m[1][3] * m.m[3][1]);
+	result.m[2][3] = InDit * (
+		-m.m[0][0] * m.m[1][1] * m.m[2][3] - m.m[0][1] * m.m[1][3] * m.m[2][0] - m.m[0][3] * m.m[1][0] * m.m[2][1] +
+		m.m[0][3] * m.m[1][1] * m.m[2][0] + m.m[0][1] * m.m[1][0] * m.m[2][3] + m.m[0][0] * m.m[1][3] * m.m[2][1]);
+	result.m[3][0] = InDit * (
+		-m.m[1][0] * m.m[2][1] * m.m[3][2] - m.m[1][1] * m.m[2][2] * m.m[3][0] - m.m[1][2] * m.m[2][0] * m.m[3][1] +
+		m.m[1][2] * m.m[2][1] * m.m[3][0] + m.m[1][1] * m.m[2][0] * m.m[3][2] + m.m[1][0] * m.m[2][2] * m.m[3][1]);
+	result.m[3][1] = InDit * (
+		m.m[0][0] * m.m[2][1] * m.m[3][2] + m.m[0][1] * m.m[2][2] * m.m[3][0] + m.m[0][2] * m.m[2][0] * m.m[3][1] -
+		m.m[0][2] * m.m[2][1] * m.m[3][0] - m.m[0][1] * m.m[2][0] * m.m[3][2] - m.m[0][0] * m.m[2][2] * m.m[3][1]);
+	result.m[3][2] = InDit * (
+		-m.m[0][0] * m.m[1][1] * m.m[3][2] - m.m[0][1] * m.m[1][2] * m.m[3][0] - m.m[0][2] * m.m[1][0] * m.m[3][1] +
+		m.m[0][2] * m.m[1][1] * m.m[3][0] + m.m[0][1] * m.m[1][0] * m.m[3][2] + m.m[0][0] * m.m[1][2] * m.m[3][1]);
+	result.m[3][3] = InDit * (
+		m.m[0][0] * m.m[1][1] * m.m[2][2] + m.m[0][1] * m.m[1][2] * m.m[2][0] + m.m[0][2] * m.m[1][0] * m.m[2][1] -
+		m.m[0][2] * m.m[1][1] * m.m[2][0] - m.m[0][1] * m.m[1][0] * m.m[2][2] - m.m[0][0] * m.m[1][2] * m.m[2][1]);
+	return result;
+}
+
+//透視投影行列
+Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
+	Matrix4x4 result = {};
+
+	float f = 1.0f / tanf(fovY / 2.0f);
+
+
+	result.m[0][0] = f / aspectRatio;
+	result.m[1][1] = f;
+	result.m[2][2] = farClip / (farClip - nearClip);
+	result.m[2][3] = 1.0f;
+	result.m[3][2] = -nearClip * farClip / (farClip - nearClip);
+	result.m[3][3] = 0.0f;
+
+	return result;
+}
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
 
@@ -216,6 +416,8 @@ ID3D12Resource *CreateBufferResource(ID3D12Device *device, size_t sizeInBytes) {
 	
 	return vertexResource;
 }
+
+
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -615,6 +817,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//右下
 	vertexData[2] = { 0.5f,-0.5f,0.0f,1.0f };
 
+	
 
 	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	ID3D12Resource *wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
@@ -623,8 +826,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//書き込むためのアドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast<void **>(&wvpData));
 	//単位行列を書き込んでおく
-	*wvpData = MakeIndentity4x4();
-
+	*wvpData = MakeIdentity4x4();
+	
 
 	//ビューポート
 	D3D12_VIEWPORT viewport{};
@@ -646,6 +849,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	scissorRecct.bottom = kClinentHeight;
 
 
+	//Transform変更
+	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-5.0f } };
 	
 
 	//メインループ
@@ -657,6 +863,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		} else {
+
+			//ゲーム処理
+
+			//Transformの更新
+			transform.rotate.y += 0.03f;
+			Matrix4x4 worldMatrix = MakeAffineMatrox(transform.scale, transform.rotate, transform.translate);
+			*wvpData = worldMatrix;
+
+			//cameraMatrix
+			Matrix4x4 cameraMatrix = MakeAffineMatrox(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+
+			//viewMatrix
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+
+			//projectionMatrix
+			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f);
+
+			//worldViewProjectionMatrix
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
 			//TransitionBarrierの設定
@@ -695,6 +921,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+
+			//wvp用のBufferの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			//描画
 			commandList->DrawInstanced(3, 1, 0, 0);
@@ -757,6 +986,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::string str1{ std::to_string(10) };
 
 	//解放処理
+	wvpResource->Release();
 	matetialResource->Release();
 	vertexResource->Release();
 	graphicsPipelineState->Release();
