@@ -916,7 +916,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//開発用UIの処理
 			ImGui::ShowDemoWindow();
 
-			
+			ImGui::Begin("MaterialColor");
+			ImGui::ColorEdit4("color", &(*materialData).x);
+			ImGui::End();
 
 			//ゲーム処理
 
