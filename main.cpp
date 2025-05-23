@@ -50,6 +50,12 @@ struct Matrix4x4 {
 };
 
 
+struct Transform {
+	Vector3 scale;
+	Vector3 rotate;
+	Vector3 translate;
+};
+
 struct  VertexData {
 	Vector4 position;
 	Vector2 texcoord;
@@ -915,7 +921,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//今回は赤を書き込んで見る
 	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
-	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
 
 	
 	//頂点バッファビューを作成
@@ -925,10 +931,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
 	//使用するリソースのサイズは頂点が3つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
 
 	//1頂点あたりのサイズ
-	vertexBufferView.StrideInBytes = sizeof(Vector4);
+	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	//頂点リソースにデータを書き込む
 	VertexData *vertexData = nullptr;
@@ -985,9 +991,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	
 
 	//Transform変更
-	/*Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-5.0f } };
-	*/
+	
 	//ImGuiの初期化
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -1057,21 +1063,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Render();
 
 			//Transformの更新
-			//transform.rotate.y += 0.03f;
-			//Matrix4x4 worldMatrix = MakeAffineMatrox(transform.scale, transform.rotate, transform.translate);
-			//*wvpData = worldMatrix;
+			transform.rotate.y += 0.03f;
+			Matrix4x4 worldMatrix = MakeAffineMatrox(transform.scale, transform.rotate, transform.translate);
+			*wvpData = worldMatrix;
 
-			////cameraMatrix
-			//Matrix4x4 cameraMatrix = MakeAffineMatrox(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			//cameraMatrix
+			Matrix4x4 cameraMatrix = MakeAffineMatrox(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 
 			//viewMatrix
-			//Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 
 			//projectionMatrix
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f);
 
 			//worldViewProjectionMatrix
-			//Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
