@@ -536,7 +536,7 @@ ID3D12Resource *CreateDeapthStencilTextureResource(ID3D12Device *device, int32_t
 		&depthClearValue,
 		IID_PPV_ARGS(&resource));
 	assert(SUCCEEDED(hr));
-
+	return resource;
 }
 
 void UploadTextureData(ID3D12Resource *texture, const DirectX::ScratchImage &mipImages) {
@@ -557,6 +557,19 @@ void UploadTextureData(ID3D12Resource *texture, const DirectX::ScratchImage &mip
 		assert(SUCCEEDED(hr));
 	}
 }
+
+//同じか手前ならOK
+bool DepthFunc(float currZ, float prevZ) {
+	return currZ <= prevZ;
+	if (DepthFunc(currZ, prevZ)) {
+		currZ;
+	} else {
+		prevZ;
+	}
+	return currZ >= prevZ;
+}
+
+
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -1057,8 +1070,42 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ID3D12Resource *textureResource = CreateTextureResource(device, metadata);
 	UploadTextureData(textureResource, mipImages);
 
+	
 	//DepthStencilTextureをウィンドウのサイズで作成
 	ID3D12Resource *depthStencilResource = CreateDeapthStencilTextureResource(device, kClientWidth, kClinentHeight);
+
+	//DSV用のヒープでディスクリプタの数は１。DSVはShaderVisidleはfalse
+	ID3D12DescriptorHeap *dsvDescriptorHeap = CreateDescriptorHesp(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+
+	//DSVの設定
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+	//DSVHeapの先頭にDSVを作る
+	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	//DepthStencilStateの設定
+	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
+
+	//Depthの機能を有効化する
+	depthStencilDesc.DepthEnable = true;
+
+	//書き込みします
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+
+	//比較関数はLessEqual
+	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
+	//DepthStencilの設定
+	graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
+
+	graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	
+	
+	//2つの値を比較する関数DepthFuncの結果がtrueなら
+	/*if (DepthFunc(currZ, prevZ)) {
+
+	}*/
 
 	//metDataを基にSRVの設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -1077,6 +1124,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//SRVの生成
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+
+	
 
 	//メインループ
 	
@@ -1098,6 +1147,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//開発用UIの処理
 			ImGui::ShowDemoWindow();
 
+			//カラー
 			ImGui::Begin("MaterialColor");
 			ImGui::ColorEdit4("color", &(*materialData).x);
 			ImGui::End();
@@ -1127,6 +1177,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+
+			//描画先のRTVとDSVを設定する
+			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+
+			//指定した深度で画面全体をクリアする
+			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 			//TransitionBarrierの設定
 			D3D12_RESOURCE_BARRIER barrier{};
