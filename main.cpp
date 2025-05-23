@@ -526,6 +526,18 @@ void UploadTextureData(ID3D12Resource *texture, const DirectX::ScratchImage &mip
 	}
 }
 
+void SRTWindow(Transform &transform) {
+
+	ImGui::Begin("SRT Settings (Debug Only)");
+
+	ImGui::SliderFloat3("Scale", &transform.scale.x, 0.1f, 10.0f);
+	ImGui::SliderFloat3("Rotate", &transform.rotate.x, -3.14159f, 3.14159f);
+	ImGui::SliderFloat3("Translate", &transform.translate.x, -100.0f, 100.0f);
+
+	ImGui::End();
+
+}
+
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	
@@ -1054,6 +1066,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::Begin("MaterialColor");
 			ImGui::ColorEdit4("color", &(*materialData).x);
 			ImGui::End();
+
+			SRTWindow(transform);
 
 			//ゲーム処理
 
