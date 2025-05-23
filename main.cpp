@@ -558,16 +558,7 @@ void UploadTextureData(ID3D12Resource *texture, const DirectX::ScratchImage &mip
 	}
 }
 
-//同じか手前ならOK
-bool DepthFunc(float currZ, float prevZ) {
-	return currZ <= prevZ;
-	if (DepthFunc(currZ, prevZ)) {
-		currZ;
-	} else {
-		prevZ;
-	}
-	return currZ >= prevZ;
-}
+
 
 
 
