@@ -915,7 +915,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//今回は赤を書き込んで見る
 	*materialData = Vector4(1.0f, 0.0f, 0.0f, 1.0f);
 
-	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
+	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
 
 	
 	//頂点バッファビューを作成
@@ -925,10 +925,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
 	//使用するリソースのサイズは頂点が3つ分のサイズ
-	vertexBufferView.SizeInBytes = sizeof(Vector4) * 3;
+	vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
 
 	//1頂点あたりのサイズ
-	vertexBufferView.StrideInBytes = sizeof(Vector4);
+	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
 	//頂点リソースにデータを書き込む
 	VertexData *vertexData = nullptr;
