@@ -15,6 +15,7 @@
 #include "externals/DirectXTex/d3dx12.h"
 #include <vector>
 #include "Math.h"
+#include <numbers>
 
 
 
@@ -439,7 +440,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #endif 
 
 
-	
+
 
 
 	//IDXGIファクトリーの生成
@@ -878,7 +879,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	
 
-
 	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	ID3D12Resource *wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
 	//データを書(き込む
@@ -888,6 +888,106 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//単位行列を書き込んでおく
 	*wvpData = math.MakeIdentity4x4();
 
+
+	
+
+	//スフィアの分割
+	uint32_t kSubdivision = 16;
+	uint32_t sphereVertexNum = kSubdivision * kSubdivision * 6;
+
+	ID3D12Resource *vertexResourceShere = CreateBufferResource(device, sizeof(VertexData) * sphereVertexNum);
+
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSphere{};
+	vertexBufferViewSphere.BufferLocation = vertexResourceShere->GetGPUVirtualAddress();
+	vertexBufferViewSphere.SizeInBytes = sizeof(VertexData) * sphereVertexNum;
+	vertexBufferViewSphere.StrideInBytes = sizeof(VertexData);
+
+	
+
+	//頂点リソースにデータを書き込む
+	VertexData *vertexDataShere = nullptr;
+
+	//書き込むためのアドレスを取得
+	vertexResourceShere->Map(0, nullptr, reinterpret_cast<void **>(&vertexDataShere));
+
+
+	//軽度分割１つ分の角度
+	const float kLonEvery = std::numbers::pi_v<float> *2.0f / float(kSubdivision);
+
+	//軽度分割1つ分の角度
+	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
+
+	//緯度の方向に分割しながら線を描く
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
+		//緯度の方向に分割
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+			float lon = lonIndex * kLonEvery;
+
+			VertexData vertA = {
+				{
+				std::cosf(lat) * std::cosf(lon),
+				std::sinf(lat),
+				std::cosf(lat) * std::sinf(lon),
+				1.0f
+				},
+				{
+				float(lonIndex) / float(kSubdivision),
+				1.0f - float(latIndex) / float(kSubdivision)
+				}
+			};
+
+
+			VertexData vertB = { {
+				std::cosf(lat + kLatEvery) * std::cosf(lon),
+				std::sinf(lat + kLatEvery),
+				std::cosf(lat + kLatEvery) * std::sinf(lon),
+				1.0f
+			}, {
+				float(lonIndex) / float(kSubdivision),
+				1.0f - float(latIndex + 1.0f) / float(kSubdivision)
+				}
+			};
+
+			VertexData vertC = {
+				{
+				std::cosf(lat) * std::cosf(lon + kLonEvery),
+				std::sinf(lat),
+				std::cosf(lat) * std::sinf(lon + kLonEvery),
+				1.0f
+			}, {
+				float(lonIndex + 1.0f) / float(kSubdivision),
+				1.0f - float(latIndex) / float(kSubdivision)
+				}
+			};
+
+			VertexData vertD = { {
+				std::cosf(lat + kLatEvery) * std::cosf(lon + kLonEvery),
+				std::sinf(lat + kLatEvery),
+				std::cosf(lat + kLatEvery) * std::sinf(lon + kLonEvery),
+				1.0f
+			},{
+				float(lonIndex + 1.0f) / float(kSubdivision),
+				1.0f - float(latIndex + 1.0f) / float(kSubdivision)
+				}
+			};
+
+			vertexDataShere[start + 0] = vertA;
+			vertexDataShere[start + 1] = vertB;
+			vertexDataShere[start + 2] = vertC;
+
+			vertexDataShere[start + 3] = vertC;
+			vertexDataShere[start + 4] = vertB;
+			vertexDataShere[start + 5] = vertD;
+
+
+		}
+	}
+
+	ID3D12Resource *transformationMatrixResourceSphere = CreateBufferResource(device, sizeof(Matrix4x4));
+	Matrix4x4 *wvpDataSphere = nullptr;
+	transformationMatrixResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataSphere));
 
 	//ビューポート
 	D3D12_VIEWPORT viewport{};
@@ -949,8 +1049,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//Transform変更
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-5.0f } };
+	Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
 	Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	Transform transformSphere{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 
 	//ImGuiの初期化
 	IMGUI_CHECKVERSION();
@@ -964,7 +1065,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-	
+
 
 
 	//メインループ
@@ -1002,13 +1103,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//worldViewProjectionMatrix
 			Matrix4x4 worldViewProjectionMatrix = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
 			*wvpData = worldViewProjectionMatrix;
+			*wvpDataSphere = *wvpData;
 
 			//Sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = math.MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = math.MakeIdentity4x4();
 			Matrix4x4 projectionMatrixSprite = math.MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClinentHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrixSprite= math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
+			Matrix4x4 worldViewProjectionMatrixSprite = math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
 			*transformetionMatrixDataSprite = worldViewProjectionMatrixSprite;
+
+			//スフィア用
+			transformSphere.rotate.y += 0.03f;
+			Matrix4x4 worldMatrixShere = math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
+			Matrix4x4 wvp = math.Multiply(worldMatrixShere, math.Multiply(viewMatrix, projectionMatrix));
+			*wvpDataSphere = wvp;
+
 
 			//開発用UIの処理
 			ImGui::ShowDemoWindow();
@@ -1016,6 +1125,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//カラー
 			ImGui::Begin("MaterialColor");
 			ImGui::ColorEdit4("color", &(*materialData).x);
+			ImGui::DragFloat3("cameraRotate", &transformSphere.rotate.x,0.01f);
+			ImGui::DragFloat3("cameraScale", &transformSphere.scale.x, 0.01f);
+			ImGui::DragFloat3("cameraTranslate", &transformSphere.translate.x, 0.01f);
 			ImGui::End();
 
 			//ゲーム処理
@@ -1066,7 +1178,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//RootSignatureを設定。PSOに設定しているけど別途設定が必要
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState);
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
 
 			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1074,17 +1186,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
 
-			//wvp用のBufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+			//TransformationMatrixCbufferの場所を設定
+			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSphere->GetGPUVirtualAddress());
 
-			
 
 			//SRVのDescriptorの先頭を設定
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 
 			//描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(sphereVertexNum, 1, 0, 0);
 
 			//Supriteの描画。
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
@@ -1095,6 +1206,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//描画
 			commandList->DrawInstanced(6, 1, 0, 0);
+
+
+
+			
+
+			
 
 			//実際のcommandListのImGuiの描画コマンドを積む
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
@@ -1161,6 +1278,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 解放処理
 	CloseHandle(fenceEvent);
 	transformationMatrixResourceSprite->Release();
+	transformationMatrixResourceSphere->Release();
 	vertexResourceSprite->Release();
 	fence->Release();
 	rtvDescriptorHeap->Release();
@@ -1180,6 +1298,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 #endif
 	vertexResource->Release();
 	matetialResource->Release();
+	vertexResourceShere->Release();
 	wvpResource->Release();
 	textureResource->Release();
 	intermediateResource->Release();
@@ -1192,7 +1311,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootSignature->Release();
 	pixelShaderBlob->Release();
 	vertexShaderBlob->Release();
-	
+
 
 	ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
