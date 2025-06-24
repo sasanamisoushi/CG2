@@ -51,9 +51,11 @@ struct Material {
 	int32_t enableLighting;
 };
 
+__declspec(align(256))
 struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+	
 };
 
 struct DirectionalLight {
@@ -962,24 +964,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	VertexDataSprite[5].normal = { 0.0f,0.0f,1.0f };
 
 	//Sprite用のTransformationMatrix用のリソースをス来る
-	ID3D12Resource *transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource *transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
 	//データを書き込む
-	Matrix4x4 *transformetionMatrixDataSprite = nullptr;
+	TransformationMatrix *transformetionMatrixDataSprite = nullptr;
 	//書き込むためのアドレスを取得
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void **>(&transformetionMatrixDataSprite));
 	//単位行列を書き込んでおく
-	*transformetionMatrixDataSprite = math.MakeIdentity4x4();
+	*transformetionMatrixDataSprite = TransformationMatrix{ math.MakeIdentity4x4() };
 
 
 
 	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
-	ID3D12Resource *wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource *wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 	//データを書(き込む
-	Matrix4x4 *wvpData = nullptr;
+	TransformationMatrix *wvpData = nullptr;
 	//書き込むためのアドレスを取得
 	wvpResource->Map(0, nullptr, reinterpret_cast<void **>(&wvpData));
 	//単位行列を書き込んでおく
-	*wvpData = math.MakeIdentity4x4();
+	*wvpData = TransformationMatrix{ math.MakeIdentity4x4() };
 
 
 
@@ -1097,8 +1099,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 	}
 
-	ID3D12Resource *transformationMatrixResourceSphere = CreateBufferResource(device, sizeof(Matrix4x4));
-	Matrix4x4 *wvpDataSphere = nullptr;
+	ID3D12Resource *transformationMatrixResourceSphere = CreateBufferResource(device, sizeof(TransformationMatrix));
+	TransformationMatrix *wvpDataSphere = nullptr;
 	transformationMatrixResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataSphere));
 
 	//ビューポート
@@ -1234,34 +1236,39 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//Transformの更新
 			transform.rotate.y += 0.03f;
-			Matrix4x4 worldMatrix = math.MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			*wvpData = worldMatrix;
+			Matrix4x4 worldMatrix =  math.MakeAffineMatrix(transform.scale, transform.rotate, transform.translate) ;
+			
 
 			//cameraMatrix
-			Matrix4x4 cameraMatrix = math.MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			Matrix4x4 cameraMatrix =  math.MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate) ;
 
 			//viewMatrix
-			Matrix4x4 viewMatrix = math.Inverse(cameraMatrix);
+			Matrix4x4 viewMatrix = math.Inverse(cameraMatrix) ;
 
 			//projectionMatrix
-			Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f);
+			Matrix4x4 projectionMatrix =  math.MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f) ;
+
+			Matrix4x4 wvp = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
+
+			wvpData->WVP = wvp;
+			wvpData->World = worldMatrix;
 
 			//worldViewProjectionMatrix
-			Matrix4x4 worldViewProjectionMatrix = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
+			TransformationMatrix worldViewProjectionMatrix = TransformationMatrix{ math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix))};
 			*wvpData = worldViewProjectionMatrix;
 			*wvpDataSphere = *wvpData;
 
 			//Sprite用のworldViewProjectionMatrixを作る
-			Matrix4x4 worldMatrixSprite = math.MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-			Matrix4x4 viewMatrixSprite = math.MakeIdentity4x4();
-			Matrix4x4 projectionMatrixSprite = math.MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClinentHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrixSprite = math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
+			Matrix4x4 worldMatrixSprite =  math.MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate) ;
+			Matrix4x4 viewMatrixSprite =  math.MakeIdentity4x4() ;
+			Matrix4x4 projectionMatrixSprite =  math.MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClinentHeight), 0.0f, 100.0f) ;
+			TransformationMatrix worldViewProjectionMatrixSprite = TransformationMatrix{ math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite)) };
 			*transformetionMatrixDataSprite = worldViewProjectionMatrixSprite;
 
 			//スフィア用
 			transformSphere.rotate.y += 0.03f;
-			Matrix4x4 worldMatrixShere = math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
-			Matrix4x4 wvp = math.Multiply(worldMatrixShere, math.Multiply(viewMatrix, projectionMatrix));
+			Matrix4x4 worldMatrixShere =  math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate) ;
+			TransformationMatrix wvp = TransformationMatrix{ math.Multiply(worldMatrixShere, math.Multiply(viewMatrix, projectionMatrix)) };
 			*wvpDataSphere = wvp;
 
 
