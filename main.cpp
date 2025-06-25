@@ -1292,15 +1292,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
-			//Supriteの描画。
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			////Supriteの描画。
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 
 
-			//TransformationMatrixCbufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			////TransformationMatrixCbufferの場所を設定
+			//commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			//描画
-			commandList->DrawInstanced(6, 1, 0, 0);
+			////描画
+			//commandList->DrawInstanced(6, 1, 0, 0);
 
 
 
