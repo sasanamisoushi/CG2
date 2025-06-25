@@ -1,5 +1,6 @@
 #include "Math.h"
 #include <corecrt_math.h>
+#include <cmath>
 
 //平行移動
 Matrix4x4 Math::MakeTranslateMatrix(const Vector3 &translate) {
@@ -223,4 +224,16 @@ Matrix4x4 Math::MakeOrthographicMatrix(float left, float top, float right, float
 	result.m[3][3] = 1.0f;
 
 	return result;
+}
+
+Vector3 Math::Normalize(const Vector3 &v) {
+	float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+	if (length == 0.0f) {
+		return { 0.0f, 0.0f, 0.0f }; 
+	}
+	return {
+		v.x / length,
+		v.y / length,
+		v.z / length
+	};
 }

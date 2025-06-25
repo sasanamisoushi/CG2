@@ -67,5 +67,7 @@ public:
 
 	//平行投影行列
 	Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
+
+	Vector3 Normalize(const Vector3 &v);
 };
 
