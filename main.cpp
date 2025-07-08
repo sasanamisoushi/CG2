@@ -898,8 +898,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//書き込む為のアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
 
+
 	//スフィア用のインデックス
 	ID3D12Resource *indexResourcesphere = CreateBufferResource(device, sizeof(uint32_t) * vertexCount);
+
+	// インデックスデータ書き込み
+	uint32_t *indexData = nullptr;
+	indexResourcesphere->Map(0, nullptr, reinterpret_cast<void **>(&indexData));
+
+	for (uint32_t i = 0; i < vertexCount; ++i) {
+		indexData[i] = i;
+	}
+
+	indexResourcesphere->Unmap(0, nullptr);
 
 	D3D12_INDEX_BUFFER_VIEW indexBufferViewShere{};
 	//リソースの先頭のアドレスから使う
@@ -1296,7 +1307,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//RootSignatureを設定。PSOに設定しているけど別途設定が必要
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState);
-			commandList->IASetVertexBuffers(&indexBufferViewShere);
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			commandList->IASetIndexBuffer(&indexBufferViewShere);
+
 
 			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1313,7 +1326,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			//描画
-			commandList->DrawInstanced(vertexCount, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(vertexCount, 1, 0, 0, 0);
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
@@ -1402,6 +1415,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	CloseWindow(hwnd);
 
 	// 解放処理
+	indexResourcesphere->Release();
 	indexResourceSprite->Release();
 	CloseHandle(fenceEvent);
 	directionLightResource->Release();
