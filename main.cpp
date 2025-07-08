@@ -49,12 +49,12 @@ struct  VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	Matrix4x4 uvTransform;
 };
 
 struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
-
 };
 
 struct DirectionalLight {
@@ -69,7 +69,11 @@ Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-
 Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform transformSphere{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 
-
+Transform uvTransformSprite{
+	{1.0f,1.0f,1.0f},
+	{0.0f,0.0f,0.0f},
+	{0.0f,0.0f,0.0f},
+};
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
 
@@ -1130,7 +1134,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 
-
+	
 
 	//ImGuiの初期化
 	IMGUI_CHECKVERSION();
