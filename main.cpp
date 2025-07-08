@@ -866,9 +866,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//分裂数
 	const uint32_t kSubdivision = 16;
 
-	
-
-
 	//経度分割1つ分の角度
 	const float kLonEvery = 2.0f * std::numbers::pi_v<float> / float(kSubdivision);
 
@@ -876,7 +873,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const float kLatEvery = std::numbers::pi_v<float> / float(kSubdivision);
 
 	//必要な頂点数
-	const uint32_t vertexCount = kSubdivision * kSubdivision * 6;
+	const uint32_t vertexCount = (kSubdivision + 1) * (kSubdivision + 1);
+
+	//インデックス数
+	const uint32_t indexCount = kSubdivision * kSubdivision * 6;
 
 	//頂点リソースを作成
 	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * vertexCount);
@@ -897,17 +897,56 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//書き込む為のアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
-
-
+	
 	//スフィア用のインデックス
-	ID3D12Resource *indexResourcesphere = CreateBufferResource(device, sizeof(uint32_t) * vertexCount);
+	ID3D12Resource *indexResourcesphere = CreateBufferResource(device, sizeof(uint32_t) * indexCount);
+
+	
+	for (uint32_t lat = 0; lat <= kSubdivision; ++lat) {
+		float latAngle = -std::numbers::pi_v<float> / 2.0f + kLatEvery * lat;
+
+		for (uint32_t lon = 0; lon <= kSubdivision; ++lon) {
+			float lonAngle = lon * kLonEvery;
+
+			uint32_t index = lat * (kSubdivision + 1) + lon;
+
+			float x = std::cosf(latAngle) * std::cosf(lonAngle);
+			float y = std::sinf(latAngle);
+			float z = std::cosf(latAngle) * std::sinf(lonAngle);
+
+			vertexData[index].position = { x, y, z, 1.0f };
+			vertexData[index].texcoord = {
+				float(lon) / float(kSubdivision),
+				1.0f - float(lat) / float(kSubdivision)
+			};
+			vertexData[index].normal = { x, y, z };
+		}
+	}
+
+	vertexResource->Unmap(0, nullptr);
+	
+
 
 	// インデックスデータ書き込み
 	uint32_t *indexData = nullptr;
 	indexResourcesphere->Map(0, nullptr, reinterpret_cast<void **>(&indexData));
 
-	for (uint32_t i = 0; i < vertexCount; ++i) {
-		indexData[i] = i;
+	uint32_t idx = 0;
+	for (uint32_t lat = 0; lat < kSubdivision; ++lat) {
+		for (uint32_t lon = 0; lon < kSubdivision; ++lon) {
+			uint32_t current = lat * (kSubdivision + 1) + lon;
+			uint32_t next = current + (kSubdivision + 1);
+
+			// 三角形1
+			indexData[idx++] = current;
+			indexData[idx++] = next;
+			indexData[idx++] = current + 1;
+
+			// 三角形2
+			indexData[idx++] = current + 1;
+			indexData[idx++] = next;
+			indexData[idx++] = next + 1;
+		}
 	}
 
 	indexResourcesphere->Unmap(0, nullptr);
@@ -916,98 +955,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//リソースの先頭のアドレスから使う
 	indexBufferViewShere.BufferLocation = indexResourcesphere->GetGPUVirtualAddress();
 
-	indexBufferViewShere.SizeInBytes = sizeof(uint32_t) * vertexCount;
+	indexBufferViewShere.SizeInBytes = sizeof(uint32_t) * indexCount;
 
 	indexBufferViewShere.Format = DXGI_FORMAT_R32_UINT;
 
 
 
-	//緯度の方向に分割 -π/2 ~ π/2
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-		float lat = -std::numbers::pi_v<float> / 2.0f + kLatEvery * latIndex;
-		//緯度の方向に分割
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
-			float lon = lonIndex * kLonEvery;
-
-			VertexData vertA = {
-				{
-				std::cosf(lat) * std::cosf(lon),
-				std::sinf(lat),
-				std::cosf(lat) * std::sinf(lon),
-				1.0f
-				},
-				{
-				float(lonIndex) / float(kSubdivision),
-				1.0f - float(latIndex) / float(kSubdivision)
-				},
-				{
-				std::cosf(lat) * std::cosf(lon),
-				std::sinf(lat),
-				std::cosf(lat) * std::sinf(lon),
-				}
-
-			};
-
-
-			VertexData vertB = { {
-				std::cosf(lat + kLatEvery) * std::cosf(lon),
-				std::sinf(lat + kLatEvery),
-				std::cosf(lat + kLatEvery) * std::sinf(lon),
-				1.0f
-			}, {
-				float(lonIndex) / float(kSubdivision),
-				1.0f - float(latIndex + 1.0f) / float(kSubdivision)
-				},
-				{
-				std::cosf(lat + kLatEvery) * std::cosf(lon),
-				std::sinf(lat + kLatEvery),
-				std::cosf(lat + kLatEvery) * std::sinf(lon),
-				}
-			};
-
-			VertexData vertC = {
-				{
-				std::cosf(lat) * std::cosf(lon + kLonEvery),
-				std::sinf(lat),
-				std::cosf(lat) * std::sinf(lon + kLonEvery),
-				1.0f
-			}, {
-				float(lonIndex + 1.0f) / float(kSubdivision),
-				1.0f - float(latIndex) / float(kSubdivision)
-				},
-				{std::cosf(lat) * std::cosf(lon + kLonEvery),
-				std::sinf(lat),
-				std::cosf(lat) * std::sinf(lon + kLonEvery),
-				}
-			};
-
-			VertexData vertD = { {
-				std::cosf(lat + kLatEvery) * std::cosf(lon + kLonEvery),
-				std::sinf(lat + kLatEvery),
-				std::cosf(lat + kLatEvery) * std::sinf(lon + kLonEvery),
-				1.0f
-			},{
-				float(lonIndex + 1.0f) / float(kSubdivision),
-				1.0f - float(latIndex + 1.0f) / float(kSubdivision)
-				},{
-					std::cosf(lat + kLatEvery) * std::cosf(lon + kLonEvery),
-				std::sinf(lat + kLatEvery),
-				std::cosf(lat + kLatEvery) * std::sinf(lon + kLonEvery),
-				}
-			};
-
-			vertexData[start + 0] = vertA;
-			vertexData[start + 1] = vertB;
-			vertexData[start + 2] = vertC;
-
-			vertexData[start + 3] = vertC;
-			vertexData[start + 4] = vertB;
-			vertexData[start + 5] = vertD;
-
-
-		}
-	}
+	
 
 
 	//マテリアル用のリソースを作る。今回はcolor１つ分のサイズを用意する
@@ -1326,7 +1280,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			//描画
-			commandList->DrawIndexedInstanced(vertexCount, 1, 0, 0, 0);
+			commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
