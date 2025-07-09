@@ -49,6 +49,7 @@ struct  VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	float padding[3];
 	Matrix4x4 uvTransform;
 };
 
@@ -977,6 +978,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//今回は赤を書き込んで見る
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = true;
+	materialData->uvTransform = math.MakeIdentity4x4();
 
 
 	//Sprite用のマテリアルリソースを作る
@@ -989,6 +991,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//白で設定
 	materialDataSprite->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialDataSprite->enableLighting = false;
+	materialDataSprite->uvTransform = math.MakeIdentity4x4();
 
 	//平行光源用のリソース
 	ID3D12Resource *directionLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
@@ -1115,11 +1118,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
 
-
-
-
-
-
 	//DepthStencilTextureをウィンドウのサイズで作成
 	ID3D12Resource *depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClinentHeight);
 
@@ -1197,7 +1195,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrixSprite = math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
 			transformetionMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
 
-			
+			//uvTranslate用の行列
+			Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
+			uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeRotateZMatrix(uvTransformSprite.rotate.z));
+			uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeTranslateMatrix(uvTransformSprite.translate));
+			materialDataSprite->uvTransform = uvTransformMatrix;
 
 
 			//開発用UIの処理
@@ -1215,6 +1217,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x,-1.0f,1.0f);
 			ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
 
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
 			ImGui::End();
 
 			//ゲーム処理
