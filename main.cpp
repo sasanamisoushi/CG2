@@ -16,6 +16,7 @@
 #include <vector>
 #include "Math.h"
 #include <numbers>
+#include<sstream>
 
 
 
@@ -64,6 +65,10 @@ struct DirectionalLight {
 	float intensity;
 };
 
+struct ModelData {
+	std::vector<VertexData>vertices;
+};
+
 //Transform変更
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
@@ -75,6 +80,8 @@ Transform uvTransformSprite{
 	{0.0f,0.0f,0.0f},
 	{0.0f,0.0f,0.0f},
 };
+
+
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
 
@@ -399,7 +406,60 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap *descrip
 	return handleGPU;
 }
 
+ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename) {
+	ModelData modelData;
+	std::vector<Vector4> positions; //位置
+	std::vector<Vector3> normals;  //法線
+	std::vector<Vector2> texcoords; //テクスチャ座標
+	std::string line;  //ファイルから読んだ1行を格納する
 
+	std::ifstream file(directoryPath + "/" + filename);  //ファイルを開く
+	assert(file.is_open()); //とりあえず開けなかったら止める
+
+	while (std::getline(file, line)) {
+		std::string identfier;
+		std::istringstream s(line);
+		s >> identfier; //先頭の識別子を読む
+
+
+		if (identfier == "v") {
+			Vector4 position;
+			s >> position.x >> position.y >> position.z;
+			position.w = 1.0f;
+			positions.push_back(position);
+		} else if (identfier == "vt") {
+			Vector2 texcoord;
+			s >> texcoord.x >> texcoord.y;
+			texcoords.push_back(texcoord);
+		} else if (identfier == "vn") {
+			Vector3 normal;
+			s >> normal.x >> normal.y >> normal.z;
+			normals.push_back(normal);
+		} else if (identfier == "f") {
+			//面は三角形限定
+			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
+				std::string vertexDefinition;
+				s >> vertexDefinition;
+				//頂点の要素へのindexは「位置/uv/法線」で格納されているので、分解してIndexを取得する
+				std::istringstream v(vertexDefinition);
+				uint32_t elementIndice[3];
+				for (int32_t element = 0; element < 3; ++element) {
+					std::string index;
+					std::getline(v, index, '/');  //区切りでインデックスを読んでいく
+					elementIndice[element] = std::stoi(index);
+				}
+
+				//要素へのindexから、実際の要素の値を取得して頂点を構築する
+				Vector4 position = positions[elementIndice[0] - 1];
+				Vector2 texcord = texcoords[elementIndice[1] - 1];
+				Vector3 normal = normals[elementIndice[2] - 1];
+				VertexData vertex = { position,texcord,normal };
+				modelData.vertices.push_back(vertex);
+			}
+		}
+	}
+	return modelData;
+}
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -883,8 +943,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//インデックス数
 	const uint32_t indexCount = kSubdivision * kSubdivision * 6;
 
+	//モデル読み込み
+	ModelData modelData = LoadObjFile("resources", "plane.obj");
+
 	//頂点リソースを作成
-	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * vertexCount);
+	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
 
 	//頂点バッファビューを作成
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
@@ -893,7 +956,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
 	//使用するリソースのサイズは頂点3つのサイズ
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * vertexCount;
+	vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
 	//1頂点当たりのサイズ
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -903,6 +966,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//書き込む為のアドレスを取得
 	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
 	
+	//頂点データをリソースにコピー
+	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) *modelData.vertices.size());
+
+
 	//スフィア用のインデックス
 	ID3D12Resource *indexResourcesphere = CreateBufferResource(device, sizeof(uint32_t) * indexCount);
 
@@ -1211,6 +1278,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat3("cameraRotate", &transformSphere.rotate.x, 0.01f);
 			ImGui::DragFloat3("cameraScale", &transformSphere.scale.x, 0.01f);
 			ImGui::DragFloat3("cameraTranslate", &transformSphere.translate.x, 0.01f);
+			ImGui::SliderAngle("SphereRotateX", &transformSphere.rotate.x);
+			ImGui::SliderAngle("SphereRotateY", &transformSphere.rotate.y);
+			ImGui::SliderAngle("SphereRotateZ", &transformSphere.rotate.z);
+
+
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
 			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
@@ -1271,7 +1343,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootSignature(rootSignature);
 			commandList->SetPipelineState(graphicsPipelineState);
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			commandList->IASetIndexBuffer(&indexBufferViewShere);
+			commandList->IASetIndexBuffer(nullptr);
 
 
 			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
@@ -1289,25 +1361,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			//描画
-			commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 			
 
-			//Supriteの描画。
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);
+			//////Supriteの描画。
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//commandList->IASetIndexBuffer(&indexBufferViewSprite);
 
-		
+			////TransformationMatrixCbufferの場所を設定
+			//commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
-			//TransformationMatrixCbufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-
-		
-
-			//描画
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			////描画
+			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 
 
