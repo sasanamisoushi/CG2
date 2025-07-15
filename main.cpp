@@ -417,42 +417,42 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 	assert(file.is_open()); //とりあえず開けなかったら止める
 
 	while (std::getline(file, line)) {
-		std::string identfier;
+		std::string identifier;
 		std::istringstream s(line);
-		s >> identfier; //先頭の識別子を読む
+		s >> identifier; //先頭の識別子を読む
 
 
-		if (identfier == "v") {
+		if (identifier == "v") {
 			Vector4 position;
 			s >> position.x >> position.y >> position.z;
 			position.w = 1.0f;
 			positions.push_back(position);
-		} else if (identfier == "vt") {
+		} else if (identifier == "vt") {
 			Vector2 texcoord;
 			s >> texcoord.x >> texcoord.y;
 			texcoords.push_back(texcoord);
-		} else if (identfier == "vn") {
+		} else if (identifier == "vn") {
 			Vector3 normal;
 			s >> normal.x >> normal.y >> normal.z;
 			normals.push_back(normal);
-		} else if (identfier == "f") {
+		} else if (identifier == "f") {
 			//面は三角形限定
 			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
 				std::string vertexDefinition;
 				s >> vertexDefinition;
 				//頂点の要素へのindexは「位置/uv/法線」で格納されているので、分解してIndexを取得する
 				std::istringstream v(vertexDefinition);
-				uint32_t elementIndice[3];
+				uint32_t elementIndices[3];
 				for (int32_t element = 0; element < 3; ++element) {
 					std::string index;
 					std::getline(v, index, '/');  //区切りでインデックスを読んでいく
-					elementIndice[element] = std::stoi(index);
+					elementIndices[element] = std::stoi(index);
 				}
 
 				//要素へのindexから、実際の要素の値を取得して頂点を構築する
-				Vector4 position = positions[elementIndice[0] - 1];
-				Vector2 texcord = texcoords[elementIndice[1] - 1];
-				Vector3 normal = normals[elementIndice[2] - 1];
+				Vector4 position = positions[elementIndices[0] - 1];
+				Vector2 texcord = texcoords[elementIndices[1] - 1];
+				Vector3 normal = normals[elementIndices[2] - 1];
 				VertexData vertex = { position,texcord,normal };
 				modelData.vertices.push_back(vertex);
 			}
@@ -969,73 +969,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//頂点データをリソースにコピー
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) *modelData.vertices.size());
 
-
-	//スフィア用のインデックス
-	ID3D12Resource *indexResourcesphere = CreateBufferResource(device, sizeof(uint32_t) * indexCount);
-
-	
-	for (uint32_t lat = 0; lat <= kSubdivision; ++lat) {
-		float latAngle = -std::numbers::pi_v<float> / 2.0f + kLatEvery * lat;
-
-		for (uint32_t lon = 0; lon <= kSubdivision; ++lon) {
-			float lonAngle = lon * kLonEvery;
-
-			uint32_t index = lat * (kSubdivision + 1) + lon;
-
-			float x = std::cosf(latAngle) * std::cosf(lonAngle);
-			float y = std::sinf(latAngle);
-			float z = std::cosf(latAngle) * std::sinf(lonAngle);
-
-			vertexData[index].position = { x, y, z, 1.0f };
-			vertexData[index].texcoord = {
-				float(lon) / float(kSubdivision),
-				1.0f - float(lat) / float(kSubdivision)
-			};
-			vertexData[index].normal = { x, y, z };
-		}
-	}
-
-	vertexResource->Unmap(0, nullptr);
-	
-
-
-	// インデックスデータ書き込み
-	uint32_t *indexData = nullptr;
-	indexResourcesphere->Map(0, nullptr, reinterpret_cast<void **>(&indexData));
-
-	uint32_t idx = 0;
-	for (uint32_t lat = 0; lat < kSubdivision; ++lat) {
-		for (uint32_t lon = 0; lon < kSubdivision; ++lon) {
-			uint32_t current = lat * (kSubdivision + 1) + lon;
-			uint32_t next = current + (kSubdivision + 1);
-
-			// 三角形1
-			indexData[idx++] = current;
-			indexData[idx++] = next;
-			indexData[idx++] = current + 1;
-
-			// 三角形2
-			indexData[idx++] = current + 1;
-			indexData[idx++] = next;
-			indexData[idx++] = next + 1;
-		}
-	}
-
-	indexResourcesphere->Unmap(0, nullptr);
-
-	D3D12_INDEX_BUFFER_VIEW indexBufferViewShere{};
-	//リソースの先頭のアドレスから使う
-	indexBufferViewShere.BufferLocation = indexResourcesphere->GetGPUVirtualAddress();
-
-	indexBufferViewShere.SizeInBytes = sizeof(uint32_t) * indexCount;
-
-	indexBufferViewShere.Format = DXGI_FORMAT_R32_UINT;
-
-
-
-	
-
-
 	//マテリアル用のリソースを作る。今回はcolor１つ分のサイズを用意する
 	ID3D12Resource *matetialResource = CreateBufferResource(device, sizeof(Material));
 	//マテリアルにデータを書き込む
@@ -1111,6 +1044,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//単位行列を書き込んでおく
 	wvpData->WVP = math.MakeIdentity4x4();
 
+	
+	// スフィア用のWVPリソース（← これが新しく追加）
+	ID3D12Resource *wvpResourceSphere = CreateBufferResource(device, sizeof(TransformationMatrix));
+	TransformationMatrix *wvpDataSphere = nullptr;
+	wvpResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataSphere));
+	wvpDataSphere->WVP = math.MakeIdentity4x4();
+
 
 	//ビューポート
 	D3D12_VIEWPORT viewport{};
@@ -1150,6 +1090,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//SRVを作成するDescriptorHeapの場所を決める
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap, desriptorSizeSRV, 2);
+
+	
 
 	//SRVの生成
 	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
@@ -1235,7 +1177,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 			//Transformの更新
-			transform.rotate.y += 0.03f;
+			//transform.rotate.y += 0.03f;
 			Matrix4x4 worldMatrix = math.MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 
 
@@ -1254,6 +1196,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			wvpData->WVP = worldViewProjectionMatrix;
 			wvpData->World = worldMatrix;
 
+			//Sphere用のworldViewProjectionMatrixを作る
+			Matrix4x4 worldMatrixSphere = math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
+			Matrix4x4 worldViewProjectionMatrixSphere = math.Multiply(worldMatrixSphere, math.Multiply(viewMatrix, projectionMatrix));
+			wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
+			wvpDataSphere->World = worldMatrixSphere;
 
 			//Sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = math.MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1275,9 +1222,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//カラー
 			ImGui::Begin("MaterialColor");
 			ImGui::ColorEdit4("color", &materialData->color.x);
-			ImGui::DragFloat3("cameraRotate", &transformSphere.rotate.x, 0.01f);
-			ImGui::DragFloat3("cameraScale", &transformSphere.scale.x, 0.01f);
-			ImGui::DragFloat3("cameraTranslate", &transformSphere.translate.x, 0.01f);
+			ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
+			ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
+			ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
 			ImGui::SliderAngle("SphereRotateX", &transformSphere.rotate.x);
 			ImGui::SliderAngle("SphereRotateY", &transformSphere.rotate.y);
 			ImGui::SliderAngle("SphereRotateZ", &transformSphere.rotate.z);
@@ -1353,7 +1300,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
 
 			//TransformationMatrixCbufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
 
 			commandList->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
 
@@ -1446,7 +1393,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	CloseWindow(hwnd);
 
 	// 解放処理
-	indexResourcesphere->Release();
+	//indexResourcesphere->Release();
 	indexResourceSprite->Release();
 	CloseHandle(fenceEvent);
 	directionLightResource->Release();
