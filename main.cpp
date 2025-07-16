@@ -457,6 +457,7 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 		if (identifier == "v") {
 			Vector4 position;
 			s >> position.x >> position.y >> position.z;
+			position.x *= -1.0f;
 			position.w = 1.0f;
 			positions.push_back(position);
 		} else if (identifier == "vt") {
@@ -467,6 +468,7 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 		} else if (identifier == "vn") {
 			Vector3 normal;
 			s >> normal.x >> normal.y >> normal.z;
+			normal.x *= -1.0f;
 			normals.push_back(normal);
 		} else if (identifier == "f") {
 			VertexData triangle[3];
@@ -993,7 +995,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	const uint32_t indexCount = kSubdivision * kSubdivision * 6;
 
 	//モデル読み込み
-	ModelData modelData = LoadObjFile("resources", "plane.obj");
+	ModelData modelData = LoadObjFile("resources", "axis.obj");
 
 	//頂点リソースを作成
 	ID3D12Resource *vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
@@ -1059,20 +1061,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void **>(&VertexDataSprite));
 
 	//1枚目の三角形
-	VertexDataSprite[0].position = { -0.0f,360.0f,0.0f,1.0f }; 
+	VertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f }; 
 	VertexDataSprite[0].texcoord = { 0.0f,1.0f };
-	VertexDataSprite[0].normal = { -0.0f,0.0f,1.0f };
-	VertexDataSprite[1].position = { -0.0f,0.0f,0.0f,1.0f };    
+	VertexDataSprite[0].normal = { 0.0f,0.0f,1.0f };
+	VertexDataSprite[1].position = { 0.0f,0.0f,0.0f,1.0f };    
 	VertexDataSprite[1].texcoord = { 0.0f,0.0f };
-	VertexDataSprite[1].normal = { -0.0f,0.0f,1.0f };
-	VertexDataSprite[2].position = { -640.0f,360.0f,0.0f,1.0f }; 
+	VertexDataSprite[1].normal = { 0.0f,0.0f,1.0f };
+	VertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f }; 
 	VertexDataSprite[2].texcoord = { 1.0f,1.0f };
-	VertexDataSprite[2].normal = { -0.0f,0.0f,1.0f };
+	VertexDataSprite[2].normal = { 0.0f,0.0f,1.0f };
 
 	//2枚目の三角形
-	VertexDataSprite[3].position = { -640.0f,0.0f,0.0f,1.0f };    
+	VertexDataSprite[3].position = { 640.0f,0.0f,0.0f,1.0f };    
 	VertexDataSprite[3].texcoord = { 1.0f,0.0f };
-	VertexDataSprite[3].normal = { -0.0f,0.0f,1.0f };
+	VertexDataSprite[3].normal = { 0.0f,0.0f,1.0f };
 
 	//Sprite用のTransformationMatrix用のリソースをス来る
 	ID3D12Resource *transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
