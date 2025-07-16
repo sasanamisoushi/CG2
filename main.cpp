@@ -54,6 +54,10 @@ struct Material {
 	Matrix4x4 uvTransform;
 };
 
+struct MaterialData {
+	std::string textureFilePath;
+};
+
 struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
@@ -67,6 +71,7 @@ struct DirectionalLight {
 
 struct ModelData {
 	std::vector<VertexData>vertices;
+	MaterialData material;
 };
 
 //Transform変更
@@ -406,6 +411,33 @@ D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap *descrip
 	return handleGPU;
 }
 
+MaterialData LoadMaterialtemplateFile(const std::string &directoryPath, const std::string &filename) {
+
+	//構築するMaterialData
+	MaterialData materialData;
+	//ファイルから読んだ1行を格納するもの
+	std::string line;
+	//ファイルを開く
+	std::ifstream file(directoryPath + "/" + filename);
+	//とりあえず開けなかったら止める
+	assert(file.is_open());
+
+	while (std::getline(file, line)) {
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		//identifierに応じた処理
+		if (identifier == "map_Kd") {
+			std::string textureFilename;
+			s >> textureFilename;
+			//連続してファイルパスにする
+			materialData.textureFilePath = directoryPath + "/" + textureFilename;
+		}
+	}
+	return materialData;
+}
+
 ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename) {
 	ModelData modelData;
 	std::vector<Vector4> positions; //位置
@@ -430,12 +462,14 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 		} else if (identifier == "vt") {
 			Vector2 texcoord;
 			s >> texcoord.x >> texcoord.y;
+			texcoord.y = 1.0f - texcoord.y;
 			texcoords.push_back(texcoord);
 		} else if (identifier == "vn") {
 			Vector3 normal;
 			s >> normal.x >> normal.y >> normal.z;
 			normals.push_back(normal);
 		} else if (identifier == "f") {
+			VertexData triangle[3];
 			//面は三角形限定
 			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
 				std::string vertexDefinition;
@@ -455,11 +489,26 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 				Vector3 normal = normals[elementIndices[2] - 1];
 				VertexData vertex = { position,texcord,normal };
 				modelData.vertices.push_back(vertex);
+				triangle[faceVertex] = { position,texcord,normal };
 			}
+
+			//頂点を逆順で登録することで、回り順を逆にする
+			modelData.vertices.push_back(triangle[2]);
+			modelData.vertices.push_back(triangle[1]);
+			modelData.vertices.push_back(triangle[0]);
+		} else if(identifier=="mtllib") {
+			//matrialTemplateLidraryファイルの名前を取得する
+			std::string materialFilename;
+			s >> materialFilename;
+			//基本的にobjファイルと同一階層にmtlは存在されるので、ディレクトリ名とファイル名を渡す
+			modelData.material = LoadMaterialtemplateFile(directoryPath, materialFilename);
 		}
 	}
 	return modelData;
 }
+
+
+
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -1010,20 +1059,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void **>(&VertexDataSprite));
 
 	//1枚目の三角形
-	VertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f }; 
+	VertexDataSprite[0].position = { -0.0f,360.0f,0.0f,1.0f }; 
 	VertexDataSprite[0].texcoord = { 0.0f,1.0f };
-	VertexDataSprite[0].normal = { 0.0f,0.0f,1.0f };
-	VertexDataSprite[1].position = { 0.0f,0.0f,0.0f,1.0f };    
+	VertexDataSprite[0].normal = { -0.0f,0.0f,1.0f };
+	VertexDataSprite[1].position = { -0.0f,0.0f,0.0f,1.0f };    
 	VertexDataSprite[1].texcoord = { 0.0f,0.0f };
-	VertexDataSprite[1].normal = { 0.0f,0.0f,1.0f };
-	VertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f }; 
+	VertexDataSprite[1].normal = { -0.0f,0.0f,1.0f };
+	VertexDataSprite[2].position = { -640.0f,360.0f,0.0f,1.0f }; 
 	VertexDataSprite[2].texcoord = { 1.0f,1.0f };
-	VertexDataSprite[2].normal = { 0.0f,0.0f,1.0f };
+	VertexDataSprite[2].normal = { -0.0f,0.0f,1.0f };
 
 	//2枚目の三角形
-	VertexDataSprite[3].position = { 640.0f,0.0f,0.0f,1.0f };    
+	VertexDataSprite[3].position = { -640.0f,0.0f,0.0f,1.0f };    
 	VertexDataSprite[3].texcoord = { 1.0f,0.0f };
-	VertexDataSprite[3].normal = { 0.0f,0.0f,1.0f };
+	VertexDataSprite[3].normal = { -0.0f,0.0f,1.0f };
 
 	//Sprite用のTransformationMatrix用のリソースをス来る
 	ID3D12Resource *transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
@@ -1045,7 +1094,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	wvpData->WVP = math.MakeIdentity4x4();
 
 	
-	// スフィア用のWVPリソース（← これが新しく追加）
+	// スフィア用のWVPリソース
 	ID3D12Resource *wvpResourceSphere = CreateBufferResource(device, sizeof(TransformationMatrix));
 	TransformationMatrix *wvpDataSphere = nullptr;
 	wvpResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataSphere));
@@ -1075,7 +1124,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//2枚目のTextureを読んで転送する
-	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
+	DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata &metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource *textureResource2 = CreateTextureResource(device, metadata2);
 	ID3D12Resource *intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
@@ -1230,7 +1279,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::SliderAngle("SphereRotateZ", &transformSphere.rotate.z);
 
 
-			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
 			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
 			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x,-1.0f,1.0f);
@@ -1393,7 +1442,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	CloseWindow(hwnd);
 
 	// 解放処理
-	//indexResourcesphere->Release();
+	wvpResourceSphere->Release();
 	indexResourceSprite->Release();
 	CloseHandle(fenceEvent);
 	directionLightResource->Release();
