@@ -18,6 +18,8 @@
 #include<sstream>
 #include <wrl.h>
 #include <xaudio2.h>
+#define DIRECTINPUT_VERSION    0x0800//DirectInputのバージョン指定
+#include <dinput.h>
 
 
 
@@ -30,6 +32,8 @@
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"Dbghelp.lib")
 #pragma comment(lib,"xaudio2.lib")
+#pragma comment(lib,"dinput8.lib")
+#pragma comment(lib,"dxguid.lib")
 
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
@@ -650,6 +654,14 @@ void SoundPlayerWave(IXAudio2 *xAudio2, const SoundData &soundData) {
 	result = pSourceVoice->SubmitSourceBuffer(&buf);
 	result = pSourceVoice->Start();
 }
+
+struct Window {
+	HINSTANCE hInstance;
+	HWND hwnd;
+	
+};
+
+
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -1353,6 +1365,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//音声再生
 	SoundPlayerWave(xAudio2.Get(), soundData1);
 
+	Window w;
+	w.hInstance = GetModuleHandle(nullptr);
+
+	//DirectInputの初期化
+	IDirectInput8 *directInput = nullptr;
+	result = DirectInput8Create(
+		w.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
+		(void **)&directInput, nullptr);
+	assert(SUCCEEDED(result));
+
+	//キーボードデバイスの生成
+	IDirectInputDevice8
 	
 
 	//ImGuiの初期化
@@ -1368,7 +1392,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool useMonsterBall = true;
-
 
 	//メインループ
 
