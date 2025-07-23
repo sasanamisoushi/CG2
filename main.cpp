@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
-//#include <format>
 #include <fstream>
 #include <d3d12.h>
 #include <dxgi1_6.h>
@@ -18,6 +17,10 @@
 #include <numbers>
 #include<sstream>
 #include <wrl.h>
+#include <xaudio2.h>
+
+
+
 
 
 
@@ -26,6 +29,7 @@
 #pragma comment(lib,"d3d12.lib")
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"Dbghelp.lib")
+#pragma comment(lib,"xaudio2.lib")
 
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
@@ -524,8 +528,128 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 	return modelData;
 }
 
+//チャンクヘッダ
+struct ChunkHeader {
+	char id[4];  //チャンク毎のID
+	int32_t size; //チャンクサイズ
+};
 
+//RIFFヘッダチャンク
+struct RiffHeader {
+	ChunkHeader chunk; //"RIFF"
+	char type[4];   //"WAVE"
+};
 
+//FMTチャンク
+struct FormatChunk {
+	ChunkHeader chunk; //"fmt"
+	WAVEFORMATEX fmt;  //波形フォーマット
+};
+
+//音声データ
+struct SoundData {
+	//波形フォーマット
+	WAVEFORMATEX wfex;
+	//バッファの先頭アドレス
+	BYTE *pBuffer;
+	//バッファのサイズ
+	unsigned int bufferSize;
+};
+
+SoundData SoundLoadWave(const char *filename) {
+	//HRESULT result;
+
+	//ファイル入力ストリームのインスタンス
+	std::ifstream file;
+	//wavファイルをバイナリモードで開く
+	file.open(filename, std::ios_base::binary);
+	//ファイルオープン失敗を検出する
+	assert(file.is_open());
+
+	//RIFFヘッダーの読み込み
+	RiffHeader riff;
+	file.read((char *)&riff, sizeof(riff));
+	//ファイルがRIFFかチェック
+	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
+		assert(0);
+	}
+	//タイプかWAVEかチェック
+	if (strncmp(riff.type, "WAVE", 4) != 0) {
+		assert(0);
+	}
+
+	//Formatチャンクの読み込み
+	FormatChunk format = {};
+	//チャンクヘッダーの確認
+	file.read((char *)&format, sizeof(ChunkHeader));
+	if (strncmp(format.chunk.id, "fmt ", 4) != 0) {
+		assert(0);
+	}
+
+	//チャンク本体の読み込み
+	assert(format.chunk.size <= sizeof(format.fmt));
+	file.read((char *)&format.fmt, format.chunk.size);
+
+	//Dataチャンクの読み込み
+	ChunkHeader data;
+	file.read((char *)&data, sizeof(data));
+	//JUNKチャンクを検出
+	if (strncmp(data.id, "JUNK", 4) == 0) {
+		//読み取り位置をJUNKチャンクの終わりまで進める
+		file.seekg(data.size, std::ios_base::cur);
+		//再度読み込み
+		file.read((char *)&data, sizeof(data));
+	}
+
+	if (strncmp(data.id, "data", 4) != 0) {
+		assert(0);
+	}
+
+	//Dataチャンクのデータ部
+	char *pBuffer = new char[data.size];
+	file.read(pBuffer, data.size);
+
+	//Waveファイルを閉じる
+	file.close();
+
+	//returnする為の音声データ
+	SoundData soundData = {};
+
+	soundData.wfex = format.fmt;
+	soundData.pBuffer = reinterpret_cast<BYTE *>(pBuffer);
+	soundData.bufferSize = data.size;
+
+	return soundData;
+}
+
+//音声データ解放
+void SoundUnload(SoundData *soundData) {
+	//バッファのメモリ
+	delete[] soundData->pBuffer;
+
+	soundData->pBuffer = 0;
+	soundData->bufferSize = 0;
+	soundData->wfex = {};
+}
+
+void SoundPlayerWave(IXAudio2 *xAudio2, const SoundData &soundData) {
+	HRESULT result;
+
+	//波形ファーマットを元にSourceVoiceの生成
+	IXAudio2SourceVoice *pSourceVoice = nullptr;
+	result = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
+	assert(SUCCEEDED(result));
+
+	//再生する波形データの設定
+	XAUDIO2_BUFFER buf{};
+	buf.pAudioData = soundData.pBuffer;
+	buf.AudioBytes = soundData.bufferSize;
+	buf.Flags = XAUDIO2_END_OF_STREAM;
+
+	//波形データ
+	result = pSourceVoice->SubmitSourceBuffer(&buf);
+	result = pSourceVoice->Start();
+}
 
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -580,6 +704,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//クライアント領域を元に実際のサイズにwrcを変更してもらう
 	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
 
+	
+
+	
+
 	//ウィンドウの生成
 	HWND hwnd = CreateWindow(
 		wc.lpszClassName,
@@ -596,6 +724,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//ウインドウを表示する
 	ShowWindow(hwnd, SW_SHOW);
+
+	
 
 #ifdef _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
@@ -1206,6 +1336,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
 
+	Microsoft::WRL::ComPtr<IXAudio2>xAudio2;
+	IXAudio2MasteringVoice *masterVoice;
+	
+	HRESULT result;
+
+	//XAudioエンジンのインスタンスの生成
+	result= XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+
+	//マスターボイスの生成
+	result = xAudio2->CreateMasteringVoice(&masterVoice);
+
+	//音声読み込み
+	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
+
+	//音声再生
+	SoundPlayerWave(xAudio2.Get(), soundData1);
 
 	
 
@@ -1435,13 +1581,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
 
-
-
-
-
-
-
 		}
+
+
 	}
 
 	//出力ウィンドへの文字 
@@ -1462,11 +1604,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	CloseHandle(fenceEvent);
 	
 
-	
+	//xAudio2解放
+	xAudio2.Reset();
 
-	
-	
-	
+	//音声データ解放
+	SoundUnload(&soundData1);
+
 	signatureBlob->Release();
 	if (errorBlob) {
 		errorBlob->Release();
