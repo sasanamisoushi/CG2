@@ -661,8 +661,26 @@ struct Window {
 	
 };
 
+//全キーの入力状態を取得する
+BYTE keys[256] = {};
+BYTE preKey[256] = {};
 
 
+bool GetKey(uint8_t key) {
+	return keys[key] & 0x80;
+}
+
+bool LetKey(uint8_t key) {
+	return !(keys[key] & 0x80);
+}
+
+bool GetKeyMoment(uint8_t key) {
+	return (keys[key] & 0x80) && !(preKey[key] & 0x80);
+}
+
+bool LetKeyMoment(uint8_t key) {
+	return !(keys[key] & 0x80) && (preKey[key] & 0x80);
+}
 //Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3DResourceLeakChecker leakCheck;
@@ -986,6 +1004,45 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	descriptionRootSignature.pStaticSamplers = staticSamplers;
 	descriptionRootSignature.NumStaticSamplers = _countof(staticSamplers);
 
+	Microsoft::WRL::ComPtr<IXAudio2>xAudio2;
+	IXAudio2MasteringVoice *masterVoice;
+
+	HRESULT result;
+
+	//XAudioエンジンのインスタンスの生成
+	result = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+
+	//マスターボイスの生成
+	result = xAudio2->CreateMasteringVoice(&masterVoice);
+
+	//音声読み込み
+	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
+
+	//音声再生
+	SoundPlayerWave(xAudio2.Get(), soundData1);
+
+	Window w;
+	w.hInstance = GetModuleHandle(nullptr);
+
+	//DirectInputの初期化
+	IDirectInput8 *directInput = nullptr;
+	result = DirectInput8Create(
+		w.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
+		(void **)&directInput, nullptr);
+	assert(SUCCEEDED(result));
+
+	//キーボードデバイスの生成
+	IDirectInputDevice8 *keyboard = nullptr;
+	result = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
+	assert(SUCCEEDED(result));
+
+	//入力データの形式のセット
+	result = keyboard->SetDataFormat(&c_dfDIKeyboard);//標準形式
+	assert(SUCCEEDED(result));
+
+	//排他制御レベルのセット
+	result = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(result));
 
 
 	//シリアライズしてバイナルにする
@@ -1348,35 +1405,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
 
-	Microsoft::WRL::ComPtr<IXAudio2>xAudio2;
-	IXAudio2MasteringVoice *masterVoice;
+
+
 	
-	HRESULT result;
-
-	//XAudioエンジンのインスタンスの生成
-	result= XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
-
-	//マスターボイスの生成
-	result = xAudio2->CreateMasteringVoice(&masterVoice);
-
-	//音声読み込み
-	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
-
-	//音声再生
-	SoundPlayerWave(xAudio2.Get(), soundData1);
-
-	Window w;
-	w.hInstance = GetModuleHandle(nullptr);
-
-	//DirectInputの初期化
-	IDirectInput8 *directInput = nullptr;
-	result = DirectInput8Create(
-		w.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
-		(void **)&directInput, nullptr);
-	assert(SUCCEEDED(result));
-
-	//キーボードデバイスの生成
-	IDirectInputDevice8
 	
 
 	//ImGuiの初期化
@@ -1392,6 +1423,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool useMonsterBall = true;
+
+	//07_01 トリガー処理
+	bool GetKey(uint8_t key);
+	bool LetKey(uint8_t key);
+	bool GetKeyMoment(uint8_t key);
+	bool LetKeyMoment(uint8_t key);
 
 	//メインループ
 
@@ -1410,6 +1447,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//Update
 
+			//キーボード情報の取得開始
+			keyboard->Acquire();
+			keyboard->GetDeviceState(sizeof(keys), keys);
+			
+
+			
+
+			if (GetKey(DIK_0)) {
+				OutputDebugStringA("Hit 0\n");
+			}
 
 			//Transformの更新
 			//transform.rotate.y += 0.03f;
@@ -1652,3 +1699,5 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	return 0;
 }
+
+
