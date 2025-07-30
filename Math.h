@@ -27,6 +27,7 @@ struct Matrix3x3 {
 	float m[3][3];
 };
 
+Vector3 operator-(const Vector3 &v1, const Vector3 &v2);
 
 class Math {
 public:
@@ -71,5 +72,14 @@ public:
 	Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 
 	Vector3 Normalize(const Vector3 &v);
+
+	
+
+	Vector3 Cross(const Vector3 &v1, const Vector3 &v2);
+
+	float Dot(const Vector3 &v1, const Vector3 &v2);
+
+	Matrix4x4 MakeViewMatrix(const Vector3 &eye, const Vector3 &target, const Vector3 &up);
+
 };
 

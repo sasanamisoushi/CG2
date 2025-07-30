@@ -2,6 +2,10 @@
 #include <corecrt_math.h>
 #include <cmath>
 
+Vector3 operator-(const Vector3 &v1, const Vector3 &v2) {
+	return Vector3(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
+}
+
 //平行移動
 Matrix4x4 Math::MakeTranslateMatrix(const Vector3 &translate) {
 	Matrix4x4 result = {
@@ -236,4 +240,46 @@ Vector3 Math::Normalize(const Vector3 &v) {
 		v.y / length,
 		v.z / length
 	};
+}
+
+Vector3 Math::Cross(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 result;
+	result.x = v1.y * v2.z - v1.z * v2.y;
+	result.y = v1.z * v2.x - v1.x * v2.z;
+	result.z = v1.x * v2.y - v1.y * v2.x;
+	return result;
+}
+
+float Math::Dot(const Vector3 &v1, const Vector3 &v2) {
+	return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
+
+Matrix4x4 Math::MakeViewMatrix(const Vector3 &eye, const Vector3 &target, const Vector3 &up) {
+	Vector3 zaxis = Math::Normalize(target - eye);               // 前方向（Z+）
+	Vector3 xaxis = Math::Normalize(Math::Cross(up, zaxis));        // 右方向（X+）
+	Vector3 yaxis = Math::Cross(zaxis, xaxis);                 // 上方向（Y+）
+
+	Matrix4x4 view = {};
+
+	view.m[0][0] = xaxis.x;
+	view.m[0][1] = yaxis.x;
+	view.m[0][2] = zaxis.x;
+	view.m[0][3] = 0.0f;
+
+	view.m[1][0] = xaxis.y;
+	view.m[1][1] = yaxis.y;
+	view.m[1][2] = zaxis.y;
+	view.m[1][3] = 0.0f;
+
+	view.m[2][0] = xaxis.z;
+	view.m[2][1] = yaxis.z;
+	view.m[2][2] = zaxis.z;
+	view.m[2][3] = 0.0f;
+
+	view.m[3][0] = -Math::Dot(xaxis, eye);
+	view.m[3][1] = -Math::Dot(yaxis, eye);
+	view.m[3][2] = -Math::Dot(zaxis, eye);
+	view.m[3][3] = 1.0f;
+
+	return view;
 }
