@@ -1365,6 +1365,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSphere->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialDataSphere->enableLighting = true;
 
+	//平行光源用のリソース
+	Microsoft::WRL::ComPtr <ID3D12Resource> directionLightResourceSphere = CreateBufferResource(device, sizeof(DirectionalLight));
+	//マテリアルにデータを書き込む
+	DirectionalLight *directionLightDataSphere = nullptr;
+	//書き込むためのアドレスを取得
+	directionLightResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&directionLightDataSphere));
+
+	directionLightDataSphere->color = { 1.0f,1.0f,1.0f,1.0f };
+	directionLightDataSphere->direction = { 1.0f,0.0f,0.0f };
+	directionLightDataSphere->intensity = 1.0f;
+
+	directionLightDataSphere->direction = math.Normalize(directionLightDataSphere->direction);
+
 
 	VertexData *VertexDataSprite = nullptr;
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void **>(&VertexDataSprite));
@@ -1622,6 +1635,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
 				ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
 				ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
+				ImGui::DragFloat4("Lightcolor", &directionLightDataSphere->color.x);
+				ImGui::SliderFloat3("LightDirection", &directionLightDataSphere->direction.x, -1.0f, 1.0f);
+				ImGui::DragFloat("LightIntensity", &directionLightDataSphere->intensity);
 				
 			}
 
@@ -1631,13 +1647,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
 				ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
 				ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
+				ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
+				ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
+				ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
 
 			}
 			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
-			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
-			ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
+			
 			if (ImGui::CollapsingHeader("Sprite")) {
 				ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
 				ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
