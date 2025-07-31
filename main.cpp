@@ -109,7 +109,31 @@ Transform uvTransformSprite{
 	{0.0f,0.0f,0.0f},
 };
 
+enum class selectedObject {
+	None = 0,
+	Sphere,
+	Plane,
+};
 
+static selectedObject object = selectedObject::Plane;
+
+struct SceneData {
+	Vector3 cameraPos;
+	float lightingMode; // 0: None, 1: CosFalloff, 2: Lambert
+};
+
+enum class LightingMode {
+	None = 0,
+	CosFalloff,
+	Lambert
+};
+
+LightingMode currentLightingMode = LightingMode::CosFalloff;
+
+struct SceneCB {
+	DirectX::XMFLOAT3 cameraPos;
+	float lightingMode;
+};
 
 static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception) {
 
@@ -481,7 +505,7 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 		if (identifier == "v") {
 			Vector4 position;
 			s >> position.x >> position.y >> position.z;
-			position.x *= -1.0f;
+			position.x *= 1.0f;
 			position.w = 1.0f;
 			positions.push_back(position);
 		} else if (identifier == "vt") {
@@ -975,7 +999,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	//RootParameter作成。複製設定できるので配列
-	D3D12_ROOT_PARAMETER rootParamerers[4] = {};
+	D3D12_ROOT_PARAMETER rootParamerers[5] = {};
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
@@ -989,8 +1013,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParamerers[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[3].Descriptor.ShaderRegister = 1;
+	rootParamerers[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[4].Descriptor.ShaderRegister = 2;
 	descriptionRootSignature.pParameters = rootParamerers;//ルートパラメータ配列のポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);//配列の長さ
+
+	
 
 
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
@@ -1043,6 +1072,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//排他制御レベルのセット
 	result = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(result));
+
+
+	//モデル描画の方式の切り替え
+	Microsoft::WRL::ComPtr<ID3D12Resource> sceneCB = nullptr;
+
+	SceneCB sceneData = {};
+	sceneData.cameraPos = { 0.0f, 5.0f, -10.0f };
+	sceneData.lightingMode = 2.0f; // Lambertなどに対応
+
+	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_UPLOAD);
+	CD3DX12_RESOURCE_DESC bufferDesc = CD3DX12_RESOURCE_DESC::Buffer((sizeof(SceneCB) + 255) & ~255);
+	
+	result = device->CreateCommittedResource(
+		&heapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&bufferDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&sceneCB)
+	);
 	assert(SUCCEEDED(result));
 
 
@@ -1364,6 +1414,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//白で設定
 	materialDataSphere->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialDataSphere->enableLighting = true;
+	materialDataSphere->uvTransform = math.MakeIdentity4x4();
 
 	//平行光源用のリソース
 	Microsoft::WRL::ComPtr <ID3D12Resource> directionLightResourceSphere = CreateBufferResource(device, sizeof(DirectionalLight));
@@ -1373,7 +1424,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	directionLightResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&directionLightDataSphere));
 
 	directionLightDataSphere->color = { 1.0f,1.0f,1.0f,1.0f };
-	directionLightDataSphere->direction = { 1.0f,0.0f,0.0f };
+	directionLightDataSphere->direction = { 0.0f,-1.0f,0.0f };
 	directionLightDataSphere->intensity = 1.0f;
 
 	directionLightDataSphere->direction = math.Normalize(directionLightDataSphere->direction);
@@ -1519,8 +1570,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//DSVHeapの先頭にDSVを作る
 	device->CreateDepthStencilView(depthStencilResource.Get(), &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
-
-
+	
 
 
 
@@ -1620,41 +1670,66 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			materialDataSprite->uvTransform = uvTransformMatrix;
 
 
+		
+			
 			//開発用UIの処理
 			ImGui::ShowDemoWindow();
+			ImGui::Begin("Settings");
+			switch (object) {
+			case selectedObject::Sphere:
 
-			//カラー
-			ImGui::Begin("MaterialColor");
-			ImGui::ColorEdit4("color", &materialData->color.x);
-			ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
-			ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
+				if (ImGui::CollapsingHeader("Sphere")) {
+					
+					ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
+					ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
+					ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
+					ImGui::DragFloat4("Lightcolor", &directionLightDataSphere->color.x);
+					ImGui::SliderFloat3("LightDirection", &directionLightDataSphere->direction.x, -1.0f, 1.0f);
+					ImGui::DragFloat("LightIntensity", &directionLightDataSphere->intensity);
+					
+				}
+				break;
+			case selectedObject::Plane:
+				if (ImGui::CollapsingHeader("plane")) {
 
-			if (ImGui::CollapsingHeader("Sphere")) {
-				ImGui::ColorEdit4("color", &materialDataSphere->color.x);
-				ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
-				ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
-				ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
-				ImGui::DragFloat4("Lightcolor", &directionLightDataSphere->color.x);
-				ImGui::SliderFloat3("LightDirection", &directionLightDataSphere->direction.x, -1.0f, 1.0f);
-				ImGui::DragFloat("LightIntensity", &directionLightDataSphere->intensity);
-				
+
+					ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
+					ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
+					ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
+					ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
+					ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
+					ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
+
+				}
+				break;
 			}
 
-			if (ImGui::CollapsingHeader("plane")) {
-
-
-				ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
-				ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
-				ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
-				ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
-				ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
-				ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
-
+			if (ImGui::CollapsingHeader("object")) {
+				const char *objectItems[] = { "None", "Sphere", "Plane" };
+				int currentObjectIndex = static_cast<int>(object);
+				if (ImGui::Combo("Render Target", &currentObjectIndex, objectItems, IM_ARRAYSIZE(objectItems))) {
+					object = static_cast<selectedObject>(currentObjectIndex);
+				}
 			}
-			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+
+			if (ImGui::CollapsingHeader("Lighting Settings")) {
+				const char *items[] = { "None", "Lambert", "Half　Lambert" };
+				int selected = static_cast<int>(currentLightingMode);
+				if (ImGui::Combo("Lighting Mode", &selected, items, IM_ARRAYSIZE(items))) {
+					currentLightingMode = static_cast<LightingMode>(selected);
+				}
+			}
 
 			
+
+			//カラー
+			if (ImGui::CollapsingHeader("MaterialColor")) {
+				ImGui::ColorEdit4("color", &materialData->color.x);
+				ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
+				ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
+				ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
+			}
+
 			if (ImGui::CollapsingHeader("Sprite")) {
 				ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
 				ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
@@ -1663,6 +1738,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
+			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::End();
 
 			//ゲーム処理
@@ -1713,27 +1790,66 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//RootSignatureを設定。PSOに設定しているけど別途設定が必要
 			commandList->SetGraphicsRootSignature(rootSignature.Get());
 			commandList->SetPipelineState(graphicsPipelineState.Get());
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			commandList->IASetIndexBuffer(nullptr);
 
-
-			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			//マテリアルCBufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+			// sceneDataの更新（ImGuiで選ばれたモードを反映）
+			sceneData.lightingMode = static_cast<float>(currentLightingMode);
 
-			//TransformationMatrixCbufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResourcePlane->GetGPUVirtualAddress());
+			// sceneCBへ書き込み（フレームごと）
+			uint8_t *mapped = nullptr;
+			sceneCB->Map(0, nullptr, reinterpret_cast<void **>(&mapped));
+			memcpy(mapped, &sceneData, sizeof(sceneData));
+			sceneCB->Unmap(0, nullptr);
 
-			commandList->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+			switch (object) {
+			
+			case selectedObject::Sphere:
+				//Shereの描画
+				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
+				commandList->IASetIndexBuffer(&indexBufferViewShere);
 
-			//SRVのDescriptorの先頭を設定
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+				//マテリアルCBufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(0, matetialResourceSphere->GetGPUVirtualAddress());
+				//マテリアルCBufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
 
-			//描画
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+				commandList->SetGraphicsRootConstantBufferView(3, directionLightResourceSphere->GetGPUVirtualAddress());
+				//SRVのDescriptorの先頭を設定
+				commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
+				commandList->SetGraphicsRootConstantBufferView(4, sceneCB->GetGPUVirtualAddress());
+
+				// 描画
+				commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+				
+				break;
+			case selectedObject::Plane:
+				commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+				commandList->IASetIndexBuffer(nullptr);
+				//マテリアルCBufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+
+				//TransformationMatrixCbufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(1, wvpResourcePlane->GetGPUVirtualAddress());
+
+				commandList->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+
+				//SRVのDescriptorの先頭を設定
+				commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+
+				commandList->SetGraphicsRootConstantBufferView(4, sceneCB->GetGPUVirtualAddress());
+
+				//描画
+				commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+
+				
+
+
+				break;
+			}
+		
+			
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
 
@@ -1748,15 +1864,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//描画
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
-			//Shereの描画
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
-			commandList->IASetIndexBuffer(&indexBufferViewShere);
-
-			//マテリアルCBufferの場所を設定
-			commandList->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
-
-			// 描画
-			commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+			
 
 
 

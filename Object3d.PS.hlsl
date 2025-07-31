@@ -7,6 +7,8 @@ struct Material
     float32_t4x4 uvTransfoem;
 };
 
+
+
 ConstantBuffer<Material> gMaterial : register(b0);
 Texture2D<float32_t4> gTexture : register(t0);
 SamplerState gSampler : register(s0);
@@ -21,7 +23,11 @@ struct DirectionalLight
 
 ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 
-
+cbuffer Scene : register(b2)
+{
+    float3 cameraPos;
+    float lightingMode; // 0: None, 1: CosFalloff, 2: Lambert
+};
 
 struct PixelShaderOutput
 {
@@ -37,10 +43,23 @@ PixelShaderOutput main(VertexShaderOutput input)
  
     if (gMaterial.enableLighting != 0)
     {
-         float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
-        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
+        
        
+        float cos = 1.0f;
+        float lightingFactor = 1.0f;
+        if (lightingMode == 1.0f)
+        {
+           cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+
+           
+        }
+        else if(lightingMode == 2.0f)
+        {
+            float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
+            cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
+        }
+        
+        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
     }
     else
     {
