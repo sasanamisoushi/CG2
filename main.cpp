@@ -39,6 +39,7 @@
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
 #include "externals/DirectXTex/DirectXTex.h"
+#include <iostream>
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 
@@ -102,6 +103,7 @@ Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-
 Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform transformPlane{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 Transform transformSphere{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
+Transform transformBunny{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 
 Transform uvTransformSprite{
 	{1.0f,1.0f,1.0f},
@@ -113,7 +115,11 @@ enum class selectedObject {
 	None = 0,
 	Sphere,
 	Plane,
+	StanfordBunny,
+	MultiMesh,
 };
+
+Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceBunny;
 
 static selectedObject object = selectedObject::Plane;
 
@@ -538,7 +544,7 @@ ModelData LoadObjFile(const std::string &directoryPath, const std::string &filen
 				Vector2 texcord = texcoords[elementIndices[1] - 1];
 				Vector3 normal = normals[elementIndices[2] - 1];
 				VertexData vertex = { position,texcord,normal };
-				modelData.vertices.push_back(vertex);
+				//modelData.vertices.push_back(vertex);
 				triangle[faceVertex] = { position,texcord,normal };
 			}
 
@@ -1259,8 +1265,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//インデックス数
 	const uint32_t indexCount = kSubdivision * kSubdivision * 6;
 
-	//モデル読み込み
+		//モデル読み込み
 	ModelData modelData = LoadObjFile("resources", "plane.obj");
+		
 
 	//頂点リソースを作成
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
@@ -1285,6 +1292,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//頂点データをリソースにコピー
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 
+	//モデル読み込み
+	ModelData modelDataBunny = LoadObjFile("resources", "bunny.obj");
+
+	//頂点リソースを作成
+	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResourceBunny = CreateBufferResource(device, sizeof(VertexData) * modelDataBunny.vertices.size());
+
+	//頂点バッファビューを作成
+	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewBunny{};
+
+	////リソースの先頭のアドレスから使う
+	vertexBufferViewBunny.BufferLocation = vertexResourceBunny->GetGPUVirtualAddress();
+
+	//使用するリソースのサイズは頂点3つのサイズ
+	vertexBufferViewBunny.SizeInBytes = UINT(sizeof(VertexData) * modelDataBunny.vertices.size());
+	//1頂点当たりのサイズ
+	vertexBufferViewBunny.StrideInBytes = sizeof(VertexData);
+
+	//頂点リソースデータを書き込む
+	VertexData *vertexDataBunny = nullptr;
+
+	//書き込む為のアドレスを取得
+	vertexResourceBunny->Map(0, nullptr, reinterpret_cast<void **>(&vertexDataBunny));
+
+	//頂点データをリソースにコピー
+	std::memcpy(vertexDataBunny, modelDataBunny.vertices.data(), sizeof(VertexData) * modelDataBunny.vertices.size());
+
+
 	//マテリアル用のリソースを作る。今回はcolor１つ分のサイズを用意する
 	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource = CreateBufferResource(device, sizeof(Material));
 	//マテリアルにデータを書き込む
@@ -1295,7 +1329,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = true;
 	materialData->uvTransform = math.MakeIdentity4x4();
-
 
 	//Sprite用のマテリアルリソースを作る
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceSprite = CreateBufferResource(device, sizeof(Material));
@@ -1458,6 +1491,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//単位行列を書き込んでおく
 	*transformetionMatrixDataSprite = TransformationMatrix{ math.MakeIdentity4x4() };
 
+	//Bunny用のTransformationMatrix用のリソースをス来る
+	Microsoft::WRL::ComPtr<ID3D12Resource> transformationMatrixResourceBunny = CreateBufferResource(device, sizeof(TransformationMatrix));
+	//データを書き込む
+	TransformationMatrix *transformetionMatrixDataBunny = nullptr;
+	//書き込むためのアドレスを取得
+	transformationMatrixResourceBunny->Map(0, nullptr, reinterpret_cast<void **>(&transformetionMatrixDataBunny));
+	//単位行列を書き込んでおく
+	*transformetionMatrixDataBunny = TransformationMatrix{ math.MakeIdentity4x4() };
+
+	//平行光源用のリソース
+	Microsoft::WRL::ComPtr <ID3D12Resource> directionLightResourceBunny = CreateBufferResource(device, sizeof(DirectionalLight));
+	//マテリアルにデータを書き込む
+	DirectionalLight *directionLightDataBunny = nullptr;
+	//書き込むためのアドレスを取得
+	directionLightResourceBunny->Map(0, nullptr, reinterpret_cast<void **>(&directionLightDataBunny));
+
+	directionLightDataBunny->color = { 1.0f,1.0f,1.0f,1.0f };
+	directionLightDataBunny->direction = { 0.0f,-1.0f,0.0f };
+	directionLightDataBunny->intensity = 1.0f;
+
+	directionLightDataBunny->direction = math.Normalize(directionLightDataBunny->direction);
 
 	//WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
@@ -1481,6 +1535,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	TransformationMatrix *wvpDataSphere = nullptr;
 	wvpResourceSphere->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataSphere));
 	wvpDataSphere->WVP = math.MakeIdentity4x4();
+
+	//Bunny用のWVPリソース
+	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResourceBunny = CreateBufferResource(device, sizeof(TransformationMatrix));
+	TransformationMatrix *wvpDataBunny = nullptr;
+	wvpResourceBunny->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataBunny));
+	wvpDataBunny->WVP = math.MakeIdentity4x4();
 
 
 	//ビューポート
@@ -1511,6 +1571,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device, metadata2);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
 
+	//2枚目のTextureを読んで転送する
+	DirectX::ScratchImage mipImages2Bunny = LoadTexture(modelDataBunny.material.textureFilePath);
+	const DirectX::TexMetadata &metadata2Bunny = mipImages2Bunny.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2Bunny = CreateTextureResource(device, metadata2Bunny);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2Bunny = UploadTextureData(textureResource2Bunny,  mipImages2Bunny, device, commandList);
+
 	//2枚目のmetDateを基にSRVの設定
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
 	srvDesc2.Format = metadata2.format;
@@ -1527,6 +1593,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//SRVの生成
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
+	//SRVの生成
+	device->CreateShaderResourceView(textureResource2Bunny.Get(), &srvDesc2, textureSrvHandleCPU2);
 
 
 	//Textureを読んで転送する
@@ -1663,6 +1731,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 worldViewProjectionMatrixSprite = math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
 			transformetionMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
 
+			//bunny用のworldViewProjectionMatrixを作る
+			Matrix4x4 worldMatrixBunny = math.MakeAffineMatrix(transformBunny.scale, transformBunny.rotate, transformBunny.translate);
+			Matrix4x4 worldViewProjectionMatrixBunny = math.Multiply(worldMatrixBunny, math.Multiply(viewMatrix, projectionMatrix));
+			wvpDataBunny->WVP = worldViewProjectionMatrixBunny;
+			wvpDataBunny->World = worldMatrixBunny;
+
 			//uvTranslate用の行列
 			Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
 			uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeRotateZMatrix(uvTransformSprite.rotate.z));
@@ -1702,10 +1776,20 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 				}
 				break;
+			case selectedObject::StanfordBunny:
+				if (ImGui::CollapsingHeader("Bunny")) {
+					ImGui::DragFloat3("BunnyTranslate", &transformBunny.translate.x);
+					ImGui::DragFloat3("BunnyScale", &transformBunny.scale.x);
+					ImGui::DragFloat3("BunnyRotate", &transformBunny.rotate.x);
+					ImGui::DragFloat4("Lightcolor", &directionLightDataBunny->color.x);
+					ImGui::SliderFloat3("LightDirection", &directionLightDataBunny->direction.x, -1.0f, 1.0f);
+					ImGui::DragFloat("LightIntensity", &directionLightDataBunny->intensity);
+				}
+
 			}
 
 			if (ImGui::CollapsingHeader("object")) {
-				const char *objectItems[] = { "None", "Sphere", "Plane" };
+				const char *objectItems[] = { "None", "Sphere", "Plane","Bunny"};
 				int currentObjectIndex = static_cast<int>(object);
 				if (ImGui::Combo("Render Target", &currentObjectIndex, objectItems, IM_ARRAYSIZE(objectItems))) {
 					object = static_cast<selectedObject>(currentObjectIndex);
@@ -1843,8 +1927,26 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				//描画
 				commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
-				
+				break;
 
+			case selectedObject::StanfordBunny:
+				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewBunny);
+				commandList->IASetIndexBuffer(nullptr);
+				//マテリアルCBufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+
+				//TransformationMatrixCbufferの場所を設定
+				commandList->SetGraphicsRootConstantBufferView(1, wvpResourceBunny->GetGPUVirtualAddress());
+
+				commandList->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+
+				//SRVのDescriptorの先頭を設定
+				commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+
+				commandList->SetGraphicsRootConstantBufferView(4, sceneCB->GetGPUVirtualAddress());
+
+				//描画
+				commandList->DrawInstanced(UINT(modelDataBunny.vertices.size()), 1, 0, 0);
 
 				break;
 			}
