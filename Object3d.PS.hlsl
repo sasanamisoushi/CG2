@@ -37,34 +37,31 @@ struct PixelShaderOutput
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    
-    float4 transformedUV = mul(float32_t4(input.texcoord,0.0f, 1.0f), gMaterial.uvTransfoem);
-    float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
- 
-    if (gMaterial.enableLighting != 0)
+
+    float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransfoem);
+    float4 baseColor = gTexture.Sample(gSampler, transformedUV.xy);
+    float3 finalColor = (gMaterial.color * baseColor).rgb;
+
+    if (gMaterial.enableLighting != 0 && lightingMode > 0.5f)
     {
-        
-       
-        float cos = 1.0f;
-        float lightingFactor = 1.0f;
+        float3 normal = normalize(input.normal);
+        float3 lightDir = normalize(-gDirectionalLight.direction);
+        float lightIntensity = 1.0f;
+
         if (lightingMode == 1.0f)
         {
-           cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
-
-           
+            lightIntensity = saturate(dot(normal, lightDir));
         }
-        else if(lightingMode == 2.0f)
+        else if (lightingMode == 2.0f)
         {
-            float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
-            cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
+            float NdotL = dot(normal, lightDir);
+            lightIntensity = pow(NdotL * 0.5f + 0.5f, 2.0f);
         }
-        
-        output.color = gMaterial.color * textureColor * gDirectionalLight.color * cos * gDirectionalLight.intensity;
+
+        finalColor *= gDirectionalLight.color.rgb * gDirectionalLight.intensity * lightIntensity;
     }
-    else
-    {
-        output.color = gMaterial.color * textureColor;
-    }
+
+    output.color = float4(finalColor, baseColor.a);
     return output;
 }
 
