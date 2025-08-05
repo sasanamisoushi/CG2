@@ -9,13 +9,26 @@ class DebugCamera {
 	//ローカル座標
 	Vector3 translation_ = { 0,0,-50 };
 
-	//ビュー行列
-	Matrix4x4 MakeViewMatrix(const Vector3 &eye, const Vector3 &target, const Vector3 &up);
-
+	
 public:
 
 	void Initialize();
 
 	void Update();
+
+	bool ForwardMove;
+
+	bool BackwardMove;
+
+	bool UpMove;
+
+	bool DownMove;
+
+	bool RightMove;
+
+	bool LeftMove;
+
+	Math math_;
+
 };
 

@@ -81,5 +81,10 @@ public:
 
 	Matrix4x4 MakeViewMatrix(const Vector3 &eye, const Vector3 &target, const Vector3 &up);
 
+	//マウスの処理
+	void GetMousePosition(int *x, int *y);
+
+	bool IsMouseRightButtonDown();
+
 };
 

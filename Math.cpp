@@ -1,6 +1,7 @@
 #include "Math.h"
 #include <corecrt_math.h>
 #include <cmath>
+#include "externals/imgui/imgui.h"
 
 Vector3 operator-(const Vector3 &v1, const Vector3 &v2) {
 	return Vector3(v1.x - v2.x, v1.y - v2.y, v1.z - v2.z);
@@ -282,4 +283,14 @@ Matrix4x4 Math::MakeViewMatrix(const Vector3 &eye, const Vector3 &target, const 
 	view.m[3][3] = 1.0f;
 
 	return view;
+}
+
+void Math::GetMousePosition(int *x, int *y) {
+	ImVec2 pos = ImGui::GetMousePos();
+	*x = static_cast<int>(pos.x);
+	*y = static_cast<int>(pos.y);
+}
+
+bool Math::IsMouseRightButtonDown() {
+	return ImGui::IsMouseDown(ImGuiMouseButton_Right);
 }
