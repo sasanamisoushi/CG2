@@ -16,11 +16,29 @@
     <Filter Include="imgui">
       <UniqueIdentifier>{9379fa80-2541-43aa-a22c-13e2ad8f7d5c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\2d">
+      <UniqueIdentifier>{5934bf1d-61cb-4ed6-ae22-59caf65f66a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\3d">
+      <UniqueIdentifier>{331c34d6-2c75-431f-a19e-c267d31863ea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\audio">
+      <UniqueIdentifier>{c9916d26-ae51-40bd-9d8f-d124aec8088b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\base">
+      <UniqueIdentifier>{a6d30006-487c-45b8-8bd7-e77e352a4f32}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\inoutput">
+      <UniqueIdentifier>{dd9eae35-8ef8-4883-ae82-906694706895}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\math">
+      <UniqueIdentifier>{1e451b42-a6f3-4619-9177-1c29c6cea005}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\scene">
+      <UniqueIdentifier>{924cf232-337c-4b21-9804-1a91168982ba}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="engine\base\main.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
     <ClCompile Include="externals\imgui\imgui.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
@@ -42,8 +60,11 @@
     <ClCompile Include="externals\imgui\imgui_widgets.cpp">
       <Filter>imgui</Filter>
     </ClCompile>
+    <ClCompile Include="engine\base\main.cpp">
+      <Filter>ソース ファイル\base</Filter>
+    </ClCompile>
     <ClCompile Include="engine\math\MyMath.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>ソース ファイル\math</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
