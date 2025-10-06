@@ -1,4 +1,4 @@
-#include "Math.h"
+#include "MyMath.h"
 #include <corecrt_math.h>
 #include <cmath>
 
