@@ -32,39 +32,45 @@ PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
     
-    float4 transformedUV = mul(float32_t4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransfoem);
+    float32_t4 transformedUV = mul(float32_t4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransfoem);
     float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
- 
-    if (gMaterial.enableLighting != 0)
-    {
-        float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
-        output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
-        output.color.a = gMaterial.color.a * textureColor.a;
-    }
-    else
-    {
-        output.color = gMaterial.color * textureColor;
-    }
-    
-    //textureのa値が0.5以下のときにPixelを破棄
-    if (textureColor.a <= 0.5)
-    {
-        discard;
-    }
-    
-     //textureのa値が0のときにPixelを破棄
-    if (textureColor.a == 0.0)
-    {
-        discard;
-    }
-    
-     //output.colorのa値が0.0以下のときにPixelを破棄
-    if (output.color.a <= 0.0)
+    output.color = gMaterial.color * textureColor;
+    if (output.color.a == 0.0)
     {
         discard;
     }
     return output;
+    
+    //if (gMaterial.enableLighting != 0)
+    //{
+    //    float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
+    //    float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
+    //    output.color.rgb = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+    //    output.color.a = gMaterial.color.a * textureColor.a;
+    //}
+    //else
+    //{
+    //    output.color = gMaterial.color * textureColor;
+    //}
+    
+    ////textureのa値が0.5以下のときにPixelを破棄
+    //if (textureColor.a <= 0.5)
+    //{
+    //    discard;
+    //}
+    
+    // //textureのa値が0のときにPixelを破棄
+    //if (textureColor.a == 0.0)
+    //{
+    //    discard;
+    //}
+    
+    // //output.colorのa値が0.0以下のときにPixelを破棄
+    //if (output.color.a <= 0.0)
+    //{
+    //    discard;
+    //}
+    //return output;
 }
 
 
