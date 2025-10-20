@@ -5,7 +5,7 @@ on:
       -master
 
 env:
- SOLUTION_FINE_PATH: CG2/project/CG2.sln
+ SOLUTION_FINE_PATH: project/CG2.sln
  CONFIGURATION: Debug
 
 jobs:
@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Add MDBuild to PATH
+      - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x64
