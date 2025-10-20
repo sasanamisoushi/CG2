@@ -1,0 +1,24 @@
+name: DevelopmentBuild
+on:
+  push:
+    branches:
+      - master
+
+env:
+ SOLUTION_FILE_PATH: project/CG2.sln
+ CONFIGURATION: DevelopmentBuild
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+      - name: Build Solution
+        run: |
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\CG2.sln" /p:Platform=x64 /p:Configuration=Debug
