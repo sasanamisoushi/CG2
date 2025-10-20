@@ -19,6 +19,6 @@ jobs:
         uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x64
-      - name: Build
-        run: | 
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" project/CG2.sln /p:Platform=x64 /p:Configuration=Debug
+      - name: Build Solution
+        run: |
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\project\CG2.sln" /p:Platform=x64 /p:Configuration=Debug
