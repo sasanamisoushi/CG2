@@ -21,4 +21,4 @@ jobs:
           msbuild-architecture: x64
       - name: Build
         run: | 
-          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64 /p:Configuration=${{env.CONFIGURATION}}
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"; ${{env.SOLUTION_FILE_PATH}} /p:Platform=x64 /p:Configuration=${{env.CONFIGURATION}}
