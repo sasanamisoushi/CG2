@@ -2,7 +2,7 @@ name: DebugBuild
 on:
  push:
   branches:
-      -master
+      - master
 
 env:
  SOLUTION_FILE_PATH: project/CG2.sln
