@@ -12,10 +12,12 @@
 #pragma comment(lib,"dxguid.lib")
 
 
+
 class Input {
 public:
 
-	//template<typename T>using ComPtr=Microsoft::WRL
+	//namespace省略
+	template<class T>using ComPtr = Microsoft::WRL::ComPtr<T>;
 
 	//初期化
 	void Initialize(HINSTANCE hInstance,HWND hwnd);
@@ -23,5 +25,9 @@ public:
 	//更新
 	void Update();
 
+private:
+
+	//キーボードのデバイス
+	ComPtr < IDirectInputDevice8> keyboard;
 };
 
