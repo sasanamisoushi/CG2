@@ -1555,12 +1555,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//Update
 
-			////キーボード情報の取得開始
-			//keyboard->Acquire();
-			//keyboard->GetDeviceState(sizeof(keys), keys);
+			//キーボード情報の取得開始
+			keyboard->Acquire();
+			keyboard->GetDeviceState(sizeof(keys), keys);
 
-			//入力の更新
-			input->Update();
+
 
 
 			if (GetKey(DIK_0)) {
