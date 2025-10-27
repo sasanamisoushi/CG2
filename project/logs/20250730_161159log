@@ -1,0 +1,8 @@
+Use Adapater:NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatureLevel:12.2
+
+Complete create D3D12Device!!!
+
+Shader register range of type CBV (root parameter [2], visibility PIXEL) overlaps with another shader register range (root parameter [0], visibility PIXEL).
+
