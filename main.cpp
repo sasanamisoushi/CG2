@@ -113,7 +113,7 @@ struct Particle {
 
 //Transform変更
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
+Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { std::numbers::pi_v<float>/3.0f,std::numbers::pi_v<float>,0.0f }, { 0.0f,0.0f,-10.0f } };
 Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform transformPlane{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 Transform transformSphere{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
@@ -1619,6 +1619,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 	bool useMonsterBall = true;
+	bool isParticleUpdate = true;
+	bool useBillboard = true;
 
 	//07_01 トリガー処理
 	bool GetKey(uint8_t key);
@@ -1669,6 +1671,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f);
 
 
+			Matrix4x4 backToFrontMatrix = math.MakeRotateYMatrix(std::numbers::pi_v<float>);
+			Matrix4x4 billboardMatrix = math.Multiply(backToFrontMatrix, cameraMatrix);
+			billboardMatrix.m[3][0] = 0.0f;
+			billboardMatrix.m[3][1] = 0.0f;
+			billboardMatrix.m[3][2] = 0.0f;
+
+
 			//worldViewProjectionMatrix
 			Matrix4x4 worldViewProjectionMatrix = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
 			wvpData->WVP = worldViewProjectionMatrix;
@@ -1708,7 +1717,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				instancingData[index].World = worldMatrixInstanc;
 			}
 
-		
+			if (useBillboard) {
+				cameraTransform={ { 1.0f,1.0f,1.0f }, { std::numbers::pi_v<float> / 3.0f,std::numbers::pi_v<float>,0.0f }, { 0.0f,23.0f,10.0f } };
+			} else {
+				cameraTransform = { { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f  }, { 0.0f,0.0f,-10.0f } };
+			}
+
 			//particle用
 			const float kDeltaTime = 1.0f/60.0f;
 			uint32_t numInstance = 0;
@@ -1719,14 +1733,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 					continue;
 				}
 				Matrix4x4 worldMatrixInstanc = math.MakeAffineMatrix(particles[index].transform.scale, particles[index].transform.rotate, particles[index].transform.translate);
-				Matrix4x4 worldViewProjectionMatrixInstanc = math.Multiply(worldMatrixInstanc, worldViewProjectionMatrix);
+
+				Matrix4x4 worldViewProjectionMatrixInstanc = math.Multiply(worldMatrixInstanc, billboardMatrix);
+				
 				
 				float alpha = 1.0f - (particles[index].currentTime / particles[index].lifeTime);
-
-				particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
-				particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
-				particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
-				particles[index].currentTime += kDeltaTime;
+				if (isParticleUpdate) {
+					particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
+					particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
+					particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
+					particles[index].currentTime += kDeltaTime;
+				}
 				instancingData[index].WVP = worldViewProjectionMatrixInstanc;
 				instancingData[index].World = worldMatrixInstanc;
 				instancingData[index].color = particles[index].color;
@@ -1734,6 +1751,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				++numInstance;
 			}
 			
+
 			
 
 
@@ -1763,7 +1781,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 				ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
 
 			}
+
+			
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+			ImGui::Checkbox("Particle Update", &isParticleUpdate);
+			ImGui::Checkbox("Use Billboard", &useBillboard);
 
 			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
 			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
