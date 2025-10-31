@@ -18,8 +18,6 @@
 #include<sstream>
 #include <wrl.h>
 #include <xaudio2.h>
-#define DIRECTINPUT_VERSION    0x0800//DirectInputのバージョン指定
-#include <dinput.h>
 #include "Input.h"
 
 
@@ -33,8 +31,6 @@
 #pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"Dbghelp.lib")
 #pragma comment(lib,"xaudio2.lib")
-#pragma comment(lib,"dinput8.lib")
-#pragma comment(lib,"dxguid.lib")
 
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
