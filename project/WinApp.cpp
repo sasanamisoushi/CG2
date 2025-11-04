@@ -30,7 +30,7 @@ void WinApp::Initialize() {
 
 	CoInitializeEx(0, COINIT_MULTITHREADED);
 
-	WNDCLASS wc{};
+	
 	//ウインドウプロシージャ
 	wc.lpfnWndProc = WindowProc;
 	//ウインドウクラス名
@@ -43,9 +43,7 @@ void WinApp::Initialize() {
 	//ウインドウクラスを登録する
 	RegisterClass(&wc);
 
-	//クライアント領域のサイズ
-	const int32_t kClientWidth = 1280;
-	const int32_t kClinentHeight = 720;
+	
 
 	//ウインドウサイズを表す構造体にクライアント領域を入れる
 	RECT wrc = { 0,0,kClientWidth,kClinentHeight };
@@ -58,7 +56,7 @@ void WinApp::Initialize() {
 
 
 	//ウィンドウの生成
-	HWND hwnd = CreateWindow(
+	hwnd = CreateWindow(
 		wc.lpszClassName,
 		L"CG2",
 		WS_OVERLAPPEDWINDOW,

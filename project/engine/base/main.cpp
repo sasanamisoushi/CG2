@@ -687,8 +687,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//ポインタ
 	WinApp *winApp = nullptr;
 
-	//comの初期化
-	CoInitializeEx(0, COINIT_MULTITHREADED);
+	
 
 	//誰も捕捉しなかった場合に補足する関数の登録
 	SetUnhandledExceptionFilter(ExportDump);
@@ -713,50 +712,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	winApp = new WinApp();
 	winApp->Initialize();
 
-	WNDCLASS wc{};
-	//ウインドウプロシージャ
-	wc.lpfnWndProc = WindowProc;
-	//ウインドウクラス名
-	wc.lpszClassName = L"CG2";
-	//インスタンスハンドル
-	wc.hInstance = GetModuleHandle(nullptr);
-	//カーソル
-	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-
-	//ウインドウクラスを登録する
-	RegisterClass(&wc);
-
-	//クライアント領域のサイズ
-	const int32_t kClientWidth = 1280;
-	const int32_t kClinentHeight = 720;
-
-	//ウインドウサイズを表す構造体にクライアント領域を入れる
-	RECT wrc = { 0,0,kClientWidth,kClinentHeight };
-
-	//クライアント領域を元に実際のサイズにwrcを変更してもらう
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
-
-
-
-
-
-	//ウィンドウの生成
-	HWND hwnd = CreateWindow(
-		wc.lpszClassName,
-		L"CG2",
-		WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT,
-		CW_USEDEFAULT,
-		wrc.right - wrc.left,
-		wrc.bottom - wrc.top,
-		nullptr,
-		nullptr,
-		wc.hInstance,
-		nullptr);
-
-	//ウインドウを表示する
-	ShowWindow(hwnd, SW_SHOW);
-
+	
 
 
 #ifdef _DEBUG
@@ -892,9 +848,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain = nullptr;
 	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
 	//画面の幅
-	swapChainDesc.Width = kClientWidth;
+	swapChainDesc.Width = WinApp::kClientWidth;
 	//画面の高さ
-	swapChainDesc.Height = kClinentHeight;
+	swapChainDesc.Height = WinApp::kClinentHeight;
 	//色の形式
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	//マルチサンプルしない
@@ -906,7 +862,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//モニターにうつしたら、中身を破棄
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	//コマンドキュー、ウインドウハンドル、設定を渡して生成する
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1 **>(swapChain.GetAddressOf()));
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1 **>(swapChain.GetAddressOf()));
 	assert(SUCCEEDED(hr));
 
 	//RTV用のヒープでディスクリプタの数は２。　RTVはShader内で触る物ではないので、shaderVisibleはfalse
@@ -1029,28 +985,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//--------------入力デバイス--------------
 	Input *input = nullptr;
 
-	////DirectInputの初期化
-	//IDirectInput8 *directInput = nullptr;
-	//result = DirectInput8Create(
-	//	w.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8,
-	//	(void **)&directInput, nullptr);
-	//assert(SUCCEEDED(result));
-
-	////キーボードデバイスの生成
-	//IDirectInputDevice8 *keyboard = nullptr;
-	//result = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
-	//assert(SUCCEEDED(result));
-
-	////入力データの形式のセット
-	//result = keyboard->SetDataFormat(&c_dfDIKeyboard);//標準形式
-	//assert(SUCCEEDED(result));
-
-	////排他制御レベルのセット
-	//result = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-	//assert(SUCCEEDED(result));
-
+	
 	input = new Input();
-	input->Initialize(w.hInstance,hwnd);
+	input->Initialize(winApp->GetHinstance(), winApp->GetHwnd());
 
 	//シリアライズしてバイナルにする
 	ID3DBlob *signatureBlob = nullptr;
@@ -1429,8 +1366,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_VIEWPORT viewport{};
 
 	//クライアント領域のサイズと一緒にして画面全体に表示
-	viewport.Width = kClientWidth;
-	viewport.Height = kClinentHeight;
+	viewport.Width = WinApp::kClientWidth;
+	viewport.Height = WinApp::kClinentHeight;
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -1440,9 +1377,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3D12_RECT scissorRecct{};
 	//基本的にビューポートと同じ矩形が構成されるようにする
 	scissorRecct.left = 0;
-	scissorRecct.right = kClientWidth;
+	scissorRecct.right = WinApp::kClientWidth;
 	scissorRecct.top = 0;
-	scissorRecct.bottom = kClinentHeight;
+	scissorRecct.bottom = WinApp::kClinentHeight;
 
 
 
@@ -1501,7 +1438,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//DepthStencilTextureをウィンドウのサイズで作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClinentHeight);
+	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, WinApp::kClientWidth, WinApp::kClinentHeight);
 
 
 	//DSVの設定
@@ -1522,7 +1459,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(winApp->GetHwnd());
 	ImGui_ImplDX12_Init(device.Get(),
 		swapChainDesc.BufferCount,
 		rtvDesc.Format,
@@ -1579,7 +1516,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			Matrix4x4 viewMatrix = math.Inverse(cameraMatrix);
 
 			//projectionMatrix
-			Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClinentHeight), 0.1f, 100.0f);
+			Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
 
 
 			//worldViewProjectionMatrix
@@ -1603,7 +1540,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//Sprite用のworldViewProjectionMatrixを作る
 			Matrix4x4 worldMatrixSprite = math.MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
 			Matrix4x4 viewMatrixSprite = math.MakeIdentity4x4();
-			Matrix4x4 projectionMatrixSprite = math.MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClinentHeight), 0.0f, 100.0f);
+			Matrix4x4 projectionMatrixSprite = math.MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClinentHeight), 0.0f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrixSprite = math.Multiply(worldMatrixSprite, math.Multiply(viewMatrixSprite, projectionMatrixSprite));
 			transformetionMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
 
@@ -1796,7 +1733,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//出力ウィンドへの文字 
 	Log(logStream, "Hello,DirectX!\n");
-	Log(logStream, ConvertString(std::format(L"windth:{}\n", kClientWidth)));
+	Log(logStream, ConvertString(std::format(L"windth:{}\n", WinApp::kClientWidth)));
 
 
 
@@ -1806,7 +1743,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//整数を文字列にする
 	std::string str1{ std::to_string(10) };
 
-	CloseWindow(hwnd);
+	CloseWindow(winApp->GetHwnd());
 
 	// 解放処理
 	CloseHandle(fenceEvent);
