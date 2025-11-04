@@ -19,6 +19,7 @@
 #include <wrl.h>
 #include <xaudio2.h>
 #include "Input.h"
+#include "WinApp.h"
 
 
 
@@ -683,7 +684,8 @@ bool LetKeyMoment(uint8_t key) {
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3DResourceLeakChecker leakCheck;
 
-
+	//ポインタ
+	WinApp *winApp = nullptr;
 
 	//comの初期化
 	CoInitializeEx(0, COINIT_MULTITHREADED);
@@ -707,7 +709,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//ファイルを作って書き込み準備
 	std::ofstream logStream(logFilePath);
 
-
+	//windowsAppの初期化
+	winApp = new WinApp();
+	winApp->Initialize();
 
 	WNDCLASS wc{};
 	//ウインドウプロシージャ
@@ -1808,6 +1812,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	CloseHandle(fenceEvent);
 
 	delete input;
+	delete winApp;
 
 	//xAudio2解放
 	xAudio2.Reset();
