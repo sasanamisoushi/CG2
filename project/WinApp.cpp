@@ -75,3 +75,10 @@ void WinApp::Initialize() {
 
 void WinApp::Update() {
 }
+
+void WinApp::Finalize() {
+
+	CloseWindow(hwnd);
+	//COMの終了処理
+	CoUninitialize();
+}

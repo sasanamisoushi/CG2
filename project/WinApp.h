@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+#include <cstdint>
 
 class WinApp {
 public: //静的メンバ関数
@@ -13,6 +14,9 @@ public:
 
 	//更新
 	void Update();
+
+	//終了
+	void Finalize();
 
 	//getter
 	HWND GetHwnd() const { return hwnd; }

@@ -987,7 +987,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	
 	input = new Input();
-	input->Initialize(winApp->GetHinstance(), winApp->GetHwnd());
+	input->Initialize(winApp);
 
 	//シリアライズしてバイナルにする
 	ID3DBlob *signatureBlob = nullptr;
@@ -1743,7 +1743,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//整数を文字列にする
 	std::string str1{ std::to_string(10) };
 
-	CloseWindow(winApp->GetHwnd());
+	//WindowaAPIの終了処理
+	winApp->Finalize();
 
 	// 解放処理
 	CloseHandle(fenceEvent);
@@ -1769,8 +1770,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
-	//COMの終了処理
-	CoUninitialize();
 
 
 
