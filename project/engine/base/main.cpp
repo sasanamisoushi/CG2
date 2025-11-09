@@ -20,6 +20,7 @@
 #include <xaudio2.h>
 #include "Input.h"
 #include "WinApp.h"
+#include "DirectXCommon.h"
 
 
 
@@ -686,7 +687,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//ポインタ
 	WinApp *winApp = nullptr;
-
+	DirectXCommon *dxCommon = nullptr;
 	
 
 	//誰も捕捉しなかった場合に補足する関数の登録
@@ -725,8 +726,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	}
 #endif 
 
-
-
+	//DirectXCommonの初期化
+	dxCommon = new DirectXCommon();
+	dxCommon->Initialize();
 
 
 	//IDXGIファクトリーの生成
@@ -1747,6 +1749,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	delete input;
 	delete winApp;
+	delete dxCommon;
 
 	//xAudio2解放
 	xAudio2.Reset();
