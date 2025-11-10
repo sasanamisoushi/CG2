@@ -326,3 +326,4 @@ logs/
 Dumps/
 generated/
 /project/imgui.ini
+.pdb
