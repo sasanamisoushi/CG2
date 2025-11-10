@@ -155,6 +155,8 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="engine\base\main.cpp" />
     <ClCompile Include="engine\math\MyMath.cpp" />
     <ClCompile Include="Input.cpp" />
+    <ClCompile Include="Logger.cpp" />
+    <ClCompile Include="StringUtility.cpp" />
     <ClCompile Include="WinApp.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -187,7 +189,9 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="externals\imgui\imstb_truetype.h" />
     <ClInclude Include="engine\math\MyMath.h" />
     <ClInclude Include="Input.h" />
+    <ClInclude Include="Logger.h" />
     <ClInclude Include="ResourceObject.h" />
+    <ClInclude Include="StringUtility.h" />
     <ClInclude Include="WinApp.h" />
   </ItemGroup>
   <ItemGroup>
