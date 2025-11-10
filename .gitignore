@@ -327,3 +327,4 @@ Dumps/
 generated/
 /project/imgui.ini
 .pdb
+/project/externals/DirectXTex/Shaders/Compiled/BC6HEncode_EncodeBlockCS.pdb
