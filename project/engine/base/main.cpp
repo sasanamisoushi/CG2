@@ -726,9 +726,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	}
 #endif 
 
+
 	//DirectXCommonの初期化
 	dxCommon = new DirectXCommon();
 	dxCommon->Initialize();
+
 
 
 	//IDXGIファクトリーの生成
