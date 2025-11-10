@@ -12,5 +12,11 @@ public:
 
 	//デバイスの初期化
 	void CreateDevice();
+
+	//DirectX12デバイス
+	Microsoft::WRL::ComPtr<ID3D12Device8> device;
+
+	//DXGIファクトリ
+	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory;
 };
 

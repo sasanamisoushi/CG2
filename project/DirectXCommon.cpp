@@ -27,7 +27,7 @@ void DirectXCommon::CreateDevice() {
 	//IDXGIファクトリーの生成
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
 
-	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
+	hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
 	assert(SUCCEEDED(hr));
 
@@ -49,7 +49,7 @@ void DirectXCommon::CreateDevice() {
 		if (!(adapterDesc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE)) {
 
 			//採用したアダプタの情報をログに出力
-			//Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
+			Log(logStream, ConvertString(std::format(L"Use Adapater:{}\n", adapterDesc.Description)));
 			break;
 		}
 
@@ -75,14 +75,14 @@ void DirectXCommon::CreateDevice() {
 		//指定した機能レベルでデバイスを生成できたか確認
 		if (SUCCEEDED(hr)) {
 			//生成できたのでログ出力を行ってループを抜ける
-			//Log(logStream, std::format("FeatureLevel:{}\n", featureLevelStrings[i]));
+			Log(logStream, std::format("FeatureLevel:{}\n", featureLevelStrings[i]));
 			break;
 		}
 	}
 
 	//デバイスの生成が上手くいかなかったので起動できない
 	assert(device != nullptr);
-	//Log(logStream, "Complete create D3D12Device!!!\n");
+	Log(logStream, "Complete create D3D12Device!!!\n");
 
 
 	//DescriptorSIzeを取得しておく
