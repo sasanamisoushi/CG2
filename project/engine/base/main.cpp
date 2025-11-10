@@ -20,6 +20,7 @@
 #include <xaudio2.h>
 #include "Input.h"
 #include "WinApp.h"
+#include "DirectXCommon.h"
 
 
 
@@ -460,6 +461,7 @@ MaterialData LoadMaterialtemplateFile(const std::string &directoryPath, const st
 	return materialData;
 }
 
+
 ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename) {
 	ModelData modelData;
 	std::vector<Vector4> positions; //位置
@@ -686,7 +688,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//ポインタ
 	WinApp *winApp = nullptr;
-
+	DirectXCommon *dxCommon = nullptr;
 	
 
 	//誰も捕捉しなかった場合に補足する関数の登録
@@ -724,6 +726,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		debugController->SetEnableGPUBasedValidation(TRUE);
 	}
 #endif 
+
+
+	//DirectXCommonの初期化
+	dxCommon = new DirectXCommon();
+	dxCommon->Initialize();
+
+
 
 	//IDXGIファクトリーの生成
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
@@ -1743,6 +1752,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	delete input;
 	delete winApp;
+	delete dxCommon;
 
 	//xAudio2解放
 	xAudio2.Reset();
