@@ -711,7 +711,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::ofstream logStream(logFilePath);
 
 
-
 	WNDCLASS wc{};
 	//ウインドウプロシージャ
 	wc.lpfnWndProc = WindowProc;
