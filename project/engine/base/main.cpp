@@ -936,7 +936,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
-	/*rootParamerers[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 	rootParamerers[1].Descriptor.ShaderRegister = 0;
 	rootParamerers[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -1493,8 +1493,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//Update
 
 			//キーボード情報の取得開始
-			keyboard->Acquire();
-			keyboard->GetDeviceState(sizeof(keys), keys);
+		/*	keyboard->Acquire();
+			keyboard->GetDeviceState(sizeof(keys), keys);*/
 
 
 
