@@ -461,6 +461,7 @@ MaterialData LoadMaterialtemplateFile(const std::string &directoryPath, const st
 	return materialData;
 }
 
+
 ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename) {
 	ModelData modelData;
 	std::vector<Vector4> positions; //位置
