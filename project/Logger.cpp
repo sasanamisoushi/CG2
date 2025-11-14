@@ -14,13 +14,4 @@ void Logger::Log(const std::string &message) {
 	logFile << message;
 	logFile.flush();
 }
-void LogW(const std::wstring &message) {
-
-	//コンソールに出力
-	std::wcout << message;
-	//ファイルに出力
-	static std::wofstream logFile("log_w.txt", std::ios::app);
-	logFile << message;
-	logFile.flush();
-}
 

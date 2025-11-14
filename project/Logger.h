@@ -3,10 +3,8 @@
 
 
 class Logger {
+public:
 	//ログ出力
 	void Log(const std::string &message);
-
-	//ワイド文字
-	void LogW(const std::wstring &message);
 };
 
