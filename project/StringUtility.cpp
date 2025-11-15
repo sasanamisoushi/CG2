@@ -1,5 +1,5 @@
 #include "StringUtility.h"
-#include <stringapiset.h>
+#include <Windows.h>
 
 std::wstring StringUtility::ConvertString(const std::string &str) {
 

@@ -72,8 +72,7 @@ void DirectXCommon::CreateDevice() {
 	}
 #endif 
 
-	//IDXGIファクトリーの生成
-	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
+	
 
 	hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
