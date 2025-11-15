@@ -57,6 +57,13 @@ public:
 	//ImGuiの初期化
 	void InitializeImGui();
 
+	//描画前処理
+	void PreDraw();
+
+	//描画後処理
+	void PostDraw();
+
+
 	
 private:
 
@@ -106,6 +113,24 @@ private:
 
 	//RTVフォーマット
 	DXGI_FORMAT rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+
+	//RTVを2つ作るのでディスクリプタを2つ用意
+	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
+
+	//ビューポート
+	D3D12_VIEWPORT viewport{};
+
+	//シザー矩形
+	D3D12_RECT scissorRecct{};
+
+	//DXCコンパイラ
+	Microsoft::WRL::ComPtr<ID3D12Fence> fence = nullptr;
+
+	//フェンス用イベントハンドル
+	HANDLE fenceEvent = nullptr;
+
+	//フェンス値
+	uint64_t fenceValue = 0;
 
 	
 	//指定番号のCPUデスクリプトハンドルを取得

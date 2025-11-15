@@ -1413,18 +1413,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//Textureを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
-	const DirectX::TexMetadata &metadata = mipImages.GetMetadata();
+	/*DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
+	const DirectX::TexMetadata &metadata = mipImages.GetMetadata();*/
 	/*Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = CreateTextureResource(device, metadata);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);*/
 
 
 	//metDataを基にSRVの設定
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	/*D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = metadata.format;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);*/
 
 	////SRVを作成するDescriptorHeapの場所を決める
 	//D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1549,10 +1549,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			transformetionMatrixDataSprite->WVP = worldViewProjectionMatrixSprite;
 
 			//uvTranslate用の行列
-			/*Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
+			Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
 			uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeRotateZMatrix(uvTransformSprite.rotate.z));
 			uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeTranslateMatrix(uvTransformSprite.translate));
-			materialDataSprite->uvTransform = uvTransformMatrix;*/
+			materialDataSprite->uvTransform = uvTransformMatrix;
 
 
 			//開発用UIの処理
@@ -1603,43 +1603,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//ImGuiの内部コマンドを生成
 			ImGui::Render();
 
-			//UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
-
-			//TransitionBarrierの設定
-			D3D12_RESOURCE_BARRIER barrier{};
-			//今回のバリアはTransition
-			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			//Noneにしておく
-			barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-			//バリアを張る対象のリソース。現在のバックバッファに対して使う
-			//barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
-			//前のResourceState
-			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-			//後のResourceState
-			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-			//TransitionBarrierを張る
-			//commandList->ResourceBarrier(1, &barrier);
-
-
-
-			////描画先のRTVとDSVを設定する
-			//D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-			//commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
-
-			////指定した色での画面全体をクリアする
-			//float clearColor[] = { 0.1f,0.25,0.5,1.0f };
-			//commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-
-			////指定した深度で画面全体をクリアする
-			//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
-
-			//Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap };
-			//commandList->SetDescriptorHeaps(1, descriptorHeaps->GetAddressOf());
-
-
-			/*commandList->RSSetViewports(1, &viewport);
-			commandList->RSSetScissorRects(1, &scissorRecct);*/
+			//描画前処理
+			dxCommon->PreDraw();
 
 			////RootSignatureを設定。PSOに設定しているけど別途設定が必要
 			//commandList->SetGraphicsRootSignature(rootSignature.Get());
@@ -1694,41 +1659,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//実際のcommandListのImGuiの描画コマンドを積む
 			//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
 
-			//今回はRenderTargetからPresentにする
-			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-			//TransitionBarrierを張る
-			//commandList->ResourceBarrier(1, &barrier);
+			//描画後処理
+			dxCommon->PostDraw();
 
-			////コマンドリストの内容を確定させるすべてのコマンドを積んでからCloseすること
-			//hr = commandList->Close();
-			//assert(SUCCEEDED(hr));
-
-			////GPUにコマンドリストの実行を行わせる
-			//Microsoft::WRL::ComPtr<ID3D12CommandList> commandLists[] = { commandList };
-			//commandQueue->ExecuteCommandLists(1, commandLists->GetAddressOf());
-			////GPUとのosに画面の交換を行うよう通知する
-			//swapChain->Present(1, 0);
-
-			////Fenceの値を更新
-			//fenceValue++;
-			////GPUがここまでたどり着いたときに、Fenceの値を指定した値に代入するようにSignalを送る
-			//commandQueue->Signal(fence.Get(), fenceValue);
-
-			//Fenceの値が指定したSignal値にたどり着いているか確認する
-			////GetCompletedValueの初期値はFence作成時に渡した初期値
-			//if (fence->GetCompletedValue() < fenceValue) {
-			//	//指定したSignalにたどり着いていないのでたどり着くまで待つようにイベントを設定する
-			//	fence->SetEventOnCompletion(fenceValue, fenceEvent);
-			//	//イベント待つ
-			//	WaitForSingleObject(fenceEvent, INFINITE);
-			//}
-
-			////次のフレーム用のコマンドリスト準備
-			//hr = commandAllocator->Reset();
-			//assert(SUCCEEDED(hr));
-			//hr = commandList->Reset(commandAllocator.Get(), nullptr);
-			//assert(SUCCEEDED(hr));
+			
 	}
 
 	//出力ウィンドへの文字 
