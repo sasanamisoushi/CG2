@@ -9,7 +9,7 @@ class DirectXCommon {
 
 public:
 	//初期化
-	void Initialize();
+	void Initialize(WinApp *winApp);
 
 	//デバイスの初期化
 	void CreateDevice();

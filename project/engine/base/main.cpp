@@ -722,7 +722,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	dxCommon = new DirectXCommon();
-	dxCommon->Initialize();
+	dxCommon->Initialize(winApp);
 
 
 	////IDXGIファクトリーの生成

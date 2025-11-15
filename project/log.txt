@@ -10,3 +10,27 @@ Complete create D3D12Device!!!
 Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
 FeatureLevel: 12.2
 Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+FeatureLevel: 12.2
+Complete create D3D12Device!!!

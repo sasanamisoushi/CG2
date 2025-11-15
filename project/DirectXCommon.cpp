@@ -16,7 +16,7 @@ using namespace Microsoft::WRL;
 StringUtility su;
 Logger logger;
 
-void DirectXCommon::Initialize() {
+void DirectXCommon::Initialize(WinApp *winApp) {
 
 	//NULL検出
 	assert(winApp);
@@ -36,6 +36,7 @@ void DirectXCommon::Initialize() {
 	//各種デスクリプタヒープの生成
 	CreateDescriptorHeaps();
 
+	
 	//レンダーターゲットビューの初期化
 	CreateRenderTargetView();
 
@@ -188,10 +189,6 @@ void DirectXCommon::CreateCommand() {
 void DirectXCommon::CreateSwapChain() {
 
 	HRESULT hr;
-
-	//スワップチェーンを生成する
-	Microsoft::WRL::ComPtr<IDXGISwapChain4> swapChain = nullptr;
-	DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};
 	//画面の幅
 	swapChainDesc.Width = WinApp::kClientWidth;
 	//画面の高さ
@@ -257,13 +254,13 @@ void DirectXCommon::CreateDescriptorHeaps() {
 
 
 	//RTV用のヒープでディスクリプタの数は２。　RTVはShader内で触る物ではないので、shaderVisibleはfalse
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
+	this->rtvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 
 	//SRV用のヒープでディスクリプタの数は128。SRVはShaderVisibleはtrue
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
+	this->srvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
 	//DSV用のヒープでディスクリプタの数は１。DSVはShaderVisidleはfalse
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+	this->dsvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
 
 }
 
