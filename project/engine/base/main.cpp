@@ -1594,6 +1594,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			////ImGuiの内部コマンドを生成
 			//ImGui::Render();
 
+			//描画前処理
+			dxCommon->PreDraw();
+
 			//UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
 			////TransitionBarrierの設定
@@ -1680,7 +1683,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//// 描画
 			//commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
-
+			//描画後処理
+			dxCommon->PostDraw();
 
 			////実際のcommandListのImGuiの描画コマンドを積む
 			//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());

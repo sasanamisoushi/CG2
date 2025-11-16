@@ -132,6 +132,9 @@ private:
 	//フェンス値
 	uint64_t fenceValue = 0;
 
+	//TransitionBarrierの設定
+	D3D12_RESOURCE_BARRIER barrier{};
+
 
 	//指定番号のCPUデスクリプトハンドルを取得
 	static D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(const Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);

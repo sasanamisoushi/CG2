@@ -279,8 +279,7 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DirectXCommon::CreateDescriptorHesp
 
 void DirectXCommon::CreateRenderTargetView() {
 	HRESULT hr;
-	//SwapChainからResourceを引っ張ってくる
-	Microsoft::WRL::ComPtr<ID3D12Resource> swapChainResources[2] = { nullptr };
+	
 	hr = swapChain->GetBuffer(0, IID_PPV_ARGS(&swapChainResources[0]));
 	assert(SUCCEEDED(hr));
 	hr = swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainResources[1]));
@@ -291,20 +290,16 @@ void DirectXCommon::CreateRenderTargetView() {
 	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 	//ディスクリプタの先頭を取得する
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvStartHandle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	//RTVを2つ作るのでディスクリプタを2つ用意
-	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
+	// 修正: クラスメンバーの rtvHandles に格納する
+	uint32_t rtvDescriptorSize = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	//裏表の2つ分
 	for (uint32_t i = 0; i < 2; ++i) {
-		//1つ目
-		if (i == 0) {
-			rtvHandles[0] = rtvStartHandle;
-			device->CreateRenderTargetView(swapChainResources[0].Get(), &rtvDesc, rtvHandles[0]);
-		}
-		//2つ目のディスクリプハンドルを得る
-		else {
-			rtvHandles[1].ptr = rtvHandles[0].ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-			device->CreateRenderTargetView(swapChainResources[1].Get(), &rtvDesc, rtvHandles[1]);
-		}
+		// ハンドルを計算してクラスメンバーに格納
+		rtvHandles[i] = rtvStartHandle;
+		rtvHandles[i].ptr += (i * rtvDescriptorSize);
+
+		// RTVの生成
+		device->CreateRenderTargetView(swapChainResources[i].Get(), &rtvDesc, rtvHandles[i]);
 	}
 
 }
@@ -389,8 +384,7 @@ void DirectXCommon::PreDraw() {
 
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
-	//TransitionBarrierの設定
-	D3D12_RESOURCE_BARRIER barrier{};
+	
 	//今回のバリアはTransition
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 	//Noneにしておく
@@ -417,7 +411,7 @@ void DirectXCommon::PreDraw() {
 
 
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeaps[] = { srvDescriptorHeap };
-	commandList->SetDescriptorHeaps(1, descriptorHeaps->GetAddressOf());
+	commandList->SetDescriptorHeaps(1, descriptorHeaps[0].GetAddressOf());
 
 
 	commandList->RSSetViewports(1, &viewport);
@@ -430,9 +424,11 @@ void DirectXCommon::PostDraw() {
 
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
-	//TransitionBarrierの設定
-	D3D12_RESOURCE_BARRIER barrier{};
+	
 	//今回はRenderTargetからPresentにする
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
 	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
 	//TransitionBarrierを張る
