@@ -3,7 +3,13 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl.h>
+#include <string>
 #include "WinApp.h"
+#include <dxcapi.h>
+
+
+#include "externals/DirectXTex/DirectXTex.h"
+
 
 class DirectXCommon {
 
@@ -27,8 +33,7 @@ public:
 	void CreateDescriptorHeaps();
 
 	//デスクリプタヒープを生成する
-	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap>
-		CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible);
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible);
 
 	//レンダーターゲットビューの初期化
 	void CreateRenderTargetView();
@@ -62,6 +67,37 @@ public:
 
 	//描画後処理
 	void PostDraw();
+
+	//getter
+	ID3D12Device *GetDevice() { return device.Get(); }
+	ID3D12GraphicsCommandList *GetCommandList() { return commandList.Get(); }
+	ID3D12DescriptorHeap *GetSRVDescriptorHeap() { return srvDescriptorHeap.Get(); }
+	uint32_t GetDescriptorSizeSRV() { return descriptorSizeSRV; }
+	HANDLE GetFenceEvent() { return fenceEvent; }
+
+	// シェーダーのコンパイル
+	Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(const std::wstring& filePath, const wchar_t *profile);
+
+	//バッファリソースの生成
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(size_t sizeInBytes);
+
+	//テクスチャリソースの生成
+	Microsoft::WRL::ComPtr<ID3D12Resource> CreateTextureResource(const DirectX::TexMetadata& metadata);	
+
+	//テクスチャデータの転送
+	Microsoft::WRL::ComPtr<ID3D12Resource> UploadTextureData(const Microsoft::WRL::ComPtr<ID3D12Resource> &texture, const DirectX::ScratchImage &mipImages);
+
+	//テクスチャファイルの読み込み
+	static DirectX::ScratchImage LoadTexture(const std::string& filePath);
+
+	////ルートシグネチャの生成
+	//Microsoft::WRL::ComPtr<ID3D12RootSignature> CreateRootSignature(const D3D12_ROOT_SIGNATURE_DESC &desc);
+
+	//指定番号のCPUデスクリプトハンドルを取得
+	static D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(const Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);
+
+	//指定番号のGPUデスクリプトハンドルを取得
+	static D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(const Microsoft::WRL::ComPtr <ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
 
 
@@ -135,14 +171,13 @@ private:
 	//TransitionBarrierの設定
 	D3D12_RESOURCE_BARRIER barrier{};
 
-
-	//指定番号のCPUデスクリプトハンドルを取得
-	static D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(const Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);
-
-	//指定番号のGPUデスクリプトハンドルを取得
-	static D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(const Microsoft::WRL::ComPtr <ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);
+	//DXC関連
+	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_;
+	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_;
+	Microsoft::WRL::ComPtr<IDxcIncludeHandler> includeHandler_;
 
 
+	
 
 };
 
