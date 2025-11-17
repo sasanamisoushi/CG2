@@ -21,4 +21,4 @@ jobs:
           msbuild-architecture: x64
       - name: Build Solution
         run: |
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\CG2.sln" /p:Platform=x64 /p:Configuration=Debug
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\$env:SOLUTION_FILE_PATH" /p:Platform=x64 /p:Configuration=Debug
