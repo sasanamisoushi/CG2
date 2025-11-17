@@ -5,8 +5,8 @@ on:
       - master
 
 env:
- SOLUTION_FILE_PATH: project/CG2.sln
- CONFIGURATION: Development
+  SOLUTION_FILE_PATH: project/CG2.sln
+  CONFIGURATION: Debug
 
 jobs:
   build:
@@ -15,11 +15,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
         with:
           msbuild-architecture: x64
+
       - name: Build Solution
         run: |
-          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\project\CG2.sln" /p:Platform=x64 /p:Configuration=Debug
+          & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "$env:GITHUB_WORKSPACE\$env:SOLUTION_FILE_PATH" /p:Platform=x64 /p:Configuration=$env:CONFIGURATION
         shell: pwsh
