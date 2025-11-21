@@ -3,7 +3,7 @@
 #include <cmath>
 
 //平行移動
-Matrix4x4 Math::MakeTranslateMatrix(const Vector3 &translate) {
+Matrix4x4 MyMath::MakeTranslateMatrix(const Vector3 &translate) {
 	Matrix4x4 result = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -14,7 +14,7 @@ Matrix4x4 Math::MakeTranslateMatrix(const Vector3 &translate) {
 }
 
 //拡大縮小
-Matrix4x4 Math::MkeScaleMatrix(const Vector3 &scale) {
+Matrix4x4 MyMath::MkeScaleMatrix(const Vector3 &scale) {
 	Matrix4x4 result = {
 		scale.x, 0, 0, 0,
 		0, scale.y, 0, 0,
@@ -25,7 +25,7 @@ Matrix4x4 Math::MkeScaleMatrix(const Vector3 &scale) {
 
 
 //x軸回転行列
-Matrix4x4 Math::MakeRoteXMatrix(float radian) {
+Matrix4x4 MyMath::MakeRoteXMatrix(float radian) {
 	Matrix4x4 result = {
 		1,0,0,0,
 		0,cosf(radian),sinf(radian),0,
@@ -36,7 +36,7 @@ Matrix4x4 Math::MakeRoteXMatrix(float radian) {
 }
 
 //Y軸回転行列
-Matrix4x4 Math::MakeRotateYMatrix(float radian) {
+Matrix4x4 MyMath::MakeRotateYMatrix(float radian) {
 	Matrix4x4 result = {
 		cosf(radian),0,-sinf(radian),0,
 		0,1,0,0,
@@ -47,7 +47,7 @@ Matrix4x4 Math::MakeRotateYMatrix(float radian) {
 }
 
 //Z軸回転行列
-Matrix4x4 Math::MakeRotateZMatrix(float radian) {
+Matrix4x4 MyMath::MakeRotateZMatrix(float radian) {
 	Matrix4x4 result = {
 		cosf(radian),sinf(radian),0,0,
 		-sinf(radian),cosf(radian),0,0,
@@ -58,7 +58,7 @@ Matrix4x4 Math::MakeRotateZMatrix(float radian) {
 }
 
 //積
-Matrix4x4 Math::Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2) {
+Matrix4x4 MyMath::Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2) {
 	Matrix4x4 result = {};
 	for (int i = 0; i < 4; ++i) {
 		for (int j = 0; j < 4; ++j) {
@@ -71,7 +71,7 @@ Matrix4x4 Math::Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2) {
 }
 
 //アフィン変換
-Matrix4x4 Math::MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate) {
+Matrix4x4 MyMath::MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate) {
 	Matrix4x4 rot = Multiply(Multiply(MakeRoteXMatrix(rotate.x), MakeRotateYMatrix(rotate.y)), MakeRotateZMatrix(rotate.z));
 	Matrix4x4 result = Multiply(Multiply(MkeScaleMatrix(scale), rot), MakeTranslateMatrix(translate));
 
@@ -81,7 +81,7 @@ Matrix4x4 Math::MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, co
 
 
 //座標変換
-Vector3 Math::Transform(const Vector3 &vector, const Matrix4x4 &matrix) {
+Vector3 MyMath::Transform(const Vector3 &vector, const Matrix4x4 &matrix) {
 	float x = vector.x * matrix.m[0][0] + vector.y * matrix.m[1][0] + vector.z * matrix.m[2][0] + matrix.m[3][0];
 	float y = vector.x * matrix.m[0][1] + vector.y * matrix.m[1][1] + vector.z * matrix.m[2][1] + matrix.m[3][1];
 	float z = vector.x * matrix.m[0][2] + vector.y * matrix.m[1][2] + vector.z * matrix.m[2][2] + matrix.m[3][2];
@@ -97,7 +97,7 @@ Vector3 Math::Transform(const Vector3 &vector, const Matrix4x4 &matrix) {
 }
 
 //遠近投影行列
-Matrix4x4 Math::MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearZ, float farZ) {
+Matrix4x4 MyMath::MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearZ, float farZ) {
 	Matrix4x4 result = {};
 
 	float f = 1.0f / tanf(fovY / 2.0f);
@@ -113,7 +113,7 @@ Matrix4x4 Math::MakePerspectiveFovMatrix(float fovY, float aspectRatio, float ne
 }
 
 //正規化デバイス座標
-Matrix4x4 Math::MakeViewportMatrix(float width, float height) {
+Matrix4x4 MyMath::MakeViewportMatrix(float width, float height) {
 	Matrix4x4 result = {};
 
 	result.m[0][0] = width / 2.0f;
@@ -128,7 +128,7 @@ Matrix4x4 Math::MakeViewportMatrix(float width, float height) {
 }
 
 //単位行列
-Matrix4x4 Math::MakeIdentity4x4() {
+Matrix4x4 MyMath::MakeIdentity4x4() {
 	Matrix4x4 result = {};
 	for (int i = 0; i < 4; ++i) {
 		result.m[i][i] = 1.0f;
@@ -138,7 +138,7 @@ Matrix4x4 Math::MakeIdentity4x4() {
 
 
 //逆行列
-Matrix4x4 Math::Inverse(const Matrix4x4 &m) {
+Matrix4x4 MyMath::Inverse(const Matrix4x4 &m) {
 	Matrix4x4 result = {};
 	float determinant =
 		m.m[0][0] * m.m[1][1] * m.m[2][2] * m.m[3][3] + m.m[0][0] * m.m[1][2] * m.m[2][3] * m.m[3][1] + m.m[0][0] * m.m[1][3] * m.m[2][1] * m.m[3][2] -
@@ -208,7 +208,7 @@ Matrix4x4 Math::Inverse(const Matrix4x4 &m) {
 	return result;
 }
 
-Matrix4x4 Math::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
+Matrix4x4 MyMath::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
 	Matrix4x4 result = {};
 
 	float width = right - left;
@@ -226,7 +226,7 @@ Matrix4x4 Math::MakeOrthographicMatrix(float left, float top, float right, float
 	return result;
 }
 
-Vector3 Math::Normalize(const Vector3 &v) {
+Vector3 MyMath::Normalize(const Vector3 &v) {
 	float length = std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 	if (length == 0.0f) {
 		return { 0.0f, 0.0f, 0.0f }; 

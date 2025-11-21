@@ -17,7 +17,6 @@
 
 using namespace Microsoft::WRL;
 StringUtility su;
-Logger logger;
 
 void DirectXCommon::Initialize(WinApp *winApp) {
 

@@ -28,7 +28,7 @@ struct Matrix3x3 {
 };
 
 
-class Math {
+class MyMath {
 public:
 
 	//平行移動
