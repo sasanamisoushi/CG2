@@ -6,6 +6,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 
+
 using Microsoft::WRL::ComPtr;
 
 
@@ -49,6 +50,27 @@ public:
 		Vector3 translate;
 	};
 
+	//--------getter-------
+	//位置
+	const Vector2 &GetPosition()const { return position; }
+	//回転
+	float GetRotation() const { return rotation; }
+	//色
+	const Vector4 &GetColor()const { return materialData->color; }
+	//サイズ
+	const Vector2 &GetSize()const { return size; }
+
+
+	//---------setter-----------
+	//位置
+	void SetPosition(const Vector2 &position) { this->position = position; }
+	//回転
+	void SetRotation(float rotation) { this->rotation = rotation; }
+	//色
+	void SetColor(const Vector4 &color) { materialData->color = color; }
+	//サイズ
+	void SetSize(const Vector2 &size) { this->size = size; }
+
 private:
 	SpriteCommon *spriteCommon=nullptr;
 	MyMath *math = nullptr;
@@ -86,6 +108,14 @@ private:
 	//座標変換行列データ作成
 	void CreateTransformationData();
 
-	
+	//位置
+	Vector2 position = { 0.0f,0.0f };
+
+	//回転
+	float rotation = 0.0f;
+
+	//サイズ
+	Vector2 size = { 640.0f,360.0f };
+
 };
 

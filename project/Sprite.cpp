@@ -23,20 +23,20 @@ void Sprite::Update() {
 	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData_));
 
 	//1枚目の三角形
-	vertexData_[0].Position= { 0.0f,360.0f,0.0f,1.0f };
+	vertexData_[0].Position= { 0.0f,1.0f,0.0f,1.0f };
 	vertexData_[0].Texcoord = { 0.0f,1.0f };
-	vertexData_[0].normal = { 0.0f,0.0f,1.0f };
+	vertexData_[0].normal = { 0.0f,0.0f,-1.0f };
 	vertexData_[1].Position = { 0.0f,0.0f,0.0f,1.0f };
 	vertexData_[1].Texcoord = { 0.0f,0.0f };
-	vertexData_[1].normal = { 0.0f,0.0f,1.0f };
-	vertexData_[2].Position = { 640.0f,360.0f,0.0f,1.0f };
+	vertexData_[1].normal = { 0.0f,0.0f,-1.0f };
+	vertexData_[2].Position = { 1.0f,1.0f,0.0f,1.0f };
 	vertexData_[2].Texcoord = { 1.0f,1.0f };
-	vertexData_[2].normal = { 0.0f,0.0f,1.0f };
+	vertexData_[2].normal = { 0.0f,0.0f,-1.0f };
 
 	//2枚目の三角形
-	vertexData_[3].Position = { 640.0f,0.0f,0.0f,1.0f };
+	vertexData_[3].Position = { 1.0f,0.0f,0.0f,1.0f };
 	vertexData_[3].Texcoord = { 1.0f,0.0f };
-	vertexData_[3].normal = { 0.0f,0.0f,1.0f };
+	vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
 
 	//インデックスリソースにデータを書き込む
 	indexResource->Map(0, nullptr, reinterpret_cast<void **>(&indexData_));
@@ -49,6 +49,9 @@ void Sprite::Update() {
 
 	//Transform情報を作る
 	Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	transform.translate = { position.x,position.y,0.0f };
+	transform.rotate = { 0.0f,0.0f,rotation };
+	transform.scale = { size.x,size.y,1.0f };
 
 	//TransformからWorldMatrixを作る
 	Matrix4x4 worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);

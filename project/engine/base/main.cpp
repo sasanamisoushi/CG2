@@ -445,6 +445,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion 基盤システムの初期化
 
+	
+
 	Sprite *sprite = new Sprite();
 	sprite->Initialize(spriteCommon);
 	
@@ -828,7 +830,33 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
 			wvpDataSphere->World = worldMatrixSphere;
 
+			////現在の座標を変数で受ける
+			//Vector2 position = sprite->GetPosition();
+			////座標を変更する
+			//position += Vector2{ 0.1f,0.1f };
+			////変更を反映する
+			//sprite->SetPosition(position);
 			
+			////角度を変化させるテスト
+			//float rotation = sprite->GetRotation();
+			//rotation += 0.01f;
+			////変更を反映する
+			//sprite->SetRotation(rotation);
+
+			////色を変化させるテスト
+			//Vector4 color = sprite->GetColor();
+			//color.x += 0.01f;
+			//if (color.x > 1.0f) {
+			//	color.x -= 1.0f;
+			//}
+			//sprite->SetColor(color);
+
+			//サイズを変更させるテスト
+			Vector2 size = sprite->GetSize();
+			size.x += 0.1f;
+			size.y += 0.1f;
+			sprite->SetSize(size);
+
 
 			sprite->Update();
 
@@ -915,7 +943,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			dxCommon->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 
 			//描画
-			dxCommon->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+			//dxCommon->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
 			//スプライト描画
 			sprite->Draw();
@@ -930,7 +958,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
 
 			// 描画
-			dxCommon->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+			//dxCommon->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
 			//実際のcommandListのImGuiの描画コマンドを積む
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
