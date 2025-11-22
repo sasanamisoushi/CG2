@@ -4,6 +4,18 @@
 struct Vector2 {
 	float x;
 	float y;
+
+	// 加算（+=）
+	Vector2 &operator+=(const Vector2 &rhs) {
+		this->x += rhs.x;
+		this->y += rhs.y;
+		return *this;
+	}
+
+	// 加算（+）
+	Vector2 operator+(const Vector2 &rhs) const {
+		return Vector2{ this->x + rhs.x, this->y + rhs.y };
+	}
 };
 
 struct Vector3 {
@@ -28,8 +40,11 @@ struct Matrix3x3 {
 };
 
 
-class Math {
+class MyMath {
 public:
+
+	
+
 
 	//平行移動
 	Matrix4x4 MakeTranslateMatrix(const Vector3 &translate);

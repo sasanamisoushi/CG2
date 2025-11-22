@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 
+Logger logger;
 
 void Logger::Log(const std::string &message) {
 
