@@ -445,13 +445,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 #pragma endregion 基盤システムの初期化
 
-	
+	std::vector<Sprite *>sprites;
+	for (uint32_t i = 0; i < 5; ++i) {
+		Sprite *sprite = new Sprite();
+		sprite->Initialize(spriteCommon);
+		Vector2 pos = sprite->GetPosition();
+		pos = { 10.0f + i * 200.0f,100.0f };
+		sprite->SetPosition(pos);
+		Vector2 size = sprite->GetSize();
+		size.x = 100.0f;
+		size.y = 100.0f;
+		sprite->SetSize(size);
 
-	Sprite *sprite = new Sprite();
-	sprite->Initialize(spriteCommon);
-	
-	
-	
+		sprites.push_back(sprite);
+	}
+
+
+
 
 	//誰も捕捉しなかった場合に補足する関数の登録
 	SetUnhandledExceptionFilter(ExportDump);
@@ -472,9 +482,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//ファイルを作って書き込み準備
 	std::ofstream logStream(logFilePath);
 
-	
 
-	
+
+
 #ifdef _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
@@ -515,7 +525,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//--------------入力デバイス--------------
 	Input *input = nullptr;
 
-	
+
 	input = new Input();
 	input->Initialize(winApp);
 
@@ -564,7 +574,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 
 	//マテリアル用のリソースを作る。今回はcolor１つ分のサイズを用意する
-	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource = dxCommon->CreateBufferResource( sizeof(Material));
+	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource = dxCommon->CreateBufferResource(sizeof(Material));
 	//マテリアルにデータを書き込む
 	Material *materialData = nullptr;
 	//書き込むためのアドレスを取得
@@ -575,7 +585,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->uvTransform = math.MakeIdentity4x4();
 
 
-	
+
 	//平行光源用のリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionLightResource = dxCommon->CreateBufferResource(sizeof(DirectionalLight));
 	//マテリアルにデータを書き込む
@@ -709,7 +719,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//2枚目のTextureを読んで転送する
 	DirectX::ScratchImage mipImages2 = dxCommon->LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata &metadata2 = mipImages2.GetMetadata();
-	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = dxCommon->CreateTextureResource( metadata2);
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = dxCommon->CreateTextureResource(metadata2);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = dxCommon->UploadTextureData(textureResource2, mipImages2);
 
 	//2枚目のmetDateを基にSRVの設定
@@ -731,7 +741,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//Textureを読んで転送する
 	DirectX::ScratchImage mipImages = dxCommon->LoadTexture("resources/uvChecker.png");
 	const DirectX::TexMetadata &metadata = mipImages.GetMetadata();
-	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = dxCommon->CreateTextureResource( metadata);
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = dxCommon->CreateTextureResource(metadata);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = dxCommon->UploadTextureData(textureResource, mipImages);
 
 
@@ -761,7 +771,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	dxCommon->depthBufferGeneration(WinApp::kClientWidth, WinApp::kClinentHeight);
 
 
-	
+
 	bool useMonsterBall = true;
 
 	//07_01 トリガー処理
@@ -781,190 +791,192 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			break;
 		}
 
-			ImGui_ImplDX12_NewFrame();
-			ImGui_ImplWin32_NewFrame();
-			ImGui::NewFrame();
+		ImGui_ImplDX12_NewFrame();
+		ImGui_ImplWin32_NewFrame();
+		ImGui::NewFrame();
 
-			//Update
+		//Update
 
-			//キーボード情報の取得開始
-		/*	keyboard->Acquire();
-			keyboard->GetDeviceState(sizeof(keys), keys);*/
-
-
-
-			if (input->TriggerKey(DIK_0)) {
-				OutputDebugStringA("Hit 0\n");
-			}
-
-			//Transformの更新
-			//transform.rotate.y += 0.03f;
-			Matrix4x4 worldMatrix = math.MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+		//キーボード情報の取得開始
+	/*	keyboard->Acquire();
+		keyboard->GetDeviceState(sizeof(keys), keys);*/
 
 
-			//cameraMatrix
-			Matrix4x4 cameraMatrix = math.MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 
-			//viewMatrix
-			Matrix4x4 viewMatrix = math.Inverse(cameraMatrix);
+		if (input->TriggerKey(DIK_0)) {
+			OutputDebugStringA("Hit 0\n");
+		}
 
-			//projectionMatrix
-			Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
-
-
-			//worldViewProjectionMatrix
-			Matrix4x4 worldViewProjectionMatrix = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
-			wvpData->WVP = worldViewProjectionMatrix;
-			wvpData->World = worldMatrix;
-
-			//Plane用のworldViewProjectionMatrixを作る
-			Matrix4x4 worldMatrixPlane = math.MakeAffineMatrix(transformPlane.scale, transformPlane.rotate, transformPlane.translate);
-			Matrix4x4 worldViewProjectionMatrixPlane = math.Multiply(worldMatrixPlane, math.Multiply(viewMatrix, projectionMatrix));
-			wvpDataPlane->WVP = worldViewProjectionMatrixPlane;
-			wvpDataPlane->World = worldMatrixPlane;
+		//Transformの更新
+		//transform.rotate.y += 0.03f;
+		Matrix4x4 worldMatrix = math.MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 
 
-			//Sphere用のworldViewProjectionMatrixを作る
-			Matrix4x4 worldMatrixSphere = math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
-			Matrix4x4 worldViewProjectionMatrixSphere = math.Multiply(worldMatrixSphere, math.Multiply(viewMatrix, projectionMatrix));
-			wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
-			wvpDataSphere->World = worldMatrixSphere;
+		//cameraMatrix
+		Matrix4x4 cameraMatrix = math.MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 
-			////現在の座標を変数で受ける
-			//Vector2 position = sprite->GetPosition();
-			////座標を変更する
-			//position += Vector2{ 0.1f,0.1f };
-			////変更を反映する
-			//sprite->SetPosition(position);
-			
-			////角度を変化させるテスト
-			//float rotation = sprite->GetRotation();
-			//rotation += 0.01f;
-			////変更を反映する
-			//sprite->SetRotation(rotation);
+		//viewMatrix
+		Matrix4x4 viewMatrix = math.Inverse(cameraMatrix);
 
-			////色を変化させるテスト
-			//Vector4 color = sprite->GetColor();
-			//color.x += 0.01f;
-			//if (color.x > 1.0f) {
-			//	color.x -= 1.0f;
-			//}
-			//sprite->SetColor(color);
-
-			//サイズを変更させるテスト
-			Vector2 size = sprite->GetSize();
-			size.x += 0.1f;
-			size.y += 0.1f;
-			sprite->SetSize(size);
+		//projectionMatrix
+		Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
 
 
+		//worldViewProjectionMatrix
+		Matrix4x4 worldViewProjectionMatrix = math.Multiply(worldMatrix, math.Multiply(viewMatrix, projectionMatrix));
+		wvpData->WVP = worldViewProjectionMatrix;
+		wvpData->World = worldMatrix;
+
+		//Plane用のworldViewProjectionMatrixを作る
+		Matrix4x4 worldMatrixPlane = math.MakeAffineMatrix(transformPlane.scale, transformPlane.rotate, transformPlane.translate);
+		Matrix4x4 worldViewProjectionMatrixPlane = math.Multiply(worldMatrixPlane, math.Multiply(viewMatrix, projectionMatrix));
+		wvpDataPlane->WVP = worldViewProjectionMatrixPlane;
+		wvpDataPlane->World = worldMatrixPlane;
+
+
+		//Sphere用のworldViewProjectionMatrixを作る
+		Matrix4x4 worldMatrixSphere = math.MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
+		Matrix4x4 worldViewProjectionMatrixSphere = math.Multiply(worldMatrixSphere, math.Multiply(viewMatrix, projectionMatrix));
+		wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
+		wvpDataSphere->World = worldMatrixSphere;
+
+		////現在の座標を変数で受ける
+		//Vector2 position = sprite->GetPosition();
+		////座標を変更する
+		//position += Vector2{ 0.1f,0.1f };
+		////変更を反映する
+		//sprite->SetPosition(position);
+
+		////角度を変化させるテスト
+		//float rotation = sprite->GetRotation();
+		//rotation += 0.01f;
+		////変更を反映する
+		//sprite->SetRotation(rotation);
+
+		////色を変化させるテスト
+		//Vector4 color = sprite->GetColor();
+		//color.x += 0.01f;
+		//if (color.x > 1.0f) {
+		//	color.x -= 1.0f;
+		//}
+		//sprite->SetColor(color);
+
+		////サイズを変更させるテスト
+		//Vector2 size = sprite->GetSize();
+		//size.x += 0.1f;
+		//size.y += 0.1f;
+		//sprite->SetSize(size);
+
+		for (Sprite *sprite : sprites) {
 			sprite->Update();
+		}
 
-			////uvTranslate用の行列
-			//Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
-			//uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeRotateZMatrix(uvTransformSprite.rotate.z));
-			//uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeTranslateMatrix(uvTransformSprite.translate));
-			//materialDataSprite->uvTransform = uvTransformMatrix;
-
-
-			//開発用UIの処理
-			ImGui::ShowDemoWindow();
-
-			//カラー
-			ImGui::Begin("MaterialColor");
-			ImGui::ColorEdit4("color", &materialData->color.x);
-			ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
-			ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
-			ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
-
-			if (ImGui::CollapsingHeader("Sphere")) {
-				ImGui::ColorEdit4("color", &materialDataSphere->color.x);
-				ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
-				ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
-				ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
-				
-			}
-
-			if (ImGui::CollapsingHeader("plane")) {
+		////uvTranslate用の行列
+		//Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
+		//uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeRotateZMatrix(uvTransformSprite.rotate.z));
+		//uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeTranslateMatrix(uvTransformSprite.translate));
+		//materialDataSprite->uvTransform = uvTransformMatrix;
 
 
-				ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
-				ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
-				ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
+		//開発用UIの処理
+		ImGui::ShowDemoWindow();
 
-			}
-			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+		//カラー
+		ImGui::Begin("MaterialColor");
+		ImGui::ColorEdit4("color", &materialData->color.x);
+		ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
+		ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
+		ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
 
-			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
-			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
-			ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
-			if (ImGui::CollapsingHeader("Sprite")) {
-				ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
-				ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
-				ImGui::DragFloat3("SpriteRotate", &transformSprite.rotate.x);
-			}
-			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
-			ImGui::End();
+		if (ImGui::CollapsingHeader("Sphere")) {
+			ImGui::ColorEdit4("color", &materialDataSphere->color.x);
+			ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
+			ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
+			ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
 
-			//ゲーム処理
+		}
 
-			//Draw
-
-			//ImGuiの内部コマンドを生成
-			ImGui::Render();
-
-			
-
-			//描画前処理
-			dxCommon->PreDraw();
-
-			//Spriteの描画基準
-			spriteCommon->SetCommonPipelineState();
-
-			
-			dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
-			dxCommon->GetCommandList()->IASetIndexBuffer(nullptr);
+		if (ImGui::CollapsingHeader("plane")) {
 
 
-			//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
-			dxCommon->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
+			ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
+			ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
 
-			//マテリアルCBufferの場所を設定
-			dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+		}
+		//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 
-			//TransformationMatrixCbufferの場所を設定
-			dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResourcePlane->GetGPUVirtualAddress());
+		ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
+		ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
+		ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
+		if (ImGui::CollapsingHeader("Sprite")) {
+			ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
+			ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
+			ImGui::DragFloat3("SpriteRotate", &transformSprite.rotate.x);
+		}
+		ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+		ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+		ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+		ImGui::End();
 
-			dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+		//ゲーム処理
 
-			//SRVのDescriptorの先頭を設定
-			dxCommon->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+		//Draw
 
-			//描画
-			//dxCommon->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+		//ImGuiの内部コマンドを生成
+		ImGui::Render();
 
-			//スプライト描画
+
+
+		//描画前処理
+		dxCommon->PreDraw();
+
+		//Spriteの描画基準
+		spriteCommon->SetCommonPipelineState();
+
+
+		dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
+		dxCommon->GetCommandList()->IASetIndexBuffer(nullptr);
+
+
+		//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
+		dxCommon->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		//マテリアルCBufferの場所を設定
+		dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+
+		//TransformationMatrixCbufferの場所を設定
+		dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResourcePlane->GetGPUVirtualAddress());
+
+		dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+
+		//SRVのDescriptorの先頭を設定
+		dxCommon->GetCommandList()->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+
+		//描画
+		//dxCommon->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+
+		//スプライト描画
+		for (Sprite *sprite : sprites) {
 			sprite->Draw();
+		}
 
-			
 
-			//Shereの描画
-			dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
-			dxCommon->GetCommandList()->IASetIndexBuffer(&indexBufferViewShere);
+		//Shereの描画
+		dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
+		dxCommon->GetCommandList()->IASetIndexBuffer(&indexBufferViewShere);
 
-			//マテリアルCBufferの場所を設定
-			dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
+		//マテリアルCBufferの場所を設定
+		dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
 
-			// 描画
-			//dxCommon->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+		// 描画
+		//dxCommon->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
-			//実際のcommandListのImGuiの描画コマンドを積む
-			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
+		//実際のcommandListのImGuiの描画コマンドを積む
+		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
 
-			//描画後処理
-			dxCommon->PostDraw();
+		//描画後処理
+		dxCommon->PostDraw();
 	}
 
 	//出力ウィンドへの文字 
@@ -990,7 +1002,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete dxCommon;
 
 	delete spriteCommon;
-	delete sprite;
+	for (Sprite *sprite : sprites) {
+		delete sprite;
+	}
+	sprites.clear();
 
 	//xAudio2解放
 	xAudio2.Reset();
