@@ -5,6 +5,7 @@
 #include <wrl.h>
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <string>
 
 
 using Microsoft::WRL::ComPtr;
@@ -15,13 +16,16 @@ class SpriteCommon;
 class Sprite {
 public:
 	//初期化
-	void Initialize(SpriteCommon *spriteCommon);
+	void Initialize(SpriteCommon *spriteCommon, std::string textureFilePath);
 
 	//更新処理
 	void Update();
 
 	//描画
 	void Draw();
+
+	//テクスチャ差し替え
+	void textureReplacement(std::string textureFilePath);
 
 	//頂点データ
 	struct VertexData {
@@ -116,6 +120,9 @@ private:
 
 	//サイズ
 	Vector2 size = { 640.0f,360.0f };
+
+	//テクスチャ番号
+	uint32_t textureIndex = 0;
 
 };
 

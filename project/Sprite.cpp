@@ -1,10 +1,11 @@
 #include "Sprite.h"
 #include "SpriteCommon.h"
+#include "TextureManager.h"
 
 
 
 
-void Sprite::Initialize(SpriteCommon *spriteCommon) {
+void Sprite::Initialize(SpriteCommon *spriteCommon, std::string textureFilePath) {
 	//引数で受け取ってメンバ変数に記録する
 	this->spriteCommon = spriteCommon;
 	
@@ -16,6 +17,10 @@ void Sprite::Initialize(SpriteCommon *spriteCommon) {
 
 	//座標変換行列データ作成
 	CreateTransformationData();
+
+	//単位行列を書き込んでいく
+	TextureManager::GetInstance()->LoadTexture(textureFilePath); // ロード処理を追加
+	textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath);
 }
 
 void Sprite::Update() {
@@ -80,9 +85,21 @@ void Sprite::Draw() {
 	//TransformationMatrixCbufferの場所を設定
 	spriteCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(1, transformationMatrixResource->GetGPUVirtualAddress());
 
+	//SRVのDescriptorの先頭を設定
+	spriteCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex));
+
 	//描画
 	spriteCommon->GetDxCommon()->GetCommandList()->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
+}
+
+void Sprite::textureReplacement(std::string textureFilePath) {
+	// テクスチャをロードする
+	TextureManager::GetInstance()->LoadTexture(textureFilePath);
+	// 差し替えたいテクスチャのインデックスを取得する
+	uint32_t newIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath);
+	// 自身のテクスチャインデックスを更新する
+	this->textureIndex = newIndex;
 }
 
 void Sprite::CreateVertexData() {
