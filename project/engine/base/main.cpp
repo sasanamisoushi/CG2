@@ -450,8 +450,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	spriteCommon->Initialize(dxCommon);
 
 #pragma endregion 基盤システムの初期化
-
-	std::vector<Sprite *>sprites;
+	Sprite *sprite = new Sprite();
+	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
+	/*std::vector<Sprite *>sprites;
 	for (uint32_t i = 0; i < 5; ++i) {
 		Sprite *sprite = new Sprite();
 		sprite->Initialize(spriteCommon, "resources/uvChecker.png");
@@ -466,7 +467,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->SetSize(size);
 
 		sprites.push_back(sprite);
-	}
+	}*/
 
 	
 
@@ -792,12 +793,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		wvpDataSphere->WVP = worldViewProjectionMatrixSphere;
 		wvpDataSphere->World = worldMatrixSphere;
 
-		////現在の座標を変数で受ける
-		//Vector2 position = sprite->GetPosition();
-		////座標を変更する
-		//position += Vector2{ 0.1f,0.1f };
-		////変更を反映する
-		//sprite->SetPosition(position);
+		//現在の座標を変数で受ける
+		Vector2 position = sprite->GetPosition();
+		//座標を変更する
+		position = Vector2{ 200.0f,200.0f };
+		//変更を反映する
+		sprite->SetPosition(position);
+
+		Vector2 size = sprite->GetSize();
+		size.x = 300.0f;
+		size.y = 300.0f;
+		sprite->SetSize(size);
 
 		////角度を変化させるテスト
 		//float rotation = sprite->GetRotation();
@@ -819,24 +825,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//size.y += 0.1f;
 		//sprite->SetSize(size);
 
-		const int kSwitchInterval = 60;
+		/*const int kSwitchInterval = 60;
 		static int frameCounter = 0;
-		frameCounter++;
-		for (uint32_t i = 0; i < sprites.size(); ++i) {
-			Sprite *sprite = sprites[i];
+		frameCounter++;*/
+		//for (uint32_t i = 0; i < sprites.size(); ++i) {
+			//Sprite *sprite = sprites[i];
 
-			// 偶数番目のスプライト i (0, 2, 4...) を対象とする
-			if (i % 2 == 0) {
+			//// 偶数番目のスプライト i (0, 2, 4...) を対象とする
+			//if (i % 2 == 0) {
 
-				// 1秒ごとに画像を切り替える
-				if ((frameCounter / kSwitchInterval) % 2 == 0) {
-					sprite->textureReplacement("resources/uvChecker.png");
-				} else {
-					sprite->textureReplacement("resources/monsterBall.png");
-				}
-			}
+			//	// 1秒ごとに画像を切り替える
+			//	if ((frameCounter / kSwitchInterval) % 2 == 0) {
+			//		sprite->textureReplacement("resources/uvChecker.png");
+			//	} else {
+			//		sprite->textureReplacement("resources/monsterBall.png");
+			//	}
+			//}
 			sprite->Update();
-		}
+		//}
 
 		
 
@@ -926,9 +932,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//dxCommon->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
 		//スプライト描画
-		for (Sprite *sprite : sprites) {
+		//for (Sprite *sprite : sprites) {
 			sprite->Draw();
-		}
+		//}
 
 		
 		//Shereの描画
@@ -974,10 +980,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete dxCommon;
 
 	delete spriteCommon;
-	for (Sprite *sprite : sprites) {
+	//for (Sprite *sprite : sprites) {
 		delete sprite;
-	}
-	sprites.clear();
+	/*}
+	sprites.clear();*/
 
 	//xAudio2解放
 	xAudio2.Reset();

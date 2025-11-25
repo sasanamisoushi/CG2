@@ -63,7 +63,16 @@ public:
 	const Vector4 &GetColor()const { return materialData->color; }
 	//サイズ
 	const Vector2 &GetSize()const { return size; }
-
+	//アンカーポイント
+	const Vector2 &GetAnchorPoint()const { return anchorPoint; }
+	//左右フリップ
+	bool GetIsFlipX()const { return isFlipX_; }
+	//上下フリップ
+	bool GetIsFlipY()const { return isFlipY_; }
+	//テクスチャ左上座標
+	const Vector2 &GetTextureLeftTop()const { return textureLeftTop; }
+	//テクスチャ切り出しサイズ
+	const Vector2 &GetTextureSize()const { return textureSize; }
 
 	//---------setter-----------
 	//位置
@@ -74,6 +83,16 @@ public:
 	void SetColor(const Vector4 &color) { materialData->color = color; }
 	//サイズ
 	void SetSize(const Vector2 &size) { this->size = size; }
+	//アンカーポイント
+	void SetAnchorPoint(const Vector2 &anchorPoint) { this->anchorPoint = anchorPoint; }
+	//左右フリップ
+	bool setIsFlipX(bool isFlipX) { this->isFlipX_ = isFlipX; }
+	//上下フリップ
+	bool setIsFlipY(bool isFlipY) { this->isFlipY_ = isFlipY; }
+	//テクスチャ左上座標
+	void SetTextureLeftTop(const Vector2 &textureLeftTop) { this->textureLeftTop = textureLeftTop; }
+	//テクスチャ切り出しサイズ
+	void SetTextureSize(const Vector2 &textureSize) { this->textureSize = textureSize; }
 
 private:
 	SpriteCommon *spriteCommon=nullptr;
@@ -123,6 +142,24 @@ private:
 
 	//テクスチャ番号
 	uint32_t textureIndex = 0;
+
+	//アンカーポイント
+	Vector2 anchorPoint = { 0.0f,0.0f };
+
+	//左右フリップ
+	bool isFlipX_ = false;
+
+	//上下フリップ
+	bool isFlipY_ = false;
+
+	//テクスチャ左上座標
+	Vector2 textureLeftTop = { 0.0f,0.0f };
+
+	//テクスチャ切り出しサイズ
+	Vector2 textureSize = { 60.0f,60.0f };
+
+	//テクスチャサイズをイメージに合わせる
+	void AdjustTextureSize();
 
 };
 
