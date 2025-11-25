@@ -6,6 +6,9 @@ class Logger {
 public:
 	//ログ出力
 	void Log(const std::string &message);
+
+	
 };
 
+extern Logger logger;
 

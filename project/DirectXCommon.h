@@ -100,7 +100,8 @@ public:
 	//指定番号のGPUデスクリプトハンドルを取得
 	static D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(const Microsoft::WRL::ComPtr <ID3D12DescriptorHeap> &descriptorHeap, uint32_t descriptorSize, uint32_t index);
 
-
+	//最大SRV数
+	static const uint32_t kMaxSRVCount;
 
 private:
 
