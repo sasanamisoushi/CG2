@@ -1125,7 +1125,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
 
 	//音声再生
-	SoundPlayerWave(xAudio2.Get(), soundData1);
+	//SoundPlayerWave(xAudio2.Get(), soundData1);
 
 	Window w;
 	w.hInstance = GetModuleHandle(nullptr);
