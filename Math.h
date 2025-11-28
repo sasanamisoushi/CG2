@@ -27,6 +27,27 @@ struct Matrix3x3 {
 	float m[3][3];
 };
 
+inline Vector3 operator+(const Vector3 &a, const Vector3 &b) {
+	return { a.x + b.x, a.y + b.y, a.z + b.z };
+}
+
+// Vector3 * float
+inline Vector3 operator*(const Vector3 &v, float s) {
+	return { v.x * s, v.y * s, v.z * s };
+}
+
+// float * Vector3（逆順も使えるように）
+inline Vector3 operator*(float s, const Vector3 &v) {
+	return { v.x * s, v.y * s, v.z * s };
+}
+
+// Vector3 += Vector3 もあると便利
+inline Vector3 &operator+=(Vector3 &a, const Vector3 &b) {
+	a.x += b.x;
+	a.y += b.y;
+	a.z += b.z;
+	return a;
+}
 
 class Math {
 public:
