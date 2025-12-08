@@ -25,6 +25,8 @@
 #include "SpriteCommon.h"
 #include "Sprite.h"
 #include "TextureManager.h"
+#include "Object3dCommon.h"
+#include "Object3d.h"
 
 
 #pragma comment(lib,"dxguid.lib")
@@ -57,21 +59,21 @@ struct  VertexData {
 };
 
 
-struct Material {
-	Vector4 color;
-	int32_t enableLighting;
-	float padding[3];
-	Matrix4x4 uvTransform;
-};
+//struct Material {
+//	Vector4 color;
+//	int32_t enableLighting;
+//	float padding[3];
+//	Matrix4x4 uvTransform;
+//};
 
-struct MaterialData {
-	std::string textureFilePath;
-};
+//struct MaterialData {
+//	std::string textureFilePath;
+//};
 
-struct TransformationMatrix {
-	Matrix4x4 WVP;
-	Matrix4x4 World;
-};
+//struct TransformationMatrix {
+//	Matrix4x4 WVP;
+//	Matrix4x4 World;
+//};
 
 struct DirectionalLight {
 	Vector4 color; //ライトの色
@@ -79,10 +81,10 @@ struct DirectionalLight {
 	float intensity;
 };
 
-struct ModelData {
-	std::vector<VertexData>vertices;
-	MaterialData material;
-};
+//struct ModelData {
+//	std::vector<VertexData>vertices;
+//	MaterialData material;
+//};
 
 //Transform変更
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
@@ -174,102 +176,102 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-MaterialData LoadMaterialtemplateFile(const std::string &directoryPath, const std::string &filename) {
-
-	//構築するMaterialData
-	MaterialData materialData;
-	//ファイルから読んだ1行を格納するもの
-	std::string line;
-	//ファイルを開く
-	std::ifstream file(directoryPath + "/" + filename);
-	//とりあえず開けなかったら止める
-	assert(file.is_open());
-
-	while (std::getline(file, line)) {
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier;
-
-		//identifierに応じた処理
-		if (identifier == "map_Kd") {
-			std::string textureFilename;
-			s >> textureFilename;
-			//連続してファイルパスにする
-			materialData.textureFilePath = directoryPath + "/" + textureFilename;
-		}
-	}
-	return materialData;
-}
+//MaterialData LoadMaterialtemplateFile(const std::string &directoryPath, const std::string &filename) {
+//
+//	//構築するMaterialData
+//	MaterialData materialData;
+//	//ファイルから読んだ1行を格納するもの
+//	std::string line;
+//	//ファイルを開く
+//	std::ifstream file(directoryPath + "/" + filename);
+//	//とりあえず開けなかったら止める
+//	assert(file.is_open());
+//
+//	while (std::getline(file, line)) {
+//		std::string identifier;
+//		std::istringstream s(line);
+//		s >> identifier;
+//
+//		//identifierに応じた処理
+//		if (identifier == "map_Kd") {
+//			std::string textureFilename;
+//			s >> textureFilename;
+//			//連続してファイルパスにする
+//			materialData.textureFilePath = directoryPath + "/" + textureFilename;
+//		}
+//	}
+//	return materialData;
+//}
 
 ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename) {
-	ModelData modelData;
-	std::vector<Vector4> positions; //位置
-	std::vector<Vector3> normals;  //法線
-	std::vector<Vector2> texcoords; //テクスチャ座標
-	std::string line;  //ファイルから読んだ1行を格納する
+	//ModelData modelData;
+	//std::vector<Vector4> positions; //位置
+	//std::vector<Vector3> normals;  //法線
+	//std::vector<Vector2> texcoords; //テクスチャ座標
+	//std::string line;  //ファイルから読んだ1行を格納する
 
-	std::ifstream file(directoryPath + "/" + filename);  //ファイルを開く
-	assert(file.is_open()); //とりあえず開けなかったら止める
+	//std::ifstream file(directoryPath + "/" + filename);  //ファイルを開く
+	//assert(file.is_open()); //とりあえず開けなかったら止める
 
-	while (std::getline(file, line)) {
-		std::string identifier;
-		std::istringstream s(line);
-		s >> identifier; //先頭の識別子を読む
+	//while (std::getline(file, line)) {
+	//	std::string identifier;
+	//	std::istringstream s(line);
+	//	s >> identifier; //先頭の識別子を読む
 
 
-		if (identifier == "v") {
-			Vector4 position;
-			s >> position.x >> position.y >> position.z;
-			position.x *= -1.0f;
-			position.w = 1.0f;
-			positions.push_back(position);
-		} else if (identifier == "vt") {
-			Vector2 texcoord;
-			s >> texcoord.x >> texcoord.y;
-			texcoord.y = 1.0f - texcoord.y;
-			texcoords.push_back(texcoord);
-		} else if (identifier == "vn") {
-			Vector3 normal;
-			s >> normal.x >> normal.y >> normal.z;
-			normal.x *= -1.0f;
-			normals.push_back(normal);
-		} else if (identifier == "f") {
-			VertexData triangle[3];
-			//面は三角形限定
-			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
-				std::string vertexDefinition;
-				s >> vertexDefinition;
-				//頂点の要素へのindexは「位置/uv/法線」で格納されているので、分解してIndexを取得する
-				std::istringstream v(vertexDefinition);
-				uint32_t elementIndices[3];
-				for (int32_t element = 0; element < 3; ++element) {
-					std::string index;
-					std::getline(v, index, '/');  //区切りでインデックスを読んでいく
-					elementIndices[element] = std::stoi(index);
-				}
+	//	if (identifier == "v") {
+	//		Vector4 position;
+	//		s >> position.x >> position.y >> position.z;
+	//		position.x *= -1.0f;
+	//		position.w = 1.0f;
+	//		positions.push_back(position);
+	//	} else if (identifier == "vt") {
+	//		Vector2 texcoord;
+	//		s >> texcoord.x >> texcoord.y;
+	//		texcoord.y = 1.0f - texcoord.y;
+	//		texcoords.push_back(texcoord);
+	//	} else if (identifier == "vn") {
+	//		Vector3 normal;
+	//		s >> normal.x >> normal.y >> normal.z;
+	//		normal.x *= -1.0f;
+	//		normals.push_back(normal);
+	//	} else if (identifier == "f") {
+	//		VertexData triangle[3];
+	//		//面は三角形限定
+	//		for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
+	//			std::string vertexDefinition;
+	//			s >> vertexDefinition;
+	//			//頂点の要素へのindexは「位置/uv/法線」で格納されているので、分解してIndexを取得する
+	//			std::istringstream v(vertexDefinition);
+	//			uint32_t elementIndices[3];
+	//			for (int32_t element = 0; element < 3; ++element) {
+	//				std::string index;
+	//				std::getline(v, index, '/');  //区切りでインデックスを読んでいく
+	//				elementIndices[element] = std::stoi(index);
+	//			}
 
-				//要素へのindexから、実際の要素の値を取得して頂点を構築する
-				Vector4 position = positions[elementIndices[0] - 1];
-				Vector2 texcord = texcoords[elementIndices[1] - 1];
-				Vector3 normal = normals[elementIndices[2] - 1];
-				VertexData vertex = { position,texcord,normal };
-				modelData.vertices.push_back(vertex);
-				triangle[faceVertex] = { position,texcord,normal };
-			}
+	//			//要素へのindexから、実際の要素の値を取得して頂点を構築する
+	//			Vector4 position = positions[elementIndices[0] - 1];
+	//			Vector2 texcord = texcoords[elementIndices[1] - 1];
+	//			Vector3 normal = normals[elementIndices[2] - 1];
+	//			VertexData vertex = { position,texcord,normal };
+	//			modelData.vertices.push_back(vertex);
+	//			triangle[faceVertex] = { position,texcord,normal };
+	//		}
 
-			//頂点を逆順で登録することで、回り順を逆にする
-			modelData.vertices.push_back(triangle[2]);
-			modelData.vertices.push_back(triangle[1]);
-			modelData.vertices.push_back(triangle[0]);
-		} else if (identifier == "mtllib") {
-			//matrialTemplateLidraryファイルの名前を取得する
-			std::string materialFilename;
-			s >> materialFilename;
-			//基本的にobjファイルと同一階層にmtlは存在されるので、ディレクトリ名とファイル名を渡す
-			modelData.material = LoadMaterialtemplateFile(directoryPath, materialFilename);
-		}
-	}
-	return modelData;
+	//		//頂点を逆順で登録することで、回り順を逆にする
+	//		modelData.vertices.push_back(triangle[2]);
+	//		modelData.vertices.push_back(triangle[1]);
+	//		modelData.vertices.push_back(triangle[0]);
+	//	} else if (identifier == "mtllib") {
+	//		//matrialTemplateLidraryファイルの名前を取得する
+	//		std::string materialFilename;
+	//		s >> materialFilename;
+	//		//基本的にobjファイルと同一階層にmtlは存在されるので、ディレクトリ名とファイル名を渡す
+	//		modelData.material = LoadMaterialtemplateFile(directoryPath, materialFilename);
+	//	}
+	//}
+	//return modelData;
 }
 
 //チャンクヘッダ
@@ -443,21 +445,36 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//テクスチャマネージャの初期化
 	TextureManager::GetInstance()->Initialiaze(dxCommon);
 
-	
+
 
 	//スプライト共通部の初期化
 	spriteCommon = new SpriteCommon();
 	spriteCommon->Initialize(dxCommon);
 
+	Object3dCommon *object3dCommon = nullptr;
+	//3Dオブジェクト共通部の初期化
+	object3dCommon = new Object3dCommon();
+	object3dCommon->Initialize(dxCommon);
+
 #pragma endregion 基盤システムの初期化
 	Sprite *sprite = new Sprite();
 	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
+
+#pragma region 最初のシーンの初期化
+
+	//3Dオブジェトの初期化
+	Object3d *object3d = new Object3d();
+	object3d->Initialize(object3dCommon);
+
+#pragma endregion 最初のシーンの終了
+
+
 	/*std::vector<Sprite *>sprites;
 	for (uint32_t i = 0; i < 5; ++i) {
 		Sprite *sprite = new Sprite();
 		sprite->Initialize(spriteCommon, "resources/uvChecker.png");
-		
-		
+
+
 		Vector2 pos = sprite->GetPosition();
 		pos = { 10.0f + i * 200.0f,100.0f };
 		sprite->SetPosition(pos);
@@ -469,7 +486,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprites.push_back(sprite);
 	}*/
 
-	
+
 
 
 	//誰も捕捉しなかった場合に補足する関数の登録
@@ -559,28 +576,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//モデル読み込み
 	ModelData modelData = LoadObjFile("resources", "plane.obj");
 
-	//頂点リソースを作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = dxCommon->CreateBufferResource(sizeof(VertexData) * modelData.vertices.size());
+	////頂点リソースを作成
+	//Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = dxCommon->CreateBufferResource(sizeof(VertexData) * modelData.vertices.size());
 
-	//頂点バッファビューを作成
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	////頂点バッファビューを作成
+	//D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 
-	////リソースの先頭のアドレスから使う
-	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+	//////リソースの先頭のアドレスから使う
+	//vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 
-	//使用するリソースのサイズは頂点3つのサイズ
-	vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-	//1頂点当たりのサイズ
-	vertexBufferView.StrideInBytes = sizeof(VertexData);
+	////使用するリソースのサイズは頂点3つのサイズ
+	//vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
+	////1頂点当たりのサイズ
+	//vertexBufferView.StrideInBytes = sizeof(VertexData);
 
-	//頂点リソースデータを書き込む
-	VertexData *vertexData = nullptr;
+	////頂点リソースデータを書き込む
+	//VertexData *vertexData = nullptr;
 
-	//書き込む為のアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
+	////書き込む為のアドレスを取得
+	//vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
 
-	//頂点データをリソースにコピー
-	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
+	////頂点データをリソースにコピー
+	//std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 
 	//マテリアル用のリソースを作る。今回はcolor１つ分のサイズを用意する
 	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource = dxCommon->CreateBufferResource(sizeof(Material));
@@ -841,10 +858,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//		sprite->textureReplacement("resources/monsterBall.png");
 			//	}
 			//}
-			sprite->Update();
+		sprite->Update();
 		//}
 
-		
+
 
 		////uvTranslate用の行列
 		//Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
@@ -906,6 +923,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//描画前処理
 		dxCommon->PreDraw();
 
+		//3Dオブジェトの描画準備
+		object3dCommon->SetCommonDrawSettings();
+
 		//Spriteの描画基準
 		spriteCommon->SetCommonPipelineState();
 
@@ -933,10 +953,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		//スプライト描画
 		//for (Sprite *sprite : sprites) {
-			sprite->Draw();
+		sprite->Draw();
 		//}
 
-		
+
 		//Shereの描画
 		dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
 		dxCommon->GetCommandList()->IASetIndexBuffer(&indexBufferViewShere);
@@ -978,10 +998,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete input;
 	delete winApp;
 	delete dxCommon;
-
+	delete object3dCommon;
+	delete object3d;
 	delete spriteCommon;
 	//for (Sprite *sprite : sprites) {
-		delete sprite;
+	delete sprite;
 	/*}
 	sprites.clear();*/
 
