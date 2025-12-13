@@ -43,6 +43,8 @@ void DirectXCommon::Initialize(WinApp *winApp) {
 	//各種デスクリプタヒープの生成
 	CreateDescriptorHeaps();
 
+	//深度バッファの生成
+	depthBufferGeneration(WinApp::kClientWidth,WinApp::kClinentHeight);
 	
 	//レンダーターゲットビューの初期化
 	CreateRenderTargetView();
@@ -554,7 +556,7 @@ Microsoft::WRL::ComPtr<ID3D12Resource> DirectXCommon::CreateBufferResource(size_
 
 	//バッファリソース。テクスチャの場合はまた別の設定をする
 	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	vertexResourceDesc.Width = sizeInBytes;   //リソースのサイズ。今回はVector4を3頂点分
+	vertexResourceDesc.Width = Align256(sizeInBytes);   //リソースのサイズ。今回はVector4を3頂点分
 
 	//バッファの場合はこれらほ１にする決まり
 	vertexResourceDesc.Height = 1;
