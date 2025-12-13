@@ -33,6 +33,21 @@ struct Vector4 {
 
 struct Matrix4x4 {
 	float m[4][4];
+
+	Matrix4x4 operator*(const Matrix4x4 &other) const {
+		Matrix4x4 result{};
+
+		for (int row = 0; row < 4; ++row) {
+			for (int col = 0; col < 4; ++col) {
+				result.m[row][col] =
+					m[row][0] * other.m[0][col] +
+					m[row][1] * other.m[1][col] +
+					m[row][2] * other.m[2][col] +
+					m[row][3] * other.m[3][col];
+			}
+		}
+		return result;
+	}
 };
 
 struct Matrix3x3 {
@@ -40,11 +55,12 @@ struct Matrix3x3 {
 };
 
 
+
 class MyMath {
 public:
 
 	
-
+	
 
 	//平行移動
 	Matrix4x4 MakeTranslateMatrix(const Vector3 &translate);

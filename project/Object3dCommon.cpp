@@ -123,7 +123,7 @@ void Object3dCommon::CreateGraphicsPipeline() {
 	// RasterizerStateの作成
 	D3D12_RASTERIZER_DESC rasterizerDesc = {};
 	// 3Dでは裏面を非表示にする (背面カリング) を有効にする
-	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
+	rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;
 	// 三角形の中を塗りつぶす
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 

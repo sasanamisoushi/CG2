@@ -1,8 +1,13 @@
 #include "Object3d.h"
 #include "Object3dCommon.h"
+#include "TextureManager.h"
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <wrl.h>
+
+using Microsoft::WRL::ComPtr;
+
 
 
 
@@ -12,6 +17,8 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	this->object3dCommon = object3dCommon;
 
+	this->math = new MyMath();
+
 	//モデルの読み込み
 	modelData = LoadObjFile("resources", "plane.obj");
 
@@ -20,6 +27,76 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 
 	//マテリアルデータ作成
 	CreateMaterialData();
+
+	//座標変換行列データ作成
+	CreateTransformationData();
+
+	//平行光源データ作成
+	CreateDirectionLightData();
+
+	//.objの参照しているテクスチャファイル読み込み
+	TextureManager::GetInstance()->LoadTexture(modelData.material.textureFilePath);
+	//読み込んだテクスチャの番号を取得
+	modelData.material.textureIndex = 
+		TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData.material.textureFilePath);
+
+	transform={ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
+	cameraTransform={ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
+}
+
+void Object3d::Update() {
+
+	transform.rotate.y += 0.01f;
+
+	
+
+	Matrix4x4 worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+
+
+	//cameraMatrix
+	Matrix4x4 cameraMatrix = math->MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+
+	//viewMatrix
+	Matrix4x4 viewMatrix = math->Inverse(cameraMatrix);
+
+	//projectionMatrix
+	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
+
+	//worldViewProjectionMatrix
+	//Matrix4x4 worldViewProjectionMatrix = math->Multiply(worldMatrix, math->Multiply(viewMatrix, projectionMatrix));
+	transformationMatrixData->WVP = worldMatrix* viewMatrix*projectionMatrix;
+	transformationMatrixData->World = worldMatrix;
+
+}
+
+void Object3d::Draw() {
+
+	
+
+	object3dCommon->GetDxCommon()->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
+	object3dCommon->GetDxCommon()->GetCommandList()->IASetIndexBuffer(nullptr);
+	object3dCommon->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えて置けばよい
+	object3dCommon->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	//マテリアルCBufferの場所を設定
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
+
+	//TransformationMatrixCbufferの場所を設定
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+
+	//SRVのDescriptorの先頭を設定
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(modelData.material.textureIndex));
+
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
+
+	
+
+	//描画
+	object3dCommon->GetDxCommon()->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+
+	
 }
 
 MaterialData Object3d::LoadMaterialTemplateFile(const std::string &directoryPath, const std::string &filename) {
@@ -122,10 +199,9 @@ ModelData Object3d::LoadObjFile(const std::string &directoryPath, const std::str
 void Object3d::CreateVertexData() {
 
 	//頂点リソースを作成
-	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(VertexData) * modelData.vertices.size());
+	vertexResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(VertexData) * modelData.vertices.size());
 
-	//頂点バッファビューを作成
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	
 
 	////リソースの先頭のアドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
@@ -148,7 +224,7 @@ void Object3d::CreateVertexData() {
 
 void Object3d::CreateMaterialData() {
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(Material));
+	matetialResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(Material));
 
 	//書き込むためのアドレスを取得
 	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
@@ -160,8 +236,24 @@ void Object3d::CreateMaterialData() {
 
 void Object3d::CreateTransformationData() {
 	//Plane用のWVPリソース
-	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResourcePlane = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(TransformationMatrix));
+	wvpResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(TransformationMatrix));
 	
-	wvpResourcePlane->Map(0, nullptr, reinterpret_cast<void **>(&wvpDataPlane));
-	wvpDataPlane->WVP = math->MakeIdentity4x4();
+	wvpResource->Map(0, nullptr, reinterpret_cast<void **>(&transformationMatrixData));
+	transformationMatrixData->WVP = math->MakeIdentity4x4();
+	transformationMatrixData->World = math->MakeIdentity4x4();
+}
+
+void Object3d::CreateDirectionLightData() {
+	//平行光源用のリソース
+	directionLightResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(DirectionalLight));
+	
+	//書き込むためのアドレスを取得
+	directionLightResource->Map(0, nullptr, reinterpret_cast<void **>(&directionLightData));
+
+	directionLightData->color = { 1.0f,1.0f,1.0f,1.0f };
+	directionLightData->direction = { 1.0f,0.0f,0.0f };
+	directionLightData->intensity = 1.0f;
+
+	directionLightData->direction = math->Normalize(directionLightData->direction);
+
 }
