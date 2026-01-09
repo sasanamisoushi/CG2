@@ -186,7 +186,9 @@ private:
 	//記録時間
 	std::chrono::steady_clock::time_point reference_;
 
-	
+	size_t Align256(size_t size) {
+		return (size + 255) & ~255;
+	}
 	
 
 };
