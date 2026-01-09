@@ -81,9 +81,14 @@ public:
 
 	//セッター
 	void SetModel(Model *model) { this->model = model; }
+	void SetScale(const Vector3 &scale) { this->transform.scale = scale; }
 	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; }
+	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }
 
-
+	//ゲッター
+	const Vector3 &GetScale()const { return transform.scale; }
+	const Vector3 &GetRotate()const { return transform.rotate; }
+	const Vector3 &GetTranslate()const { return transform.translate; }
 
 private:
 
