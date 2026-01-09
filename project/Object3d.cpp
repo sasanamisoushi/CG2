@@ -8,11 +8,6 @@
 
 using Microsoft::WRL::ComPtr;
 
-
-
-
-
-
 void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	this->object3dCommon = object3dCommon;
@@ -238,4 +233,10 @@ void Object3d::CreateDirectionLightData() {
 
 	directionLightData->direction = math->Normalize(directionLightData->direction);
 
+}
+
+void Object3d::SetModel(const std::string &filepath) {
+
+	//モデルを検索してセットする
+	model = ModelManager::GetInstance()->FindModel(filepath);
 }
