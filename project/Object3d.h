@@ -9,6 +9,7 @@
 #include <cassert>
 #include <MyMath.h>
 #include"Model.h"
+#include "ModelManager.h"
 
 class Object3dCommon;
 
@@ -80,7 +81,7 @@ public:
 	Transform cameraTransform;
 
 	//セッター
-	void SetModel(Model *model) { this->model = model; }
+	void SetModel(const std::string &filepath);
 	void SetScale(const Vector3 &scale) { this->transform.scale = scale; }
 	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; }
 	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }

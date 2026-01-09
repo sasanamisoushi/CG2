@@ -8,13 +8,13 @@
 
 using Microsoft::WRL::ComPtr;
 
-void Model::Initialize(ModelCommon *modelCommon) {
+void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypath, const std::string &filename) {
 
 	//引数で受け取ってメンバ変数に記録する
 	this->modelCommon_ = modelCommon;
 
 	//モデルの読み込み
-	modelData = LoadObjFile("resources", "plane.obj");
+	modelData = LoadObjFile(directorypath,filename);
 
 
 	//頂点データ作成
