@@ -27,6 +27,7 @@
 #include "TextureManager.h"
 #include "Object3dCommon.h"
 #include "Object3d.h"
+#include "Model.h"
 
 
 #pragma comment(lib,"dxguid.lib")
@@ -462,6 +463,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
 
 #pragma region 最初のシーンの初期化
+
+	ModelCommon *modelCommon= new ModelCommon();
+	modelCommon->Initialize(dxCommon);
+
+	Model *model = new Model();
+	model->Initialize(modelCommon);
 
 	//3Dオブジェトの初期化
 	Object3d *object3d = new Object3d();
@@ -948,6 +955,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		object3dCommon->SetCommonDrawSettings();
 		//3Dオブジェクトの描画
 		object3d->Draw();
+		model->Draw();
 
 
 		//Spriteの描画基準
@@ -956,6 +964,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//for (Sprite *sprite : sprites) {
 		sprite->Draw();
 		//}
+
+		
 
 		//dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
 		//dxCommon->GetCommandList()->IASetIndexBuffer(nullptr);
@@ -1026,6 +1036,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete object3dCommon;
 	delete object3d;
 	delete spriteCommon;
+	delete model;
+	delete modelCommon;
 	//for (Sprite *sprite : sprites) {
 	delete sprite;
 	/*}

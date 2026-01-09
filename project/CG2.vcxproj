@@ -157,6 +157,8 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="engine\math\MyMath.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Logger.cpp" />
+    <ClCompile Include="Model.cpp" />
+    <ClCompile Include="ModelCommon.cpp" />
     <ClCompile Include="Object3d.cpp" />
     <ClCompile Include="Object3dCommon.cpp" />
     <ClCompile Include="Sprite.cpp" />
@@ -196,6 +198,8 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="externals\imgui\imstb_truetype.h" />
     <ClInclude Include="engine\math\MyMath.h" />
     <ClInclude Include="Logger.h" />
+    <ClInclude Include="Model.h" />
+    <ClInclude Include="ModelCommon.h" />
     <ClInclude Include="Object3d.h" />
     <ClInclude Include="Object3dCommon.h" />
     <ClInclude Include="ResourceObject.h" />
