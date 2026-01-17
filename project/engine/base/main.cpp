@@ -17,6 +17,7 @@
 #include "Object3d.h"
 #include "Model.h"
 #include "ModelManager.h"
+#include "Camera.h"
 
 
 #pragma comment(lib,"dxcompiler.lib")
@@ -293,6 +294,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Sprite *sprite = new Sprite();
 	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
 
+	Camera *camera = new Camera;
+	camera->SetRotate({ 0.0f,0.0f,0.0f });
+	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
+	object3dCommon->SetDefaultCamera(camera);
+
 #pragma region 最初のシーンの初期化
 
 	/*ModelCommon *modelCommon= new ModelCommon();
@@ -500,6 +506,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		////projectionMatrix
 		//Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
 
+		//カメラの更新
+		camera->Update();
 
 		for (Object3d *object3d : objects) {
 			object3d->Update();

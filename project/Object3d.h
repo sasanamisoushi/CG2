@@ -10,14 +10,15 @@
 #include <MyMath.h>
 #include"Model.h"
 #include "ModelManager.h"
+#include "Camera.h"
 
 class Object3dCommon;
 
-struct Transform {
-	Vector3 scale;
-	Vector3 rotate;
-	Vector3 translate;
-};
+//struct Transform {
+//	Vector3 scale;
+//	Vector3 rotate;
+//	Vector3 translate;
+//};
 
 //struct  VertexData {
 //	Vector4 position;
@@ -78,13 +79,14 @@ public:
 	void CreateDirectionLightData();
 
 	Transform transform;
-	Transform cameraTransform;
+	//Transform cameraTransform;
 
 	//セッター
 	void SetModel(const std::string &filepath);
 	void SetScale(const Vector3 &scale) { this->transform.scale = scale; }
 	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; }
 	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }
+	void SetCamera(Camera *camera) { this->camera = camera; }
 
 	//ゲッター
 	const Vector3 &GetScale()const { return transform.scale; }
@@ -114,7 +116,8 @@ private:
 	//モデル
 	Model *model = nullptr;
 
-	
+	//カメラ
+	Camera *camera = nullptr;
 	
 };
 
