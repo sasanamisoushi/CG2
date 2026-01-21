@@ -1,5 +1,7 @@
 #pragma once
 #include <DirectXCommon.h>
+#include "Camera.h"
+
 class Object3dCommon {
 public:
 	//初期化
@@ -12,6 +14,12 @@ public:
 	void LoadShaders();
 
 	DirectXCommon *GetDxCommon()const { return dxCommon_; }
+
+	//setter
+	void SetDefaultCamera(Camera *camera) { this->defaultCamera = camera; }
+
+	//getter
+	Camera *GetDefaultCamera()const { return defaultCamera; }
 
 private:
 	//ルートシグネチャの作成
@@ -30,5 +38,7 @@ private:
 	// Shader blobs
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob;
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob;
+
+	Camera *defaultCamera = nullptr;
 };
 
