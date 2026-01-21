@@ -27,6 +27,8 @@ public:
 	//テクスチャ差し替え
 	void textureReplacement(std::string textureFilePath);
 
+	~Sprite();
+
 	//頂点データ
 	struct VertexData {
 		Vector4 Position;
@@ -160,6 +162,9 @@ private:
 
 	//テクスチャサイズをイメージに合わせる
 	void AdjustTextureSize();
+
+	// テクスチャファイルパス
+	std::string textureFilePath_;
 
 };
 

@@ -18,6 +18,7 @@
 #include "Model.h"
 #include "ModelManager.h"
 #include "Camera.h"
+#include "SrvManager.h"
 
 
 #pragma comment(lib,"dxcompiler.lib")
@@ -275,8 +276,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	dxCommon->Initialize(winApp);
 	dxCommon->GetCommandList();
 	dxCommon->InitializeImGui();
+
+	SrvManager *srvManager = nullptr;
+	//SRVマネージャの初期化
+	srvManager = new SrvManager();
+	srvManager->Initialize(dxCommon);
+
 	//テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialiaze(dxCommon);
+	TextureManager::GetInstance()->Initialiaze(dxCommon,srvManager);
 
 	//3Dモデルマネージャーの初期化
 	ModelManager::GetInstance()->Initialize(dxCommon);
@@ -290,7 +297,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	object3dCommon = new Object3dCommon();
 	object3dCommon->Initialize(dxCommon);
 
+	//テクスチャマネージャの初期化
+	//TextureManager::GetInstance()->Initialiaze(dxCommon, srvManager);
+
 #pragma endregion 基盤システムの初期化
+	TextureManager::GetInstance()->LoadTexture("resources/uvChecker.png");
 	Sprite *sprite = new Sprite();
 	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
 
@@ -592,11 +603,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 		//開発用UIの処理
-		ImGui::ShowDemoWindow();
+		/*ImGui::ShowDemoWindow();
 
 
 		ImGui::Begin("Object3d Controller");
-		ImGui::Text("Model Transform");
+		ImGui::Text("Model Transform");*/
 		/*ImGui::DragFloat3("Translate", &object3d->transform.translate.x, 0.01f);
 		ImGui::DragFloat3("Rotate", &object3d->transform.rotate.x, 0.01f);
 		ImGui::DragFloat3("Scale", &object3d->transform.scale.x, 0.01f);*/
@@ -604,16 +615,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		
 		// カメラも操作したい場合
-		ImGui::Separator();
-		ImGui::Text("Camera Transform");
+		/*ImGui::Separator();
+		ImGui::Text("Camera Transform");*/
 		/*ImGui::DragFloat3("Cam Pos", &object3d->cameraTransform.translate.x, 0.01f);
 		ImGui::DragFloat3("Cam Rot", &object3d->cameraTransform.rotate.x, 0.01f);
 		*/
 
-		ImGui::End();
-		//カラー
-		ImGui::Begin("MaterialColor");
-		ImGui::ColorEdit4("color", &materialData->color.x);
+		//ImGui::End();
+		////カラー
+		//ImGui::Begin("MaterialColor");
+		//ImGui::ColorEdit4("color", &materialData->color.x);
 		//ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
 		//ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
 		//ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
@@ -654,7 +665,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//Draw
 
 		//ImGuiの内部コマンドを生成
-		ImGui::Render();
+		//ImGui::Render();
 
 
 
@@ -750,6 +761,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete winApp;
 	delete dxCommon;
 	delete object3dCommon;
+	delete srvManager;
 	for (Object3d *object3d : objects) {
 		delete object3d;
 	}

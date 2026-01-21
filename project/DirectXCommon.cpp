@@ -82,11 +82,11 @@ void DirectXCommon::CreateDevice() {
 	}
 #endif 
 
-	
-
 	hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
 	assert(SUCCEEDED(hr));
+
+	
 
 	//使用するアダプタ用の変数
 	Microsoft::WRL::ComPtr<IDXGIAdapter4> useAdapter = nullptr;
@@ -140,6 +140,7 @@ void DirectXCommon::CreateDevice() {
 	//デバイスの生成が上手くいかなかったので起動できない
 	assert(device != nullptr);
 	logger.Log("Complete create D3D12Device!!!\n");
+
 
 #ifdef _DEBUG
 
@@ -275,6 +276,7 @@ void DirectXCommon::CreateDescriptorHeaps() {
 
 
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DirectXCommon::CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible) {
+	assert(device);
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = nullptr;
 	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
 	descriptorHeapDesc.Type = heapType;

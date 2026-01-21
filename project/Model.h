@@ -69,5 +69,8 @@ private:
 
 	MyMath *math = nullptr;
 
+	// テクスチャファイルパス
+	std::string textureFilePath_;
+
 };
 
