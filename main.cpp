@@ -71,6 +71,7 @@ struct Material {
 	int32_t enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
+	float shininess;
 };
 
 struct MaterialData {
@@ -112,6 +113,11 @@ struct Emitter {
 	uint32_t count;      //発生源
 	float frequency;     //発生頻度
 	float frequencyTime; //頻度用時刻
+};
+
+// カメラ座標をGPUに送るための構造体
+struct CameraForGPU {
+	Vector3 worldPosition;
 };
 
 //Transform変更
@@ -1016,6 +1022,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	hr = swapChain->GetBuffer(1, IID_PPV_ARGS(&swapChainResources[1]));
 	assert(SUCCEEDED(hr));
 
+	// --- カメラ用リソースの作成 ---
+	// カメラ用のリソースを作る
+	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource = CreateBufferResource(device, sizeof(CameraForGPU));
+	// データを書き込むためのポインタ
+	CameraForGPU *cameraData = nullptr;
+	// アドレスを取得
+	cameraResource->Map(0, nullptr, reinterpret_cast<void **>(&cameraData));
+	// 初期値を入れておく（とりあえず原点など）
+	cameraData->worldPosition = cameraTransform.translate;
+
 	//RTVの設定
 	D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
 	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
@@ -1073,7 +1089,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	//RootParameter作成。複製設定できるので配列
-	D3D12_ROOT_PARAMETER rootParamerers[4] = {};
+	D3D12_ROOT_PARAMETER rootParamerers[5] = {};
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
@@ -1094,6 +1110,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	rootParamerers[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[3].Descriptor.ShaderRegister = 1;
+	rootParamerers[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[4].Descriptor.ShaderRegister = 2;
 	descriptionRootSignature.pParameters = rootParamerers;//ルートパラメータ配列のポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);//配列の長さ
 
@@ -1363,6 +1382,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = true;
 	materialData->uvTransform = math.MakeIdentity4x4();
+	materialData->shininess = 15.0f;
 
 
 	//Sprite用のマテリアルリソースを作る
@@ -2102,6 +2122,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
+
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource->GetGPUVirtualAddress());
 
 			// 描画
 			commandList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
