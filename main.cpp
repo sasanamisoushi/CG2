@@ -122,7 +122,7 @@ struct CameraForGPU {
 
 //Transform変更
 Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { std::numbers::pi_v<float> / 3.0f,std::numbers::pi_v<float>,0.0f }, { 0.0f,0.0f,-10.0f } };
+Transform cameraTransform{ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
 Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 Transform transformPlane{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
 Transform transformSphere{ {1.0f, 1.0f, 1.0f},{0.0f, 0.0f, 0.0f},{0.0f, 0.0f, 0.0f} };
@@ -1382,7 +1382,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = true;
 	materialData->uvTransform = math.MakeIdentity4x4();
-	materialData->shininess = 15.0f;
+	//materialData->shininess = 15.0f;
 
 
 	//Sprite用のマテリアルリソースを作る
@@ -1396,6 +1396,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	materialDataSprite->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialDataSprite->enableLighting = false;
 	materialDataSprite->uvTransform = math.MakeIdentity4x4();
+	//materialDataSprite->shininess = 15.0f;
 
 	//平行光源用のリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> directionLightResource = CreateBufferResource(device, sizeof(DirectionalLight));
@@ -1502,6 +1503,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	//白で設定
 	materialDataSphere->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialDataSphere->enableLighting = true;
+	materialDataSphere->uvTransform = math.MakeIdentity4x4();
+	materialDataSphere->shininess = 15.0f;
 
 
 	VertexData *VertexDataSprite = nullptr;
@@ -1631,7 +1634,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 	//Textureを読んで転送する
-	DirectX::ScratchImage mipImages = LoadTexture("resources/uvChecker.png");
+	DirectX::ScratchImage mipImages = LoadTexture("resources/monsterBall.png");
 	const DirectX::TexMetadata &metadata = mipImages.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = CreateTextureResource(device, metadata);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
@@ -1706,7 +1709,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
-	bool useMonsterBall = true;
+	//bool useMonsterBall = true;
 	bool isParticleUpdate = true;
 	bool useBillboard = true;
 	bool useCenterParticle = false;
@@ -1946,20 +1949,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 			if (ImGui::CollapsingHeader("Sphere")) {
 				ImGui::ColorEdit4("color", &materialDataSphere->color.x);
+				ImGui::Checkbox("Sphere: Lighting", reinterpret_cast<bool *>(&materialDataSphere->enableLighting));
+				ImGui::DragFloat("Sphere: Shininess", &materialDataSphere->shininess, 0.1f, 1.0f, 100.0f);
 				ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
 				ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
 				ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
-				
+
 			}
 
-			 if(ImGui::CollapsingHeader("plane")) {
+			/*if (ImGui::CollapsingHeader("plane")) {
 
 
 				ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
 				ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
 				ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
 
-			}
+			}*/
 
 			//if (ImGui::Begin("Camera Control (ImGui)")) {
 
@@ -2018,21 +2023,29 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//	ImGui::Checkbox("Particle Update", &isParticleUpdate);
 			//	ImGui::Checkbox("Use Billboard", &useBillboard);
 			//};
-			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
 			ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
 			ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
-			if (ImGui::CollapsingHeader("Sprite")) {
+			/*if (ImGui::CollapsingHeader("Sprite")) {
 				ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
 				ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
 				ImGui::DragFloat3("SpriteRotate", &transformSprite.rotate.x);
-			}
+			}*/
 			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+
+
 			ImGui::End();
 
 			//ゲーム処理
+
+
+
+			// cameraTransform.translate は ImGui で操作している変数
+			cameraData->worldPosition = cameraTransform.translate;
+
 
 			//Draw
 
@@ -2097,7 +2110,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
 
 			//SRVのDescriptorの先頭を設定
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			//描画
 			//commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
@@ -2114,11 +2127,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 
 			//描画
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			//commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
 			//Shereの描画
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSphere);
 			commandList->IASetIndexBuffer(&indexBufferViewShere);
+
+			// スフィア用マテリアルをルートスロット0にバインド
+			commandList->SetGraphicsRootConstantBufferView(0, matetialResourceSphere->GetGPUVirtualAddress());
+
 
 			//マテリアルCBufferの場所を設定
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResourceSphere->GetGPUVirtualAddress());
