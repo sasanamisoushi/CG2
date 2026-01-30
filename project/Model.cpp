@@ -31,7 +31,9 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 		TextureManager::GetInstance()->GetTextureIndexByFilePath(modelData.material.textureFilePath);
 
 	// テクスチャファイルパス
-	textureFilePath_= filename;
+	//textureFilePath_= filename;
+
+	textureFilePath_ = modelData.material.textureFilePath;
 }
 
 

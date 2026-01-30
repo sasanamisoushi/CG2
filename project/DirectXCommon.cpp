@@ -10,6 +10,7 @@
 #include <iostream>
 #include <externals/DirectXTex/d3dx12.h>
 #include <thread>
+#include "SrvManager.h"
 
 
 #pragma comment(lib,"d3d12.lib")
@@ -397,7 +398,7 @@ void DirectXCommon::InitializeImGui() {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 }
 
-void DirectXCommon::PreDraw() {
+void DirectXCommon::PreDraw(SrvManager *srvManager) {
 
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -426,9 +427,11 @@ void DirectXCommon::PreDraw() {
 	//指定した深度で画面全体をクリアする
 	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-
-	ID3D12DescriptorHeap *heaps[] = { srvDescriptorHeap.Get() };
-	commandList->SetDescriptorHeaps(1, heaps);
+	// SrvManagerのヒープをセット
+	if (srvManager) {
+		ID3D12DescriptorHeap *heaps[] = { srvManager->GetDescriptorHeap() };
+		commandList->SetDescriptorHeaps(1, heaps);
+	}
 
 
 	commandList->RSSetViewports(1, &viewport);

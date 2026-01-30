@@ -670,7 +670,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 		//描画前処理
-		dxCommon->PreDraw();
+		dxCommon->PreDraw(srvManager);
 
 		
 		//3Dオブジェトの描画準備

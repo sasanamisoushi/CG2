@@ -63,7 +63,7 @@ public:
 	void InitializeImGui();
 
 	//描画前処理
-	void PreDraw();
+	void PreDraw(class SrvManager *srvManager);
 
 	//描画後処理
 	void PostDraw();

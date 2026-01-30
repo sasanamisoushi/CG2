@@ -43,12 +43,12 @@ void TextureManager::LoadTexture(const std::string &filePath) {
 	//	return;
 	//}
 	if (textureDatas.contains(filePath)) {
-
+		return;
 	}
 
 	//テクスチャ枚数上限チェック
 	//assert(textureDatas.size() + kSRVIndexTop < DirectXCommon::kMaxSRVCount);
-	assert(srvManger->Allocate());
+	//assert(srvManger->Allocate());
 
 	//テクスチャファイルを読んでプログラムで扱えるようにする
 	DirectX::ScratchImage image{};
@@ -106,7 +106,7 @@ uint32_t TextureManager::GetTextureIndexByFilePath(const std::string &filePath) 
 
 D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string &filePath) {
 	//範囲指定違反チェック
-	assert(textureIndex < textureDatas.size());
+	assert(textureDatas.contains(filePath));
 
 	// テクスチャデータの参照を取得
 	TextureData &textureData = textureDatas[filePath];
@@ -115,7 +115,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string &f
 
 const DirectX::TexMetadata &TextureManager::GetMetaData(const std::string &filePath) {
 	//範囲外指定違反チェック
-	assert(textureIndex < textureDatas.size());
+	assert(textureDatas.contains(filePath));
 
 	//テクスチャデータの参照を取得
 	TextureData &textureData = textureDatas[filePath];
