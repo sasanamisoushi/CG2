@@ -7,6 +7,9 @@ public:
 	//初期化
 	void Initialize(DirectXCommon *dxCommon);
 
+	// デスクリプタヒープの取得（★追加：これをDirectXCommon::PreDrawで使う）
+	ID3D12DescriptorHeap *GetDescriptorHeap() const { return descriptorHeap.Get(); }
+
 	uint32_t Allocate();
 
 	D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(uint32_t index);

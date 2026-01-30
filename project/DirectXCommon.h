@@ -8,7 +8,6 @@
 #include <dxcapi.h>
 #include <chrono>
 
-
 #include "externals/DirectXTex/DirectXTex.h"
 
 
