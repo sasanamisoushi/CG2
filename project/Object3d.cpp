@@ -32,7 +32,10 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	
 
 	transform={ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
-	cameraTransform={ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
+	//cameraTransform={ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
+
+	//デフォルトカメラをセット
+	this->camera = object3dCommon->GetDefaultCamera();
 }
 
 void Object3d::Update() {
@@ -43,19 +46,19 @@ void Object3d::Update() {
 
 	Matrix4x4 worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 
-
-	//cameraMatrix
-	Matrix4x4 cameraMatrix = math->MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-
-	//viewMatrix
-	Matrix4x4 viewMatrix = math->Inverse(cameraMatrix);
-
 	//projectionMatrix
 	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
 
 	//worldViewProjectionMatrix
-	//Matrix4x4 worldViewProjectionMatrix = math->Multiply(worldMatrix, math->Multiply(viewMatrix, projectionMatrix));
-	transformationMatrixData->WVP = worldMatrix* viewMatrix*projectionMatrix;
+	Matrix4x4 worldViewProjectionMatrix;
+	if (camera) {
+		const Matrix4x4 &viewProjectionMatrix = camera->GetViewProjectionMatrix();
+		worldViewProjectionMatrix = math->Multiply(worldMatrix, viewProjectionMatrix);
+	} else {
+		worldViewProjectionMatrix = worldMatrix;
+	}
+	
+	transformationMatrixData->WVP = worldViewProjectionMatrix;
 	transformationMatrixData->World = worldMatrix;
 
 }

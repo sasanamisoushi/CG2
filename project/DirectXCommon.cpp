@@ -10,6 +10,7 @@
 #include <iostream>
 #include <externals/DirectXTex/d3dx12.h>
 #include <thread>
+#include "SrvManager.h"
 
 
 #pragma comment(lib,"d3d12.lib")
@@ -82,11 +83,11 @@ void DirectXCommon::CreateDevice() {
 	}
 #endif 
 
-	
-
 	hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
 	assert(SUCCEEDED(hr));
+
+	
 
 	//使用するアダプタ用の変数
 	Microsoft::WRL::ComPtr<IDXGIAdapter4> useAdapter = nullptr;
@@ -140,6 +141,7 @@ void DirectXCommon::CreateDevice() {
 	//デバイスの生成が上手くいかなかったので起動できない
 	assert(device != nullptr);
 	logger.Log("Complete create D3D12Device!!!\n");
+
 
 #ifdef _DEBUG
 
@@ -275,6 +277,7 @@ void DirectXCommon::CreateDescriptorHeaps() {
 
 
 Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> DirectXCommon::CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible) {
+	assert(device);
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> descriptorHeap = nullptr;
 	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
 	descriptorHeapDesc.Type = heapType;
@@ -395,7 +398,7 @@ void DirectXCommon::InitializeImGui() {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 }
 
-void DirectXCommon::PreDraw() {
+void DirectXCommon::PreDraw(SrvManager *srvManager) {
 
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
@@ -424,9 +427,11 @@ void DirectXCommon::PreDraw() {
 	//指定した深度で画面全体をクリアする
 	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-
-	ID3D12DescriptorHeap *heaps[] = { srvDescriptorHeap.Get() };
-	commandList->SetDescriptorHeaps(1, heaps);
+	// SrvManagerのヒープをセット
+	if (srvManager) {
+		ID3D12DescriptorHeap *heaps[] = { srvManager->GetDescriptorHeap() };
+		commandList->SetDescriptorHeaps(1, heaps);
+	}
 
 
 	commandList->RSSetViewports(1, &viewport);

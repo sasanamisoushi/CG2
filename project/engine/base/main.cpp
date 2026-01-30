@@ -17,6 +17,8 @@
 #include "Object3d.h"
 #include "Model.h"
 #include "ModelManager.h"
+#include "Camera.h"
+#include "SrvManager.h"
 
 
 #pragma comment(lib,"dxcompiler.lib")
@@ -273,9 +275,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	dxCommon = new DirectXCommon();
 	dxCommon->Initialize(winApp);
 	dxCommon->GetCommandList();
-	dxCommon->InitializeImGui();
+	//dxCommon->InitializeImGui();
+
+	SrvManager *srvManager = nullptr;
+	//SRVマネージャの初期化
+	srvManager = new SrvManager();
+	srvManager->Initialize(dxCommon);
+
 	//テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialiaze(dxCommon);
+	TextureManager::GetInstance()->Initialiaze(dxCommon,srvManager);
 
 	//3Dモデルマネージャーの初期化
 	ModelManager::GetInstance()->Initialize(dxCommon);
@@ -289,9 +297,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	object3dCommon = new Object3dCommon();
 	object3dCommon->Initialize(dxCommon);
 
+	//テクスチャマネージャの初期化
+	//TextureManager::GetInstance()->Initialiaze(dxCommon, srvManager);
+
 #pragma endregion 基盤システムの初期化
+	TextureManager::GetInstance()->LoadTexture("resources/uvChecker.png");
 	Sprite *sprite = new Sprite();
 	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
+
+	Camera *camera = new Camera;
+	camera->SetRotate({ 0.0f,0.0f,0.0f });
+	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
+	object3dCommon->SetDefaultCamera(camera);
 
 #pragma region 最初のシーンの初期化
 
@@ -470,9 +487,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			break;
 		}
 
-		ImGui_ImplDX12_NewFrame();
+		/*ImGui_ImplDX12_NewFrame();
 		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
+		ImGui::NewFrame();*/
 
 		//Update
 
@@ -500,6 +517,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		////projectionMatrix
 		//Matrix4x4 projectionMatrix = math.MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClinentHeight), 0.1f, 100.0f);
 
+		//カメラの更新
+		camera->Update();
 
 		for (Object3d *object3d : objects) {
 			object3d->Update();
@@ -584,11 +603,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 
 		//開発用UIの処理
-		ImGui::ShowDemoWindow();
+		/*ImGui::ShowDemoWindow();
 
 
 		ImGui::Begin("Object3d Controller");
-		ImGui::Text("Model Transform");
+		ImGui::Text("Model Transform");*/
 		/*ImGui::DragFloat3("Translate", &object3d->transform.translate.x, 0.01f);
 		ImGui::DragFloat3("Rotate", &object3d->transform.rotate.x, 0.01f);
 		ImGui::DragFloat3("Scale", &object3d->transform.scale.x, 0.01f);*/
@@ -596,16 +615,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		
 		// カメラも操作したい場合
-		ImGui::Separator();
-		ImGui::Text("Camera Transform");
+		/*ImGui::Separator();
+		ImGui::Text("Camera Transform");*/
 		/*ImGui::DragFloat3("Cam Pos", &object3d->cameraTransform.translate.x, 0.01f);
 		ImGui::DragFloat3("Cam Rot", &object3d->cameraTransform.rotate.x, 0.01f);
 		*/
 
-		ImGui::End();
-		//カラー
-		ImGui::Begin("MaterialColor");
-		ImGui::ColorEdit4("color", &materialData->color.x);
+		//ImGui::End();
+		////カラー
+		//ImGui::Begin("MaterialColor");
+		//ImGui::ColorEdit4("color", &materialData->color.x);
 		//ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
 		//ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
 		//ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
@@ -646,12 +665,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//Draw
 
 		//ImGuiの内部コマンドを生成
-		ImGui::Render();
+		//ImGui::Render();
 
 
 
 		//描画前処理
-		dxCommon->PreDraw();
+		dxCommon->PreDraw(srvManager);
 
 		
 		//3Dオブジェトの描画準備
@@ -708,7 +727,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//dxCommon->GetCommandList()->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
 		//実際のcommandListのImGuiの描画コマンドを積む
-		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
+		//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
 
 		//描画後処理
 		dxCommon->PostDraw();
@@ -742,6 +761,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete winApp;
 	delete dxCommon;
 	delete object3dCommon;
+	delete srvManager;
 	for (Object3d *object3d : objects) {
 		delete object3d;
 	}
@@ -760,8 +780,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SoundUnload(&soundData1);
 
 
-	ImGui_ImplDX12_Shutdown();
+	/*ImGui_ImplDX12_Shutdown();
 	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();
+	ImGui::DestroyContext();*/
 	return 0;
 }
