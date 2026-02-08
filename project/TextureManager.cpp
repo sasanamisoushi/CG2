@@ -21,12 +21,12 @@ void TextureManager::Finalize() {
 	instance = nullptr;
 }
 
-void TextureManager::Initialiaze(DirectXCommon *common,SrvManager *srvManager) {
+void TextureManager::Initialize(DirectXCommon *common,SrvManager *srvManager) {
 	//SRVの数と同数
 	textureDatas.reserve(DirectXCommon::kMaxSRVCount);
 	dxCommon = common;
 
-	srvManger = srvManager;
+	this->srvManager = srvManager;
 
 }
 
@@ -71,9 +71,9 @@ void TextureManager::LoadTexture(const std::string &filePath) {
 
 	//テクスチャデータの要素数番号をSRVのインデックスとする
 	uint32_t srvIndex = static_cast<uint32_t>(textureDatas.size() - 1) + kSRVIndexTop;
-	textureData.srvIndex = srvManger->Allocate();
-	textureData.srvHandleCPU = srvManger->GetCPUDescriptorHandle(textureData.srvIndex);
-	textureData.srvHandleGPU = srvManger->GetGPUDescriptorHandle(textureData.srvIndex);
+	textureData.srvIndex = srvManager->Allocate();
+	textureData.srvHandleCPU = srvManager->GetCPUDescriptorHandle(textureData.srvIndex);
+	textureData.srvHandleGPU = srvManager->GetGPUDescriptorHandle(textureData.srvIndex);
 
 	//転送用に生成した中間リソースをテクスチャデータ構造体に格納
 	textureData.intermediateResource = dxCommon->UploadTextureData(textureData.resource, mipImages);

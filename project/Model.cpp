@@ -38,7 +38,8 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 
 
 void Model::Draw() {
-	
+	SrvManager::GetInstance()->PreDraw();
+
 	modelCommon_->GetDxCommon()->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
 	//modelCommon_->GetDxCommon()->GetCommandList()->IASetIndexBuffer(nullptr);
 
@@ -47,7 +48,6 @@ void Model::Draw() {
 
 	//マテリアルCBufferの場所を設定
 	modelCommon_->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
-
 
 	//SRVのDescriptorの先頭を設定
 	modelCommon_->GetDxCommon()->GetCommandList()->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_));

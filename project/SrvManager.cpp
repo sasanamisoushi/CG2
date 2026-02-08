@@ -1,5 +1,20 @@
 #include "SrvManager.h"
 
+
+SrvManager *SrvManager::instance = nullptr;
+
+SrvManager *SrvManager::GetInstance() {
+	if (instance == nullptr) {
+		instance = new SrvManager();
+	}
+	return instance;
+}
+
+void SrvManager::Finalize() {
+	delete instance;
+	instance = nullptr;
+}
+
 const uint32_t SrvManager::kMaxSRVCount = 512;
 
 void SrvManager::Initialize(DirectXCommon *dxCommon) {
@@ -64,10 +79,11 @@ void SrvManager::CreateSRVforStructuredBuffer(uint32_t srvIndex, ID3D12Resource 
 	srvDesc.Buffer.StructureByteStride = structureByteStride;
 	srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
+
 	directXCommon->GetDevice()->CreateShaderResourceView(pResource, &srvDesc, GetCPUDescriptorHandle(srvIndex));
 }
 
-void SrvManager::PreDrow() {
+void SrvManager::PreDraw() {
 
 	//描画用のDescriptorHeapの設定
 	ID3D12DescriptorHeap *descriptorHeaps[] = { descriptorHeap.Get() };
