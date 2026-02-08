@@ -4,6 +4,13 @@
 //SRV管理
 class SrvManager {
 public:
+
+	// シングルトンインスタンスの取得
+	static SrvManager *GetInstance();
+
+	// 終了処理
+	void Finalize();
+
 	//初期化
 	void Initialize(DirectXCommon *dxCommon);
 
@@ -21,13 +28,21 @@ public:
 	//SRV生成
 	void CreateSRVforStructuredBuffer(uint32_t srvIndex, ID3D12Resource *pResource, UINT numElements, UINT structureByteStride);
 
-	void PreDrow();
+	void PreDraw();
 
 	//SRVセットコマンド
 	void SetGraphicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);
 
 
 private:
+
+	static SrvManager *instance;
+
+	SrvManager() = default;
+	~SrvManager() = default;
+	SrvManager(const SrvManager &) = delete;
+	SrvManager &operator=(const SrvManager &) = delete;
+
 	DirectXCommon *directXCommon = nullptr;
 
 	//最大SRV数

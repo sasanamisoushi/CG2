@@ -18,7 +18,7 @@ public:
 	void Finalize();
 
 	//初期化
-	void Initialiaze(DirectXCommon *common,SrvManager* srvManager);
+	void Initialize(DirectXCommon *common,SrvManager* srvManager);
 
 	//テクスチャファイルの読み込み
 	void LoadTexture(const std::string &filePath);
@@ -62,7 +62,7 @@ private:
 	//SRVインデックスの開始番号
 	static uint32_t kSRVIndexTop;
 
-	SrvManager *srvManger = nullptr;
+	SrvManager *srvManager = nullptr;
 	
 };
 

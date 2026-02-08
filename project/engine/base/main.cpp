@@ -19,6 +19,9 @@
 #include "ModelManager.h"
 #include "Camera.h"
 #include "SrvManager.h"
+#include "ParticleManager.h"
+#include "ParticleEmitter.h"
+
 
 
 #pragma comment(lib,"dxcompiler.lib")
@@ -279,11 +282,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	SrvManager *srvManager = nullptr;
 	//SRVマネージャの初期化
-	srvManager = new SrvManager();
-	srvManager->Initialize(dxCommon);
+	SrvManager::GetInstance()->Initialize(dxCommon);
 
 	//テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialiaze(dxCommon,srvManager);
+	TextureManager::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance());
 
 	//3Dモデルマネージャーの初期化
 	ModelManager::GetInstance()->Initialize(dxCommon);
@@ -311,6 +313,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	object3dCommon->SetDefaultCamera(camera);
 
 #pragma region 最初のシーンの初期化
+
+	//Particleマネージャーの初期化
+	ParticleManager *particleManager = new ParticleManager();
+	particleManager->Initialize(dxCommon);
+
+	particleManager->CreateParticleGroup("test", "resources/circle.png");
+
+	ParticleEmitter *particleEmitter = new ParticleEmitter("test", { 0.0f, 0.0f, 0.0f }, particleManager);
 
 	/*ModelCommon *modelCommon= new ModelCommon();
 	modelCommon->Initialize(dxCommon);*/
@@ -593,7 +603,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->Update();
 		//}
 
+		particleEmitter->Update();
 
+		particleManager->Update(camera);
 
 		////uvTranslate用の行列
 		//Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
@@ -689,6 +701,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		sprite->Draw();
 		//}
 
+		particleManager->Draw();
 		
 
 		//dxCommon->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
@@ -761,7 +774,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	delete winApp;
 	delete dxCommon;
 	delete object3dCommon;
-	delete srvManager;
+	SrvManager::GetInstance()->Finalize();
+	TextureManager::GetInstance()->Finalize();
 	for (Object3d *object3d : objects) {
 		delete object3d;
 	}
