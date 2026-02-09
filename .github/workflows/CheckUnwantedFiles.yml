@@ -13,13 +13,13 @@ on:
 # プロジェクトのニーズ区切りで指定します
 env:
    # 特定のファイル名（拡張子など）のパターン
-   UNWANTED_NAME_PATTERNS: "*.pdb *.ilk *.user *.ncb
-    *.suo *.log *.dmp *.zip imgui.ini desktop.ini
-    dxcompiler.dll dxil.dll"
+   UNWANTED_NAME_PATTERNS: >
+    *.pdb *.ilk *.user *.ncb *.suo *.log *.dmp *.zip
+    imgui.ini desktop.ini dxcompiler.dll dxil.dll
 
    # ディレクト名のパターン（ビルドの出力ファルダなど）
-   UNWANTED_DIR_PATTERNS: "generated x64 win32 arm64 .vs
-    bin ipch logs Dump"
+   UNWANTED_DIR_PATTERNS: >
+    generated x64 win32 arm64 .vs bin ipch logs Dump
 jobs:
   check-files:
     name: 不要なファイルを検索
@@ -49,8 +49,8 @@ jobs:
           #1. .git を除外
           #2. 不要なディレクトリを検索(-type d)し、見つけたらパスを出力(-print)し、その中身を枝刈り(-prune)
           #3. または(-o)不要ファイルを検索(-type f)し、パスを出力(-print)
-          UNWANTED_LIST=$(find . -path "./.git" -prune -o\
-            \( "${DIR_CONDITIONS[@]" \)-a -type d -print -prune \)-o\
+          UNWANTED_LIST=$(find . -path "./.git" -prune -o \
+            \( "${DIR_CONDITIONS[@]" \)-a -type d -print -prune \)-o \
             \( "${NAME_CONDITIONS[@]}" \)-a -type f -print \) \
           )
 
