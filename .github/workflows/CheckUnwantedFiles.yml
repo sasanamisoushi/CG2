@@ -1,4 +1,4 @@
-#リポジトリ内の不要なファイルを見つけるためのGitHub Actions
+# リポジトリ内の不要なファイルを見つけるためのGitHub Actions
 name: CheckUnwantedFiles
 
 on:
