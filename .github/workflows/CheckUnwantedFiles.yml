@@ -16,7 +16,7 @@ env:
    UNWANTED_NAME_PATTERNS: "*.pdb *.ilk *.user *.ncb
     *.suo *.log *.dmp *.zip imgui.ini desktop.ini
     dxcompiler.dll dxil.dll"
-    
+
    # ディレクト名のパターン（ビルドの出力ファルダなど）
    UNWANTED_DIR_PATTERNS: "generated x64 win32 arm64 .vs
     bin ipch logs Dump"
@@ -29,7 +29,7 @@ jobs:
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v4
         
-      - name:不要なファイルとディレクトリを検索
+      - name: 不要なファイルとディレクトリを検索
         run: |
           # ディレクトリ条件を構築(bash)
           DIR_CONDITIONS=()
