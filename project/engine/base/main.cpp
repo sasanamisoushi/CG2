@@ -21,6 +21,7 @@
 #include "SrvManager.h"
 #include "ParticleManager.h"
 #include "ParticleEmitter.h"
+#include "ImGuiManager.h"
 
 
 
@@ -267,6 +268,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	WinApp *winApp = nullptr;
 	DirectXCommon *dxCommon = nullptr;
 	SpriteCommon *spriteCommon = nullptr;
+	ImGuiManager *imGuiManager = nullptr;
 
 #pragma region 基盤システムの初期化
 
@@ -283,6 +285,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SrvManager *srvManager = nullptr;
 	//SRVマネージャの初期化
 	SrvManager::GetInstance()->Initialize(dxCommon);
+	
+	//ImGuiManagerの生成と初期化
+	imGuiManager = new ImGuiManager();
+	HWND hwnd = winApp->GetHwnd();
+	ID3D12Device *device = dxCommon->GetDevice();
+	int numFramesInFlight = 2; //バックバッファの数
+	DXGI_FORMAT rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB; 
+	ID3D12DescriptorHeap *srvHeap = SrvManager::GetInstance()->GetDescriptorHeap();
+
+	imGuiManager->Initialize(hwnd, device, numFramesInFlight, rtvFormat, srvHeap);
 
 	//テクスチャマネージャの初期化
 	TextureManager::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance());
@@ -497,9 +509,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			break;
 		}
 
-		/*ImGui_ImplDX12_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();*/
+		//-----ImGuiのフレーム開始処理-----
+		imGuiManager->BeginFrame();
 
 		//Update
 
@@ -613,74 +624,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//uvTransformMatrix = math.Multiply(uvTransformMatrix, math.MakeTranslateMatrix(uvTransformSprite.translate));
 		//materialDataSprite->uvTransform = uvTransformMatrix;
 
-
+#ifdef ENABLE_IMGUI
 		//開発用UIの処理
-		/*ImGui::ShowDemoWindow();
+		ImGui::ShowDemoWindow();
 
 
 		ImGui::Begin("Object3d Controller");
-		ImGui::Text("Model Transform");*/
-		/*ImGui::DragFloat3("Translate", &object3d->transform.translate.x, 0.01f);
-		ImGui::DragFloat3("Rotate", &object3d->transform.rotate.x, 0.01f);
-		ImGui::DragFloat3("Scale", &object3d->transform.scale.x, 0.01f);*/
+		ImGui::Text("Model Transform");
 	
-
-		
-		// カメラも操作したい場合
-		/*ImGui::Separator();
-		ImGui::Text("Camera Transform");*/
-		/*ImGui::DragFloat3("Cam Pos", &object3d->cameraTransform.translate.x, 0.01f);
-		ImGui::DragFloat3("Cam Rot", &object3d->cameraTransform.rotate.x, 0.01f);
-		*/
-
-		//ImGui::End();
-		////カラー
-		//ImGui::Begin("MaterialColor");
-		//ImGui::ColorEdit4("color", &materialData->color.x);
-		//ImGui::DragFloat3("cameraRotate", &cameraTransform.rotate.x, 0.01f);
-		//ImGui::DragFloat3("cameraScale", &cameraTransform.scale.x, 0.01f);
-		//ImGui::DragFloat3("cameraTranslate", &cameraTransform.translate.x, 0.01f);
-
-		/*if (ImGui::CollapsingHeader("Sphere")) {
-			ImGui::ColorEdit4("color", &materialDataSphere->color.x);
-			ImGui::DragFloat3("SphereTranslate", &transformSphere.translate.x);
-			ImGui::DragFloat3("SphereScale", &transformSphere.scale.x);
-			ImGui::DragFloat3("SphereRotate", &transformSphere.rotate.x);
-
-		}*/
-
-	/*	if (ImGui::CollapsingHeader("plane")) {
-
-
-			ImGui::SliderAngle("planeRotateX", &transformPlane.rotate.x);
-			ImGui::SliderAngle("planeRotateY", &transformPlane.rotate.y);
-			ImGui::SliderAngle("planeRotateZ", &transformPlane.rotate.z);
-
-		}*/
-		//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-
-		//ImGui::DragFloat4("Lightcolor", &directionLightData->color.x);
-		//ImGui::SliderFloat3("LightDirection", &directionLightData->direction.x, -1.0f, 1.0f);
-		//ImGui::DragFloat("LightIntensity", &directionLightData->intensity);
-		/*if (ImGui::CollapsingHeader("Sprite")) {
-			ImGui::DragFloat3("SpriteTranslate", &transformSprite.translate.x);
-			ImGui::DragFloat3("SpriteScale", &transformSprite.scale.x);
-			ImGui::DragFloat3("SpriteRotate", &transformSprite.rotate.x);
-		}
-		ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-		ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-		ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
-		ImGui::End();*/
+		ImGui::End();
+#endif
 
 		//ゲーム処理
 
 		//Draw
-
-		//ImGuiの内部コマンドを生成
-		//ImGui::Render();
-
-
-
+		
 		//描画前処理
 		dxCommon->PreDraw(srvManager);
 
@@ -742,6 +700,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//実際のcommandListのImGuiの描画コマンドを積む
 		//ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
 
+	
+		//-------ImGuiの描画-------
+		imGuiManager->EndFrame(dxCommon->GetCommandList());
+
 		//描画後処理
 		dxCommon->PostDraw();
 	}
@@ -792,10 +754,5 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	//音声データ解放
 	SoundUnload(&soundData1);
-
-
-	/*ImGui_ImplDX12_Shutdown();
-	ImGui_ImplWin32_Shutdown();
-	ImGui::DestroyContext();*/
 	return 0;
 }
