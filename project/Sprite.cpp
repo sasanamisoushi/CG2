@@ -9,7 +9,8 @@ void Sprite::Initialize(SpriteCommon *spriteCommon, std::string textureFilePath)
 	//引数で受け取ってメンバ変数に記録する
 	this->spriteCommon = spriteCommon;
 
-	math = new MyMath();
+	//math = new MyMath();
+	math = std::make_unique<MyMath>();
 
 	//頂点データ作成
 	CreateVertexData();
@@ -95,10 +96,10 @@ void Sprite::Update() {
 	//ViewMatrixを作って単位行列を代入
 	Matrix4x4 viewMatrix = math->MakeIdentity4x4();
 	//ProjectionMatrixを作って並行投影行列を書き込む
-	Matrix4x4 projectionMatrix = math->MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClinentHeight), 0.0f, 100.0f);
+	Matrix4x4 projectionMatrix = math->MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClientHeight), 0.0f, 100.0f);
 
-	transformetionMatrixData->WVP = math->Multiply(worldMatrix, math->Multiply(viewMatrix, projectionMatrix));
-	transformetionMatrixData->World = worldMatrix;
+	transformationMatrixData->WVP = math->Multiply(worldMatrix, math->Multiply(viewMatrix, projectionMatrix));
+	transformationMatrixData->World = worldMatrix;
 }
 
 void Sprite::Draw() {
@@ -135,7 +136,7 @@ void Sprite::textureReplacement(std::string textureFilePath) {
 
 Sprite::~Sprite() {
 
-	delete math;
+	//delete math;
 }
 
 void Sprite::CreateVertexData() {
@@ -186,10 +187,10 @@ void Sprite::CreateTransformationData() {
 	transformationMatrixResource = spriteCommon->GetDxCommon()->CreateBufferResource(sizeof(TransformationMatrix));
 
 	//書き込むためのアドレスを取得
-	transformationMatrixResource->Map(0, nullptr, reinterpret_cast<void **>(&transformetionMatrixData));
+	transformationMatrixResource->Map(0, nullptr, reinterpret_cast<void **>(&transformationMatrixData));
 	//単位行列を書き込んでおく
-	transformetionMatrixData->WVP = math->MakeIdentity4x4();
-	transformetionMatrixData->World = math->MakeIdentity4x4();
+	transformationMatrixData->WVP = math->MakeIdentity4x4();
+	transformationMatrixData->World = math->MakeIdentity4x4();
 
 
 }

@@ -18,7 +18,7 @@ void Camera::Update() {
 Camera::Camera()
 	:transform({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,0.0f })
 	, horizontal_(0.45f)
-	, aspectRatio_(float(WinApp::kClientWidth) / float(WinApp::kClinentHeight))
+	, aspectRatio_(float(WinApp::kClientWidth) / float(WinApp::kClientHeight))
 	, nearClipRange_(0.1f)
 	, furClipRange_(100.0f)
 	, worldMatrix(math_->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate))

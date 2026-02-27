@@ -6,6 +6,7 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <string>
+#include <memory>
 
 
 using Microsoft::WRL::ComPtr;
@@ -88,9 +89,9 @@ public:
 	//アンカーポイント
 	void SetAnchorPoint(const Vector2 &anchorPoint) { this->anchorPoint = anchorPoint; }
 	//左右フリップ
-	bool setIsFlipX(bool isFlipX) { this->isFlipX_ = isFlipX; }
+	bool SetIsFlipX(bool isFlipX) { this->isFlipX_ = isFlipX; }
 	//上下フリップ
-	bool setIsFlipY(bool isFlipY) { this->isFlipY_ = isFlipY; }
+	bool SetIsFlipY(bool isFlipY) { this->isFlipY_ = isFlipY; }
 	//テクスチャ左上座標
 	void SetTextureLeftTop(const Vector2 &textureLeftTop) { this->textureLeftTop = textureLeftTop; }
 	//テクスチャ切り出しサイズ
@@ -98,7 +99,8 @@ public:
 
 private:
 	SpriteCommon *spriteCommon=nullptr;
-	MyMath *math = nullptr;
+	//MyMath *math = nullptr;
+	std::unique_ptr<MyMath> math;
 
 	// 頂点バッファ
 	ComPtr<ID3D12Resource> vertexResource;
@@ -128,7 +130,7 @@ private:
 	//Sprite用のTransformationMatrix用のリソースをス来る
 	ComPtr<ID3D12Resource> transformationMatrixResource;
 	//データを書き込む
-	TransformationMatrix *transformetionMatrixData = nullptr;
+	TransformationMatrix *transformationMatrixData = nullptr;
 
 	//座標変換行列データ作成
 	void CreateTransformationData();

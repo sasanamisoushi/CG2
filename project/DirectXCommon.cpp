@@ -45,7 +45,7 @@ void DirectXCommon::Initialize(WinApp *winApp) {
 	CreateDescriptorHeaps();
 
 	//深度バッファの生成
-	depthBufferGeneration(WinApp::kClientWidth,WinApp::kClinentHeight);
+	depthBufferGeneration(WinApp::kClientWidth,WinApp::kClientHeight);
 	
 	//レンダーターゲットビューの初期化
 	CreateRenderTargetView();
@@ -203,7 +203,7 @@ void DirectXCommon::CreateSwapChain() {
 	//画面の幅
 	swapChainDesc.Width = WinApp::kClientWidth;
 	//画面の高さ
-	swapChainDesc.Height = WinApp::kClinentHeight;
+	swapChainDesc.Height = WinApp::kClientHeight;
 	//色の形式
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	//マルチサンプルしない
@@ -349,7 +349,7 @@ void DirectXCommon::CreateViewportScissorRect() {
 
 	//クライアント領域のサイズと一緒にして画面全体に表示
 	viewport.Width = WinApp::kClientWidth;
-	viewport.Height = WinApp::kClinentHeight;
+	viewport.Height = WinApp::kClientHeight;
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -362,7 +362,7 @@ void DirectXCommon::CreateScissorRect() {
 	scissorRecct.left = 0;
 	scissorRecct.right = WinApp::kClientWidth;
 	scissorRecct.top = 0;
-	scissorRecct.bottom = WinApp::kClinentHeight;
+	scissorRecct.bottom = WinApp::kClientHeight;
 
 }
 

@@ -44,7 +44,7 @@ private:
 
 	Matrix4x4 projectionMatrix;
 	float horizontal_= 0.45f;  //水平方向視野角
-	float aspectRatio_ = float(WinApp::kClientWidth / WinApp::kClinentHeight); //アスペクト比
+	float aspectRatio_ = float(WinApp::kClientWidth / WinApp::kClientHeight); //アスペクト比
 	float nearClipRange_ = 0.1f; //ニアクリップ距離
 	float furClipRange_ = 100.0f; //ファークリップ距離
 
