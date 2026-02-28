@@ -1,6 +1,7 @@
 #pragma once
 #include "ModelCommon.h"
 #include "MyMath.h"
+#include <memory>
 
 
 struct  VertexData {
@@ -50,7 +51,7 @@ public:
 private:
 	ModelCommon *modelCommon_;
 
-	
+	std::unique_ptr<MyMath> math = std::make_unique<MyMath>();
 
 	//Objファイルのデータ
 	ModelData modelData;
@@ -66,8 +67,6 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource;
 	//バッファリソース内のデータを指すポイント
 	Material *materialData = nullptr;
-
-	MyMath *math = nullptr;
 
 	// テクスチャファイルパス
 	std::string textureFilePath_;
