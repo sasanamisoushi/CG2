@@ -598,7 +598,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			//		sprite->textureReplacement("resources/monsterBall.png");
 			//	}
 			//}
-		sprite->Update();
+		
 		//}
 
 		particleEmitter->Update();
@@ -615,13 +615,25 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//開発用UIの処理
 		ImGui::ShowDemoWindow();
 
+		//ウィンドウのサイズを設定
+		ImGui::SetNextWindowSize(ImVec2(500.0f, 100.0f));
 
-		ImGui::Begin("Object3d Controller");
-		ImGui::Text("Model Transform");
+		//ウィンドウの作成
+		ImGui::Begin("Exercise");
+
+		//スプライトの座標を配列に格納
+		Vector2 currentPos = sprite->GetPosition();
+		float pos[2] = { currentPos.x,currentPos.y };
+
+		//スライダーでスプライトの座標を変更できるようにする
+		ImGui::SliderFloat2("Sprite Position", pos, 0.0f, 1280.0f, "%.1f");
+
+		//スライダーで変更された座標をスプライトに反映
+		sprite->SetPosition({ pos[0],pos[1] });
 	
 		ImGui::End();
 #endif
-
+		sprite->Update();
 		//ゲーム処理
 
 		//Draw
