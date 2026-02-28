@@ -12,8 +12,6 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	this->object3dCommon = object3dCommon;
 
-	this->math = new MyMath();
-
 	////モデルの読み込み
 	//modelData = LoadObjFile("resources", "plane.obj");
 

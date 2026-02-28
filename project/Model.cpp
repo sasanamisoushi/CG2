@@ -173,11 +173,6 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 				modelData.vertices.push_back(vertex);
 				triangle[faceVertex] = { position,texcord,normal };
 			}
-
-			//頂点を逆順で登録することで、回り順を逆にする
-			modelData.vertices.push_back(triangle[2]);
-			modelData.vertices.push_back(triangle[1]);
-			modelData.vertices.push_back(triangle[0]);
 		} else if (identifier == "mtllib") {
 			//matrialTemplateLidraryファイルの名前を取得する
 			std::string materialFilename;

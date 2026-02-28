@@ -10,6 +10,7 @@ ModelManager *ModelManager::GetInstance() {
 }
 
 void ModelManager::Finalize() {
+	
 	delete instance;
 	instance = nullptr;
 }

@@ -11,6 +11,7 @@
 #include"Model.h"
 #include "ModelManager.h"
 #include "Camera.h"
+#include <memory>
 
 class Object3dCommon;
 
@@ -98,7 +99,7 @@ private:
 	Object3dCommon *object3dCommon = nullptr;
 
 	
-	MyMath *math = nullptr;
+	std::unique_ptr<MyMath> math = std::make_unique<MyMath>();
 
 	//座標変換行列バッファリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> wvpResource;

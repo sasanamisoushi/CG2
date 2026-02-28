@@ -264,30 +264,24 @@ bool LetKeyMoment(uint8_t key) {
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	D3DResourceLeakChecker leakCheck;
 
-	//ポインタ
-	WinApp *winApp = nullptr;
-	DirectXCommon *dxCommon = nullptr;
-	SpriteCommon *spriteCommon = nullptr;
-	ImGuiManager *imGuiManager = nullptr;
-
 #pragma region 基盤システムの初期化
 
 	//windowsAppの初期化
-	winApp = new WinApp();
+	std::unique_ptr<WinApp> winApp = std::make_unique<WinApp>();
 	winApp->Initialize();
 
 	// DirectXCommon の生成と初期化
-	dxCommon = new DirectXCommon();
-	dxCommon->Initialize(winApp);
+	std::unique_ptr<DirectXCommon> dxCommon = std::make_unique<DirectXCommon>();
+	dxCommon->Initialize(winApp.get());
 	dxCommon->GetCommandList();
 	//dxCommon->InitializeImGui();
 
 	SrvManager *srvManager = nullptr;
 	//SRVマネージャの初期化
-	SrvManager::GetInstance()->Initialize(dxCommon);
+	SrvManager::GetInstance()->Initialize(dxCommon.get());
 	
 	//ImGuiManagerの生成と初期化
-	imGuiManager = new ImGuiManager();
+	std::unique_ptr<ImGuiManager> imGuiManager = std::make_unique<ImGuiManager>();
 	HWND hwnd = winApp->GetHwnd();
 	ID3D12Device *device = dxCommon->GetDevice();
 	int numFramesInFlight = 2; //バックバッファの数
@@ -297,42 +291,40 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	imGuiManager->Initialize(hwnd, device, numFramesInFlight, rtvFormat, srvHeap);
 
 	//テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialize(dxCommon, SrvManager::GetInstance());
+	TextureManager::GetInstance()->Initialize(dxCommon.get(), SrvManager::GetInstance());
 
 	//3Dモデルマネージャーの初期化
-	ModelManager::GetInstance()->Initialize(dxCommon);
+	ModelManager::GetInstance()->Initialize(dxCommon.get());
 
 	//スプライト共通部の初期化
-	spriteCommon = new SpriteCommon();
-	spriteCommon->Initialize(dxCommon);
+	std::unique_ptr<SpriteCommon> spriteCommon = std::make_unique<SpriteCommon>();
+	spriteCommon->Initialize(dxCommon.get());
 
-	Object3dCommon *object3dCommon = nullptr;
 	//3Dオブジェクト共通部の初期化
-	object3dCommon = new Object3dCommon();
-	object3dCommon->Initialize(dxCommon);
+	std::unique_ptr<Object3dCommon> object3dCommon = std::make_unique<Object3dCommon>();
+	object3dCommon->Initialize(dxCommon.get());
 
 	//テクスチャマネージャの初期化
 	//TextureManager::GetInstance()->Initialiaze(dxCommon, srvManager);
 
 #pragma endregion 基盤システムの初期化
 	TextureManager::GetInstance()->LoadTexture("resources/uvChecker.png");
-	Sprite *sprite = new Sprite();
-	sprite->Initialize(spriteCommon, "resources/uvChecker.png");
+	std::unique_ptr<Sprite> sprite = std::make_unique<Sprite>();
+	sprite->Initialize(spriteCommon.get(), "resources/uvChecker.png");
 
-	Camera *camera = new Camera;
+	std::unique_ptr<Camera> camera = std::make_unique<Camera>();
 	camera->SetRotate({ 0.0f,0.0f,0.0f });
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
-	object3dCommon->SetDefaultCamera(camera);
+	object3dCommon->SetDefaultCamera(camera.get());
 
 #pragma region 最初のシーンの初期化
 
 	//Particleマネージャーの初期化
-	ParticleManager *particleManager = new ParticleManager();
-	particleManager->Initialize(dxCommon);
-
+	std::unique_ptr<ParticleManager> particleManager = std::make_unique<ParticleManager>();
+	particleManager->Initialize(dxCommon.get());
 	particleManager->CreateParticleGroup("test", "resources/circle.png");
 
-	ParticleEmitter *particleEmitter = new ParticleEmitter("test", { 0.0f, 0.0f, 0.0f }, particleManager);
+	std::unique_ptr<ParticleEmitter> particleEmitter = std::make_unique<ParticleEmitter>("test", Vector3{ 0.0f, 0.0f, 0.0f }, particleManager.get());
 
 	/*ModelCommon *modelCommon= new ModelCommon();
 	modelCommon->Initialize(dxCommon);*/
@@ -342,10 +334,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	/*Model *model = new Model();
 	model->Initialize(modelCommon);*/
 
-	//3Dオブジェトの初期化
-	//Object3d *object3d = new Object3d();
-	//object3d->Initialize(object3dCommon);
-
 	//.objファイルからモデルを読み込み
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("plane.obj");
@@ -353,21 +341,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 描画する物体のリスト
 	std::vector<Object3d *> objects;
 
+	//3Dオブジェトの初期化
+
 	// 1つ目のオブジェクト（plane）
-	Object3d *objA = new Object3d();
-	objA->Initialize(object3dCommon);
+	std::unique_ptr<Object3d> objA = std::make_unique<Object3d>();
+	objA->Initialize(object3dCommon.get());
 	//初期化済みの3Dオブジェトにモデルを紐づける
 	objA->SetModel("plane.obj");
 	objA->transform.translate = { -2.0f, 0.0f, 0.0f }; // 左に配置
-	objects.push_back(objA);
+	objects.push_back(objA.get());
 
 	// 2つ目のオブジェクト
-	Object3d *objB = new Object3d();
-	objB->Initialize(object3dCommon);
+	std::unique_ptr<Object3d> objB = std::make_unique<Object3d>();
+	objB->Initialize(object3dCommon.get());
 	//初期化済みの3Dオブジェトにモデルを紐づける
 	objB->SetModel("plane.obj");
 	objB->transform.translate = { 2.0f, 0.0f, 0.0f }; // 右に配置
-	objects.push_back(objB);
+	objects.push_back(objB.get());
 
 #pragma endregion 最初のシーンの終了
 
@@ -452,11 +442,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	w.hInstance = GetModuleHandle(nullptr);
 
 	//--------------入力デバイス--------------
-	Input *input = nullptr;
-
-
-	input = new Input();
-	input->Initialize(winApp);
+	std::unique_ptr<Input> input = std::make_unique<Input>();
+	input->Initialize(winApp.get());
 
 	// 自作した数学関数の使用
 	MyMath math;
@@ -616,7 +603,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		particleEmitter->Update();
 
-		particleManager->Update(camera);
+		particleManager->Update(camera.get());
 
 		////uvTranslate用の行列
 		//Matrix4x4 uvTransformMatrix = math.MkeScaleMatrix(uvTransformSprite.scale);
@@ -732,23 +719,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	// 解放処理
 	CloseHandle(dxCommon->GetFenceEvent()); 
 
-	delete input;
-	delete winApp;
-	delete dxCommon;
-	delete object3dCommon;
 	SrvManager::GetInstance()->Finalize();
 	TextureManager::GetInstance()->Finalize();
-	for (Object3d *object3d : objects) {
-		delete object3d;
-	}
-	delete spriteCommon;
-	/*delete model;
-	delete modelCommon;*/
-	//for (Sprite *sprite : sprites) {
-	delete sprite;
-	/*}
-	sprites.clear();*/
-
+	
 	//xAudio2解放
 	xAudio2.Reset();
 
