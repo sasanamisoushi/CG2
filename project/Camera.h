@@ -1,6 +1,7 @@
 #pragma once
 #include "MyMath.h"
 #include <WinApp.h>
+#include <memory>
 
 struct Transform {
 	Vector3 scale;
@@ -40,7 +41,7 @@ private:
 	Matrix4x4 worldMatrix;
 	Matrix4x4 viewMatrix;
 
-	MyMath *math_=nullptr;
+	std::unique_ptr<MyMath> math_ = std::make_unique<MyMath>();
 
 	Matrix4x4 projectionMatrix;
 	float horizontal_= 0.45f;  //水平方向視野角
