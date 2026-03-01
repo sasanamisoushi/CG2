@@ -22,6 +22,7 @@
 #include "ParticleManager.h"
 #include "ParticleEmitter.h"
 #include "ImGuiManager.h"
+#include "AudioManager.h"
 
 
 
@@ -109,131 +110,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
-
-
-//チャンクヘッダ
-struct ChunkHeader {
-	char id[4];  //チャンク毎のID
-	int32_t size; //チャンクサイズ
-};
-
-//RIFFヘッダチャンク
-struct RiffHeader {
-	ChunkHeader chunk; //"RIFF"
-	char type[4];   //"WAVE"
-};
-
-//FMTチャンク
-struct FormatChunk {
-	ChunkHeader chunk; //"fmt"
-	WAVEFORMATEX fmt;  //波形フォーマット
-};
-
-//音声データ
-struct SoundData {
-	//波形フォーマット
-	WAVEFORMATEX wfex;
-	//バッファの先頭アドレス
-	BYTE *pBuffer;
-	//バッファのサイズ
-	unsigned int bufferSize;
-};
-
-SoundData SoundLoadWave(const char *filename) {
-	//HRESULT result;
-
-	//ファイル入力ストリームのインスタンス
-	std::ifstream file;
-	//wavファイルをバイナリモードで開く
-	file.open(filename, std::ios_base::binary);
-	//ファイルオープン失敗を検出する
-	assert(file.is_open());
-
-	//RIFFヘッダーの読み込み
-	RiffHeader riff;
-	file.read((char *)&riff, sizeof(riff));
-	//ファイルがRIFFかチェック
-	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
-		assert(0);
-	}
-	//タイプかWAVEかチェック
-	if (strncmp(riff.type, "WAVE", 4) != 0) {
-		assert(0);
-	}
-
-	//Formatチャンクの読み込み
-	FormatChunk format = {};
-	//チャンクヘッダーの確認
-	file.read((char *)&format, sizeof(ChunkHeader));
-	if (strncmp(format.chunk.id, "fmt ", 4) != 0) {
-		assert(0);
-	}
-
-	//チャンク本体の読み込み
-	assert(format.chunk.size <= sizeof(format.fmt));
-	file.read((char *)&format.fmt, format.chunk.size);
-
-	//Dataチャンクの読み込み
-	ChunkHeader data;
-	file.read((char *)&data, sizeof(data));
-	//JUNKチャンクを検出
-	if (strncmp(data.id, "JUNK", 4) == 0) {
-		//読み取り位置をJUNKチャンクの終わりまで進める
-		file.seekg(data.size, std::ios_base::cur);
-		//再度読み込み
-		file.read((char *)&data, sizeof(data));
-	}
-
-	if (strncmp(data.id, "data", 4) != 0) {
-		assert(0);
-	}
-
-	//Dataチャンクのデータ部
-	char *pBuffer = new char[data.size];
-	file.read(pBuffer, data.size);
-
-	//Waveファイルを閉じる
-	file.close();
-
-	//returnする為の音声データ
-	SoundData soundData = {};
-
-	soundData.wfex = format.fmt;
-	soundData.pBuffer = reinterpret_cast<BYTE *>(pBuffer);
-	soundData.bufferSize = data.size;
-
-	return soundData;
-}
-
-//音声データ解放
-void SoundUnload(SoundData *soundData) {
-	//バッファのメモリ
-	delete[] soundData->pBuffer;
-
-	soundData->pBuffer = 0;
-	soundData->bufferSize = 0;
-	soundData->wfex = {};
-}
-
-void SoundPlayerWave(IXAudio2 *xAudio2, const SoundData &soundData) {
-	HRESULT result;
-
-	//波形ファーマットを元にSourceVoiceの生成
-	IXAudio2SourceVoice *pSourceVoice = nullptr;
-	result = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
-	assert(SUCCEEDED(result));
-
-	//再生する波形データの設定
-	XAUDIO2_BUFFER buf{};
-	buf.pAudioData = soundData.pBuffer;
-	buf.AudioBytes = soundData.bufferSize;
-	buf.Flags = XAUDIO2_END_OF_STREAM;
-
-	//波形データ
-	result = pSourceVoice->SubmitSourceBuffer(&buf);
-	result = pSourceVoice->Start();
-}
-
 struct Window {
 	HINSTANCE hInstance;
 	HWND hwnd;
@@ -304,8 +180,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	std::unique_ptr<Object3dCommon> object3dCommon = std::make_unique<Object3dCommon>();
 	object3dCommon->Initialize(dxCommon.get());
 
-	//テクスチャマネージャの初期化
-	//TextureManager::GetInstance()->Initialiaze(dxCommon, srvManager);
+	//オーディオマネージャーの初期化
+	AudioManager::GetInstance()->Initialize();
+	//音声読み込み
+	SoundData soundData1 = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
+	//音声再生
+	IXAudio2SourceVoice *bgmVoice = AudioManager::GetInstance()->PlayWave(soundData1, true);
+
 
 #pragma endregion 基盤システムの初期化
 	TextureManager::GetInstance()->LoadTexture("resources/uvChecker.png");
@@ -420,23 +301,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	descriptorRangeForInstancing[0].NumDescriptors = 1;
 	descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
-	Microsoft::WRL::ComPtr<IXAudio2>xAudio2;
-	IXAudio2MasteringVoice *masterVoice;
-
-	HRESULT result;
-
-	//XAudioエンジンのインスタンスの生成
-	result = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
-
-	//マスターボイスの生成
-	result = xAudio2->CreateMasteringVoice(&masterVoice);
-
-	//音声読み込み
-	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
-
-	//音声再生
-	SoundPlayerWave(xAudio2.Get(), soundData1);
 
 	Window w;
 	w.hInstance = GetModuleHandle(nullptr);
@@ -734,10 +598,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	SrvManager::GetInstance()->Finalize();
 	TextureManager::GetInstance()->Finalize();
 	
-	//xAudio2解放
-	xAudio2.Reset();
+	AudioManager::GetInstance()->UnloadWave(soundData1);
+	AudioManager::GetInstance()->Finalize();
 
-	//音声データ解放
-	SoundUnload(&soundData1);
 	return 0;
 }
