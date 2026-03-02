@@ -417,7 +417,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		//現在の座標を変数で受ける
 		Vector2 position = sprite->GetPosition();
 		//座標を変更する
-		position = Vector2{ 200.0f,200.0f };
+		position = Vector2{ 100.0f,100.0f };
 		//変更を反映する
 		sprite->SetPosition(position);
 
