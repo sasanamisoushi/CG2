@@ -22,7 +22,7 @@ void Sprite::Initialize(SpriteCommon *spriteCommon, std::string textureFilePath)
 	CreateTransformationData();
 
 	//単位行列を書き込んでいく
-	//TextureManager::GetInstance()->LoadTexture("circle.png"); // ロード処理を追加
+	TextureManager::GetInstance()->LoadTexture(textureFilePath); // ロード処理を追加
 	textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath);
 
 	textureFilePath_ = textureFilePath;

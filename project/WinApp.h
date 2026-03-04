@@ -7,6 +7,8 @@ public: //静的メンバ関数
 
 	static LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
+	static LONG WINAPI ExportDump(EXCEPTION_POINTERS *exception);
+
 public:
 
 	//初期化
