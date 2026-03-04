@@ -160,6 +160,8 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="DirectXCommon.cpp" />
     <ClCompile Include="engine\base\main.cpp" />
     <ClCompile Include="engine\math\MyMath.cpp" />
+    <ClCompile Include="Framework.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="ImGuiManager.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Logger.cpp" />
@@ -216,6 +218,8 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="D3DResourceLeakChecker.h" />
     <ClInclude Include="DirectXCommon.h" />
     <ClInclude Include="engine\math\MyMath.h" />
+    <ClInclude Include="Framework.h" />
+    <ClInclude Include="Game.h" />
     <ClInclude Include="ImGuiManager.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="Model.h" />

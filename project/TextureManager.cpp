@@ -56,6 +56,7 @@ void TextureManager::LoadTexture(const std::string &filePath) {
 	HRESULT hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
 	assert(SUCCEEDED(hr));
 
+
 	//ミップマップの作成
 	DirectX::ScratchImage mipImages{};
 	hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
@@ -105,6 +106,7 @@ uint32_t TextureManager::GetTextureIndexByFilePath(const std::string &filePath) 
 }
 
 D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string &filePath) {
+
 	//範囲指定違反チェック
 	assert(textureDatas.contains(filePath));
 
@@ -114,6 +116,7 @@ D3D12_GPU_DESCRIPTOR_HANDLE TextureManager::GetSrvHandleGPU(const std::string &f
 }
 
 const DirectX::TexMetadata &TextureManager::GetMetaData(const std::string &filePath) {
+	
 	//範囲外指定違反チェック
 	assert(textureDatas.contains(filePath));
 

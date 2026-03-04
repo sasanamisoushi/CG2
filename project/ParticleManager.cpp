@@ -3,12 +3,12 @@
 #include "Logger.h"
 #include "TextureManager.h"
 #include "SrvManager.h"
+#include "StringUtility.h"
+
 #pragma comment(lib, "dxcompiler.lib")
 
 using namespace Microsoft::WRL;
 
-// 文字列変換用ヘルパー（もしStringUtilityなどがなければこれを使ってください）
-std::string ConvertString(const std::wstring &str);
 
 IDxcBlob *CompileShader(
 	// CompilerするShaderファイルへのパス
@@ -21,7 +21,7 @@ IDxcBlob *CompileShader(
 	IDxcIncludeHandler *includeHandler) {
 	// 1. これからシェーダーをコンパイルする旨をログに出す
 	// Loggerクラスのインスタンス(logger)を使用
-	std::string message = ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile));
+	std::string message = StringUtility::ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile));
 	logger.Log(message);
 
 	// 2. hlslファイルを読む
@@ -75,7 +75,7 @@ IDxcBlob *CompileShader(
 	assert(SUCCEEDED(hr));
 
 	// 7. 成功したらログを出す
-	message = ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile));
+	message =StringUtility::ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile));
 	logger.Log(message);
 
 	// ComPtrを使っているので手動Releaseは不要です
