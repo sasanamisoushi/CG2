@@ -47,8 +47,12 @@ void Game::Initialize() {
 	//---------音声再生----------
 	//音声読み込み
 	soundData1 = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
+
+	soundData2 = AudioManager::GetInstance()->LoadAudio("resources/maou_bgm_fantasy15.mp3");
+
 	//音声再生
 	AudioManager::GetInstance()->PlayWave(soundData1, true);
+	AudioManager::GetInstance()->PlayWave(soundData2, true);
 }
 
 void Game::Finalize() {
@@ -56,6 +60,8 @@ void Game::Finalize() {
 	Framework::Finalize();
 
 	AudioManager::GetInstance()->UnloadWave(soundData1);
+
+	AudioManager::GetInstance()->UnloadWave(soundData2);
 
 	//３Dモデルマネージャの初期化
 	ModelManager::GetInstance()->Finalize();

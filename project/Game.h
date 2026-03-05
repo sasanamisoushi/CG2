@@ -40,7 +40,9 @@ private:
 	std::unique_ptr<Object3d> objB;
 
 	//音声データ
-	SoundData soundData1;
+	SoundData soundData1; 
+
+	SoundData soundData2;
 
 };
 
