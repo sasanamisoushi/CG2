@@ -1,6 +1,15 @@
 #include "AudioManager.h"
 #include <fstream>
 #include <cassert>
+#include "StringUtility.h"
+#include <vector>
+
+#pragma comment(lib,"Mfplat.lib")
+#pragma comment(lib,"Mfreadwrite.lib")
+#pragma comment(lib,"mfuuid.lib")
+
+using namespace Microsoft::WRL;
+
 
 AudioManager *AudioManager::instance = nullptr;
 
@@ -12,12 +21,25 @@ AudioManager *AudioManager::GetInstance() {
 }
 
 void AudioManager::Finalize() {
+
+	//Foundationの終了処理
+	MFShutdown();
+	CoUninitialize();
+
     delete instance;
     instance = nullptr;
 }
 
 void AudioManager::Initialize() {
     HRESULT hr;
+
+	//comの初期化
+	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+	// Foundationの初期化を追加
+	hr = MFStartup(MF_VERSION);
+	assert(SUCCEEDED(hr));
+
     //XAudio2の初期化
     hr = XAudio2Create(&xAudio2_, 0, XAUDIO2_DEFAULT_PROCESSOR);
     assert(SUCCEEDED(hr));
@@ -91,6 +113,85 @@ SoundData AudioManager::LoadWave(const std::string &filename) {
 	return soundData;
 }
 
+SoundData AudioManager::LoadAudio(const std::string &filename) {
+	HRESULT hr;
+
+	// stringをwstringに変換
+	StringUtility su;
+	std::wstring wFilename = su.ConvertString(filename);
+
+	// SourceReaderを作成
+	ComPtr<IMFSourceReader> pReader; 
+	hr = MFCreateSourceReaderFromURL(wFilename.c_str(), nullptr, &pReader);
+	assert(SUCCEEDED(hr) && "Audio file not found or unsupported format!");
+
+	//オーディオストリームだけを選択
+	pReader->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE);
+	pReader->SetStreamSelection((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, TRUE);
+
+	//出力フォーマットをPCMに指定
+	ComPtr<IMFMediaType> pPartialType;
+	MFCreateMediaType(&pPartialType);
+	pPartialType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
+	pPartialType->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
+	hr = pReader->SetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, nullptr, pPartialType.Get());
+	assert(SUCCEEDED(hr));
+
+	//設定後の正確なフォーマット情報を取得
+	ComPtr<IMFMediaType> pUncompressedAudioTYpe;
+	hr = pReader->GetCurrentMediaType((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, &pUncompressedAudioTYpe);
+	assert(SUCCEEDED(hr));
+
+	//XAudio2で使える　WAVEFORMATEX 形式に変換
+	WAVEFORMATEX *pWavFormat = nullptr;
+	UINT32 formatSize = 0;
+	MFCreateWaveFormatExFromMFMediaType(pUncompressedAudioTYpe.Get(), &pWavFormat, &formatSize);
+
+	//データをすべて読み込む
+	std::vector<BYTE> audioData;
+	while (true) {
+		DWORD flags = 0;
+		ComPtr<IMFSample> pSample;
+		hr = pReader->ReadSample((DWORD)MF_SOURCE_READER_FIRST_AUDIO_STREAM, 0, nullptr, &flags, nullptr, &pSample);
+		assert(SUCCEEDED(hr));
+
+		//最後まで読み込んだら終了
+		if (flags & MF_SOURCE_READERF_ENDOFSTREAM) {
+			break;
+		}
+
+		if (pSample) {
+			ComPtr<IMFMediaBuffer> pBuffer;
+			hr = pSample->ConvertToContiguousBuffer(&pBuffer);
+			assert(SUCCEEDED(hr));
+
+			BYTE *pAudioData = nullptr;
+			DWORD currentLength = 0;
+			hr = pBuffer->Lock(&pAudioData, nullptr, &currentLength);
+			assert(SUCCEEDED(hr));
+
+			//読み込んだデータを配列に追加
+			audioData.insert(audioData.end(), pAudioData, pAudioData + currentLength);
+
+			pBuffer->Unlock();
+		}
+	}
+
+	//戻り値用のデータを構築
+	SoundData soundData = {};
+	soundData.wfex = *pWavFormat;
+	soundData.bufferSize = static_cast<unsigned int>(audioData.size());
+
+	//メモリーを確保してコピー
+	soundData.pBuffer = new BYTE[soundData.bufferSize];
+	memcpy(soundData.pBuffer, audioData.data(), soundData.bufferSize);
+
+	//Media Foundationが確保したメモリを解放
+	CoTaskMemFree(pWavFormat);
+
+	return soundData;
+}
+
 IXAudio2SourceVoice *AudioManager::PlayWave(const SoundData &soundData, bool loop) {
 	HRESULT result;
 
@@ -115,7 +216,7 @@ IXAudio2SourceVoice *AudioManager::PlayWave(const SoundData &soundData, bool loo
 
 	//再生開始
 	result = pSourceVoice->Start(0);
-	assert(SUCCEEDED(hr));
+	assert(SUCCEEDED(result));
 
 	return pSourceVoice;
 

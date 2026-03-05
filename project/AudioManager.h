@@ -3,6 +3,9 @@
 #include <wrl.h>
 #include <string>
 #include <cstdint>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
 
 //音声データ
 struct SoundData {
@@ -43,9 +46,12 @@ public:
 
 	//初期化
 	void Initialize();
-
+	
 	//WAVファイルの読み込み
 	SoundData LoadWave(const std::string &filename);
+
+	//音声読み込み(MFを使った版)
+	SoundData LoadAudio(const std::string &filename);
 
 	//音声再生
 	IXAudio2SourceVoice *PlayWave(const SoundData &soundData, bool loop = false);
