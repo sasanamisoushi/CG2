@@ -97,8 +97,8 @@ SoundData AudioManager::LoadWave(const std::string &filename) {
 	}
 
 	//Dataチャンクのデータ部
-	char *pBuffer = new char[data.size];
-	file.read(pBuffer, data.size);
+	std::vector<BYTE> buffer(data.size);
+	file.read(reinterpret_cast<char *>(buffer.data()), data.size);
 
 	//Waveファイルを閉じる
 	file.close();
@@ -107,8 +107,7 @@ SoundData AudioManager::LoadWave(const std::string &filename) {
 	SoundData soundData = {};
 
 	soundData.wfex = format.fmt;
-	soundData.pBuffer = reinterpret_cast<BYTE *>(pBuffer);
-	soundData.bufferSize = data.size;
+	soundData.buffer = std::move(buffer);
 
 	return soundData;
 }
@@ -180,11 +179,7 @@ SoundData AudioManager::LoadAudio(const std::string &filename) {
 	//戻り値用のデータを構築
 	SoundData soundData = {};
 	soundData.wfex = *pWavFormat;
-	soundData.bufferSize = static_cast<unsigned int>(audioData.size());
-
-	//メモリーを確保してコピー
-	soundData.pBuffer = new BYTE[soundData.bufferSize];
-	memcpy(soundData.pBuffer, audioData.data(), soundData.bufferSize);
+	soundData.buffer = std::move(audioData);
 
 	//Media Foundationが確保したメモリを解放
 	CoTaskMemFree(pWavFormat);
@@ -202,8 +197,8 @@ IXAudio2SourceVoice *AudioManager::PlayWave(const SoundData &soundData, bool loo
 
 	//再生する波形データの設定
 	XAUDIO2_BUFFER buf{};
-	buf.pAudioData = soundData.pBuffer;
-	buf.AudioBytes = soundData.bufferSize;
+	buf.pAudioData = soundData.buffer.data();
+	buf.AudioBytes = static_cast<UINT32>(soundData.buffer.size());
 	buf.Flags = XAUDIO2_END_OF_STREAM;
 
 	if (loop) {
@@ -223,10 +218,8 @@ IXAudio2SourceVoice *AudioManager::PlayWave(const SoundData &soundData, bool loo
 }
 
 void AudioManager::UnloadWave(SoundData &soundData) {
-	//バッファのメモリ
-	delete[] soundData.pBuffer;
-
-	soundData.pBuffer = 0;
-	soundData.bufferSize = 0;
+	// vectorの機能を使ってメモリを解放
+	soundData.buffer.clear();
+	soundData.buffer.shrink_to_fit();
 	soundData.wfex = {};
 }

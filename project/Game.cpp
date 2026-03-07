@@ -75,10 +75,10 @@ void Game::Finalize() {
 void Game::Update() {
 
 	Framework::Update();
-
+#ifdef ENABLE_IMGUI
 	//-----ImGuiのフレーム開始処理-----
 	imGuiManager->BeginFrame();
-
+#endif
 	if (input->TriggerKey(DIK_0)) {
 		OutputDebugStringA("Hit 0\n");
 	}
@@ -90,12 +90,6 @@ void Game::Update() {
 		object3d->Update();
 	}
 
-	//現在の座標を変数で受ける
-	Vector2 position = sprite->GetPosition();
-	//座標を変更する
-	position = Vector2{ 100.0f,100.0f };
-	//変更を反映する
-	sprite->SetPosition(position);
 
 	Vector2 size = sprite->GetSize();
 	size.x = 300.0f;
@@ -153,10 +147,10 @@ void Game::Draw() {
 	
 
 	particleManager->Draw();
-
+#ifdef  ENABLE_IMGUI
 	//-------ImGuiの描画-------
 	imGuiManager->EndFrame(dxCommon->GetCommandList());
-
+#endif
 	//描画後処理
 	dxCommon->PostDraw();
 

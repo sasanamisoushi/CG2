@@ -3,6 +3,7 @@
 #include <wrl.h>
 #include <string>
 #include <cstdint>
+#include <vector>
 #include <mfapi.h>
 #include <mfidl.h>
 #include <mfreadwrite.h>
@@ -11,10 +12,8 @@
 struct SoundData {
 	//波形フォーマット
 	WAVEFORMATEX wfex;
-	//バッファの先頭アドレス
-	BYTE *pBuffer;
-	//バッファのサイズ
-	unsigned int bufferSize;
+	//音声データバッファ
+	std::vector<BYTE> buffer;
 };
 
 
