@@ -6,6 +6,9 @@
 
 class SpriteCommon {
 public:
+
+	static SpriteCommon *GetInstance();
+
 	//初期化
 	void Initialize(DirectXCommon* dxCommon);
 
@@ -15,6 +18,12 @@ public:
 	void SetCommonPipelineState();
 
 private:
+
+	// コンストラクタを隠蔽・コピー禁止にする
+	SpriteCommon() = default;
+	~SpriteCommon() = default;
+	SpriteCommon(const SpriteCommon &) = delete;
+	SpriteCommon &operator=(const SpriteCommon &) = delete;
 
 	//ピクセルシェーダーの読み込み
 	void LoadShaders();

@@ -1,13 +1,7 @@
 #pragma once
-#include "Camera.h"
-#include "Sprite.h"
-#include "Object3d.h"
-#include "ParticleManager.h"
-#include "ParticleEmitter.h"
-#include "AudioManager.h"
 #include <memory>
-#include <vector>
 #include "Framework.h"
+#include "SceneFactory.h"
 
 class Game : public Framework {
 public:
@@ -26,23 +20,7 @@ public:
 
 private:
 
-	//シーンリソース
-	std::unique_ptr<Camera> camera;
-	std::unique_ptr<Sprite> sprite;
-
-	//パーティクル
-	std::unique_ptr<ParticleManager> particleManager;
-	std::unique_ptr<ParticleEmitter> particleEmitter;
-
-	//モデル
-	std::vector<Object3d *> objects;
-	std::unique_ptr<Object3d> objA;
-	std::unique_ptr<Object3d> objB;
-
-	//音声データ
-	SoundData soundData1; 
-
-	SoundData soundData2;
-
+	//シーンファクトリー
+	std::unique_ptr<AbstractSceneFactory> sceneFactory_;
 };
 

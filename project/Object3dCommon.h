@@ -4,6 +4,10 @@
 
 class Object3dCommon {
 public:
+
+	// シングルトンインスタンスの取得
+	static Object3dCommon *GetInstance();
+
 	//初期化
 	void Initialize(DirectXCommon* dxCommon);
 
@@ -22,6 +26,13 @@ public:
 	Camera *GetDefaultCamera()const { return defaultCamera; }
 
 private:
+
+	//コンストラクタを隠蔽・コピー禁止にする
+	Object3dCommon() = default;
+	~Object3dCommon() = default;
+	Object3dCommon(const Object3dCommon &) = delete;
+	Object3dCommon &operator=(const Object3dCommon &) = delete;
+
 	//ルートシグネチャの作成
 	void CreateRootSignature();
 

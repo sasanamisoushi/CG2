@@ -21,6 +21,11 @@ StringUtility su;
 
 const uint32_t DirectXCommon::kMaxSRVCount = 512;
 
+DirectXCommon *DirectXCommon::GetInstance() {
+	static DirectXCommon instance;
+	return &instance;
+}
+
 void DirectXCommon::Initialize(WinApp *winApp) {
 
 	//NULL検出

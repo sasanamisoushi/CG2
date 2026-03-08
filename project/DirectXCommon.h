@@ -14,6 +14,10 @@
 class DirectXCommon {
 
 public:
+
+	// シングルトンインスタンスの取得
+	static DirectXCommon *GetInstance();
+
 	//初期化
 	void Initialize(WinApp *winApp);
 
@@ -103,6 +107,12 @@ public:
 	static const uint32_t kMaxSRVCount;
 
 private:
+
+	// コンストラクタを隠蔽・コピー禁止にする
+	DirectXCommon() = default;
+	~DirectXCommon() = default;
+	DirectXCommon(const DirectXCommon &) = delete;
+	DirectXCommon &operator=(const DirectXCommon &) = delete;
 
 	//DirectX12デバイス
 	Microsoft::WRL::ComPtr<ID3D12Device> device;

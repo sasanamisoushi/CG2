@@ -2,6 +2,11 @@
 #include <externals/DirectXTex/d3dx12.h>
 #include <cassert>
 
+Object3dCommon *Object3dCommon::GetInstance() {
+	static Object3dCommon instance;
+	return &instance;
+}
+
 void Object3dCommon::Initialize(DirectXCommon *dxCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	dxCommon_ = dxCommon;

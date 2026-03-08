@@ -34,13 +34,6 @@ protected:
 
 	//基盤系
 	std::unique_ptr<WinApp> winApp;
-	std::unique_ptr<DirectXCommon> dxCommon;
 	std::unique_ptr<ImGuiManager> imGuiManager;
-	std::unique_ptr<Input> input;
-
-	//描画共通系
-	std::unique_ptr<SpriteCommon> spriteCommon;
-	std::unique_ptr<Object3dCommon> object3dCommon;
-
 };
 
