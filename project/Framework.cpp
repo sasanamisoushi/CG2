@@ -25,17 +25,17 @@ void Framework::Initialize() {
 	winApp->Initialize();
 
 	// DirectXCommon の生成と初期化
-	dxCommon = std::make_unique<DirectXCommon>();
-	dxCommon->Initialize(winApp.get());
-	dxCommon->GetCommandList();
+	
+	DirectXCommon::GetInstance()->Initialize(winApp.get());
+	DirectXCommon::GetInstance()->GetCommandList();
 
 	// SRVマネージャの初期化
-	SrvManager::GetInstance()->Initialize(dxCommon.get());
+	SrvManager::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
 	// ImGuiManagerの生成と初期化
 	imGuiManager = std::make_unique<ImGuiManager>();
 	HWND hwnd = winApp->GetHwnd();
-	ID3D12Device *device = dxCommon->GetDevice();
+	ID3D12Device *device = DirectXCommon::GetInstance()->GetDevice();
 	int numFramesInFlight = 2; //バックバッファの数
 	DXGI_FORMAT rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	ID3D12DescriptorHeap *srvHeap = SrvManager::GetInstance()->GetDescriptorHeap();
@@ -43,26 +43,23 @@ void Framework::Initialize() {
 	imGuiManager->Initialize(hwnd, device, numFramesInFlight, rtvFormat, srvHeap);
 
 	// テクスチャマネージャの初期化
-	TextureManager::GetInstance()->Initialize(dxCommon.get(), SrvManager::GetInstance());
+	TextureManager::GetInstance()->Initialize(DirectXCommon::GetInstance(), SrvManager::GetInstance());
 
 	// 3Dモデルマネージャーの初期化
-	ModelManager::GetInstance()->Initialize(dxCommon.get());
+	ModelManager::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
 	// オーディオマネージャーの初期化
 	AudioManager::GetInstance()->Initialize();
 
 	// 入力デバイス
-	input = std::make_unique<Input>();
-	input->Initialize(winApp.get());
+	Input::GetInstance()->Initialize(winApp.get());
 
 	//---------共通部の初期化---------
 	//スプライト共通部の初期化
-	spriteCommon = std::make_unique<SpriteCommon>();
-	spriteCommon->Initialize(dxCommon.get());
+	SpriteCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
 	//3Dオブジェクト共通部の初期化
-	object3dCommon = std::make_unique<Object3dCommon>();
-	object3dCommon->Initialize(dxCommon.get());
+	Object3dCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
 }
 
@@ -71,7 +68,7 @@ void Framework::Update() {
 	if (winApp->ProcessMessage()) {
 		endRequest_ = true;
 	}
-	input->Update();
+	Input::GetInstance()->Update();
 }
 
 void Framework::Finalize() {

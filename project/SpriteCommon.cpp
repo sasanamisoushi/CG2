@@ -1,7 +1,10 @@
 #include "SpriteCommon.h"
 #include "Logger.h"
 
-
+SpriteCommon *SpriteCommon::GetInstance() {
+	static SpriteCommon instance;
+	return &instance;
+}
 
 void SpriteCommon::Initialize(DirectXCommon *dxCommon) {
 	//引数で受け取ってメンバ変数に記録する
