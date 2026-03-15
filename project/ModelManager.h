@@ -19,6 +19,8 @@ public:
 	//モデルの検索
 	Model *FindModel(const std::string &filePath);
 
+	// 球モデルの作成
+	void CreateSphereModel(const std::string &modelName, int subdivision);
 
 private:
 	static ModelManager *instance;

@@ -27,7 +27,8 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//平行光源データ作成
 	CreateDirectionLightData();
 
-	
+	// カメラ用のデータの生成
+	CreateCameraData();
 
 	transform={ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	//cameraTransform={ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
@@ -52,6 +53,7 @@ void Object3d::Update() {
 	if (camera) {
 		const Matrix4x4 &viewProjectionMatrix = camera->GetViewProjectionMatrix();
 		worldViewProjectionMatrix = math->Multiply(worldMatrix, viewProjectionMatrix);
+		cameraData->worldPosition = camera->GetTranslate();
 	} else {
 		worldViewProjectionMatrix = worldMatrix;
 	}
@@ -59,6 +61,8 @@ void Object3d::Update() {
 	transformationMatrixData->WVP = worldViewProjectionMatrix;
 	transformationMatrixData->World = worldMatrix;
 
+	Matrix4x4 worldInverse = math->Inverse(worldMatrix);
+	transformationMatrixData->WorldInverseTranspose = math->Transpose(worldInverse);
 }
 
 void Object3d::Draw() {
@@ -69,6 +73,8 @@ void Object3d::Draw() {
 
 	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(3, directionLightResource->GetGPUVirtualAddress());
 
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(
+		4, cameraResource->GetGPUVirtualAddress());
 
 	//3Dモデルが割り当てられたら描画する
 	if (model) {
@@ -233,6 +239,19 @@ void Object3d::CreateDirectionLightData() {
 	directionLightData->intensity = 1.0f;
 
 	directionLightData->direction = math->Normalize(directionLightData->direction);
+
+}
+
+void Object3d::CreateCameraData() {
+	// カメラ用のリソースを作成 (パディングを含めてアライメントに注意する必要がない程度のシンプルな構造体です)
+	cameraResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(CameraForGPU));
+
+	// 書き込むためのアドレスを取得
+	cameraResource->Map(0, nullptr, reinterpret_cast<void **>(&cameraData));
+
+	// 初期値
+	cameraData->worldPosition = { 0.0f, 0.0f, 0.0f };
+
 
 }
 

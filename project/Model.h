@@ -25,6 +25,7 @@ struct Material {
 	int32_t enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
+	float shininess;
 };
 
 class Model {
@@ -47,6 +48,9 @@ public:
 
 	//.objファイルの読み取り
 	static ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename);
+
+	// 球の初期化
+	void InitializeSphere(ModelCommon *modelCommon, int subdivision);
 
 private:
 	ModelCommon *modelCommon_;

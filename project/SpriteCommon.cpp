@@ -28,11 +28,11 @@ void SpriteCommon::SetCommonPipelineState() {
 
 void SpriteCommon::LoadShaders() {
 	//Shaderをコンパイルする
-	vertexShaderBlob = dxCommon_->CompileShader(L"resources/shaders/Object3D.VS.hlsl",
+	vertexShaderBlob = dxCommon_->CompileShader(L"resources/shaders/Sprite.VS.hlsl",
 		L"vs_6_0");
 	assert(vertexShaderBlob != nullptr);
 
-	pixelShaderBlob = dxCommon_->CompileShader(L"resources/shaders/Object3D.PS.hlsl",
+	pixelShaderBlob = dxCommon_->CompileShader(L"resources/shaders/Sprite.PS.hlsl",
 		L"ps_6_0");
 	assert(pixelShaderBlob != nullptr);
 }

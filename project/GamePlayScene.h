@@ -44,6 +44,8 @@ private:
 	SoundData soundData1;
 	SoundData soundData2;
 
-
+	// 再生中のボイスを管理するポイインタ
+	IXAudio2SourceVoice *pVoice1 = nullptr;
+	IXAudio2SourceVoice *pVoice2 = nullptr;
 };
 

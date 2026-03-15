@@ -177,8 +177,10 @@ void Sprite::CreateMaterialData() {
 	materialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
 	//白で設定
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-	materialData->enableLighting = false;
+	materialData->enableLighting = 0;
 	materialData->uvTransform = math->MakeIdentity4x4();
+
+	materialData->shininess = 1.0f;
 }
 
 void Sprite::CreateTransformationData() {

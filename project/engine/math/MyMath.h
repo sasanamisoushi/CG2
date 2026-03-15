@@ -98,6 +98,9 @@ public:
 	//逆行列
 	Matrix4x4 Inverse(const Matrix4x4 &m);
 
+	// 転置行列
+	Matrix4x4 Transpose(const Matrix4x4 &m);
+
 	//平行投影行列
 	Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 

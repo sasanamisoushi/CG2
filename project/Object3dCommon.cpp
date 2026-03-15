@@ -54,7 +54,7 @@ void Object3dCommon::CreateRootSignature() {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成 (4つ定義)
-	D3D12_ROOT_PARAMETER rootParamerers[4] = {};
+	D3D12_ROOT_PARAMETER rootParamerers[5] = {};
 
 	// 0: マテリアルCBV (b0, PixelShader)
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -76,6 +76,11 @@ void Object3dCommon::CreateRootSignature() {
 	rootParamerers[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[3].Descriptor.ShaderRegister = 1;
+
+	// 4: カメラ座標CBV(b2,PixelShader)
+	rootParamerers[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[4].Descriptor.ShaderRegister = 2;
 
 	descriptionRootSignature.pParameters = rootParamerers;
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);
@@ -169,6 +174,6 @@ void Object3dCommon::CreateGraphicsPipeline() {
 	// 実際に生成
 	pipelineState_ = nullptr;
 	HRESULT hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&pipelineState_));
-	assert(SUCCEEDED(hr));
+	assert(SUCCEEDED(hr) && "パイプラインの作成に失敗しました！");
 
 }
