@@ -208,6 +208,17 @@ Matrix4x4 MyMath::Inverse(const Matrix4x4 &m) {
 	return result;
 }
 
+Matrix4x4 MyMath::Transpose(const Matrix4x4 &m) {
+	Matrix4x4 result{};
+	for (int row = 0; row < 4; ++row) {
+		for (int col = 0; col < 4; ++col) {
+			// 行と列を入れ替えて代入する
+			result.m[row][col] = m.m[col][row];
+		}
+	}
+	return result;
+}
+
 Matrix4x4 MyMath::MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
 	Matrix4x4 result = {};
 

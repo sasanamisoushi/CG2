@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <wrl.h>
+#include <cmath>
 
 
 using Microsoft::WRL::ComPtr;
@@ -88,8 +89,10 @@ void Model::CreateMaterialData() {
 	matetialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
 	//今回は赤を書き込んで見る
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
-	materialData->enableLighting = true;
+	materialData->enableLighting = 1;
 	materialData->uvTransform = math->MakeIdentity4x4();
+
+	materialData->shininess = 40.0f;
 }
 
 MaterialData Model::LoadMaterialTemplateFile(const std::string &directoryPath, const std::string &filename) {
@@ -182,4 +185,75 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 		}
 	}
 	return modelData;
+}
+
+void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
+	// 引数で受け取ってメンバ変数に記録する
+	this->modelCommon_ = modelCommon;
+
+	// 球の頂点を計算するための変数
+	const float pi = 3.1415926535f;
+	const float latEvery = pi / subdivision;
+	const float lonEvey = (2.0f * pi) / subdivision;
+
+	std::vector<VertexData> tempVertices;
+
+	// 球面上の頂点を計算
+	for (int latIndex = 0; latIndex <= subdivision; ++latIndex) {
+		float lat = -pi / 2.0f + latEvery * latIndex;
+		for (int lonIndex = 0; lonIndex <= subdivision; ++lonIndex) {
+			float lon = lonEvey * lonIndex;
+			VertexData vertex{};
+
+			// 法線と座標の計算
+			vertex.normal.x = std::cos(lat) * std::cos(lon);
+			vertex.normal.y = std::sin(lat);
+			vertex.normal.z = std::cos(lat) * std::sin(lon);
+			vertex.position = { vertex.normal.x,vertex.normal.y,vertex.normal.z,1.0f };
+
+			// UV座標の計算
+			vertex.texcoord = { float(lonIndex) / subdivision,1.0f - float(latIndex) / subdivision };
+		
+			tempVertices.push_back(vertex);
+		}
+	}
+
+	// 三角形リストとして　modelData.verticesに展開
+	modelData.vertices.clear();
+	for (int latIndex = 0; latIndex < subdivision; ++latIndex) {
+		for (int lonIndex = 0; lonIndex < subdivision; ++lonIndex) {
+			int start = (latIndex * (subdivision + 1)) + lonIndex;
+
+			int a = start;
+			int b = start + 1;
+			int c = start + (subdivision + 1);
+			int d = start + (subdivision + 1) + 1;
+
+			// 三角形1
+			modelData.vertices.push_back(tempVertices[a]);
+			modelData.vertices.push_back(tempVertices[c]);
+			modelData.vertices.push_back(tempVertices[b]);
+
+			// 三角形2
+			modelData.vertices.push_back(tempVertices[b]);
+			modelData.vertices.push_back(tempVertices[c]);
+			modelData.vertices.push_back(tempVertices[d]);
+		}
+	}
+
+	// 頂点データとマテリアルデータのバッファ作成
+	CreateVertexData();
+	CreateMaterialData();
+
+	// テクスチャの設定
+	textureFilePath_ = "resources/monsterBall.png";
+
+	// modelData側のマテリアルにもファイルパスを記録
+	modelData.material.textureFilePath = textureFilePath_;
+
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+
+	// 読み込んだテクスチャの「番号」を取得してマテリアルにセットする
+	modelData.material.textureIndex =
+		TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
 }

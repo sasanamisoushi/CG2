@@ -179,6 +179,7 @@ SoundData AudioManager::LoadAudio(const std::string &filename) {
 	//戻り値用のデータを構築
 	SoundData soundData = {};
 	soundData.wfex = *pWavFormat;
+	soundData.wfex.cbSize = 0;
 	soundData.buffer = std::move(audioData);
 
 	//Media Foundationが確保したメモリを解放
@@ -207,7 +208,6 @@ IXAudio2SourceVoice *AudioManager::PlayWave(const SoundData &soundData, bool loo
 
 	//波形データ
 	result = pSourceVoice->SubmitSourceBuffer(&buf);
-	result = pSourceVoice->Start();
 
 	//再生開始
 	result = pSourceVoice->Start(0);

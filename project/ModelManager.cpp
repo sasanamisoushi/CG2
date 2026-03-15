@@ -50,3 +50,19 @@ Model *ModelManager::FindModel(const std::string &filePath) {
 	//ファイル名一致なし
 	return nullptr;
 }
+
+void ModelManager::CreateSphereModel(const std::string &modelName, int subdivision) {
+	// 重複読み込み防止すでに同じ名前で登録されていたら何もしない
+	if (models.contains(modelName)) {
+		return;
+	}
+
+	// モデル生成
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+
+	// モデル初期化
+	newModel->InitializeSphere(modelCommon.get(), subdivision);
+
+	// マップに登録
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}

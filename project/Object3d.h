@@ -15,38 +15,10 @@
 
 class Object3dCommon;
 
-//struct Transform {
-//	Vector3 scale;
-//	Vector3 rotate;
-//	Vector3 translate;
-//};
-
-//struct  VertexData {
-//	Vector4 position;
-//	Vector2 texcoord;
-//	Vector3 normal; 
-//};
-
-//struct MaterialData {
-//	std::string textureFilePath;
-//	uint32_t textureIndex = 0;
-//};
-//
-//struct ModelData {
-//	std::vector<VertexData>vertices;
-//	MaterialData material;
-//};
-
-//struct Material {
-//	Vector4 color;
-//	int32_t enableLighting;
-//	float padding[3];
-//	Matrix4x4 uvTransform;
-//};
-
 struct TransformationMatrix {
 	Matrix4x4 WVP;
 	Matrix4x4 World;
+	Matrix4x4 WorldInverseTranspose;
 };
 
 struct DirectionalLight {
@@ -55,10 +27,12 @@ struct DirectionalLight {
 	float intensity;
 };
 
+struct CameraForGPU {
+	Vector3 worldPosition;
+};
+
 class Object3d {
 public: 
-
-	
 
 	//初期化
 	void Initialize(Object3dCommon *object3dCommon);
@@ -69,15 +43,14 @@ public:
 	//描画
 	void Draw();
 
-	
-
-	
-
 	//座標変換行列データ作成
 	void CreateTransformationData();
 
 	//平行光源データ作成
 	void CreateDirectionLightData();
+
+	// カメラデータ作成関数
+	void CreateCameraData();
 
 	Transform transform;
 	//Transform cameraTransform;
@@ -93,6 +66,7 @@ public:
 	const Vector3 &GetScale()const { return transform.scale; }
 	const Vector3 &GetRotate()const { return transform.rotate; }
 	const Vector3 &GetTranslate()const { return transform.translate; }
+	DirectionalLight *GetDirectionalLightData() const { return directionLightData; }
 
 private:
 
@@ -119,6 +93,10 @@ private:
 
 	//カメラ
 	Camera *camera = nullptr;
+
+	// カメラ用リソースとマップ用ポインタ
+	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource;
+	CameraForGPU *cameraData = nullptr;
 	
 };
 
