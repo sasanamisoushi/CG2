@@ -638,7 +638,36 @@ Microsoft::WRL::ComPtr<ID3D12Resource> DirectXCommon::UploadTextureData(const Mi
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
 	commandList->ResourceBarrier(1, &barrier);
 
-	return intermediateResource;
+	// --- GPU/CPU同期: コマンドを実行して完了を待つ ---
+	// Close, execute and signal fence
+	HRESULT hr = commandList->Close();
+	assert(SUCCEEDED(hr));
+
+	ID3D12CommandList *const commandLists[] = { commandList.Get() };
+	commandQueue->ExecuteCommandLists(_countof(commandLists), commandLists);
+
+	// シグナルと待機
+	fenceValue++;
+	hr = commandQueue->Signal(fence.Get(), fenceValue);
+	assert(SUCCEEDED(hr));
+
+	if (fence->GetCompletedValue() < fenceValue) {
+		hr = fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		assert(SUCCEEDED(hr));
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
+
+	// コマンドリストとアロケータをリセットして次の描画に備える
+	hr = commandAllocator->Reset();
+	assert(SUCCEEDED(hr));
+	hr = commandList->Reset(commandAllocator.Get(), nullptr);
+	assert(SUCCEEDED(hr));
+
+	// 中間リソースは不要になったので解放してメモリを節約する
+	intermediateResource.Reset();
+
+	// 成功したので nullptr を返す（中間リソースは内部で解放済み）
+	return nullptr;
 }
 
 DirectX::ScratchImage DirectXCommon::LoadTexture(const std::string &filePath) {
