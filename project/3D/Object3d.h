@@ -10,7 +10,7 @@
 #include <MyMath.h>
 #include"Model.h"
 #include "ModelManager.h"
-#include "Camera.h"
+#include "engine/Camera/Camera.h"
 #include <memory>
 
 class Object3dCommon;

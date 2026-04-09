@@ -1,5 +1,5 @@
 #pragma once
-#include "DirectXCommon.h"
+#include "engine/Graphics/DirectXCommon.h"
 
 class ModelCommon {
 public:

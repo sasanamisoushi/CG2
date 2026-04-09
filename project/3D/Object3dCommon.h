@@ -1,6 +1,6 @@
 #pragma once
-#include <DirectXCommon.h>
-#include "Camera.h"
+#include <engine/Graphics/DirectXCommon.h>
+#include "engine/Camera/Camera.h"
 
 class Object3dCommon {
 public:

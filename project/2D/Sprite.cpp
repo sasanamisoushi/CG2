@@ -1,6 +1,6 @@
-#include "Sprite.h"
-#include "SpriteCommon.h"
-#include "TextureManager.h"
+#include "2D/Sprite.h"
+#include "2D/SpriteCommon.h"
+#include "engine/Resource/TextureManager.h"
 
 
 

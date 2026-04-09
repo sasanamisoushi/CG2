@@ -1,5 +1,5 @@
 #include "Model.h"
-#include "TextureManager.h"
+#include "engine/Resource/TextureManager.h"
 #include <fstream>
 #include <sstream>
 #include <string>

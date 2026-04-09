@@ -2,7 +2,7 @@
 #include <map>
 #include <string>
 #include <memory>
-#include <Model.h>
+#include <3D/Model.h>
 class ModelManager {
 public:
 	//シングルトンインスタンスの取得

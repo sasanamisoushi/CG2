@@ -5,7 +5,7 @@
 #include <externals/DirectXTex/DirectXTex.h>
 #include <externals/DirectXTex/d3dx12.h>
 #include <unordered_map>
-#include "SrvManager.h"
+#include "engine/Graphics/SrvManager.h"
 
 class DirectXCommon;
 

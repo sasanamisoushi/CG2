@@ -1,6 +1,6 @@
 #include "Object3d.h"
 #include "Object3dCommon.h"
-#include "TextureManager.h"
+#include "engine/Resource/TextureManager.h"
 #include <fstream>
 #include <sstream>
 #include <string>
