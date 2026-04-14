@@ -3,10 +3,10 @@
 #include <wrl.h>
 #include <vector>
 #include <random>
-#include "DirectXCommon.h" 
-#include "SrvManager.h"
-#include "MyMath.h"
-#include "Camera.h"
+#include "engine/Graphics/DirectXCommon.h" 
+#include "engine/Graphics/SrvManager.h"
+#include "engine/Math/MyMath.h"
+#include "engine/Camera/Camera.h"
 
 
 class ParticleManager {

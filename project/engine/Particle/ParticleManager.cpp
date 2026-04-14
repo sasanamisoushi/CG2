@@ -1,8 +1,8 @@
 #include "ParticleManager.h"
 #include <cassert>
 #include "Logger.h"
-#include "TextureManager.h"
-#include "SrvManager.h"
+#include "engine/Resource/TextureManager.h"
+#include "engine/Graphics/SrvManager.h"
 #include "StringUtility.h"
 
 #pragma comment(lib, "dxcompiler.lib")
@@ -545,12 +545,12 @@ void ParticleManager::CreatePipelineState() {
 
 	//シェーダーのコンパイル
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob;
-	vertexShaderBlob = CompileShader(L"Particle.VS.hlsl",
+	vertexShaderBlob = CompileShader(L"resources/shaders/Particle.VS.hlsl",
 		L"vs_6_0", dxcUtils.Get(),dxcCompiler.Get(),includeHandler.Get());
 	assert(vertexShaderBlob != nullptr);
 
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob;
-	pixelShaderBlob = CompileShader(L"Particle.PS.hlsl",
+	pixelShaderBlob = CompileShader(L"resources/shaders/Particle.PS.hlsl",
 		L"ps_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get());
 	assert(pixelShaderBlob != nullptr);
 
