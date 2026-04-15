@@ -1,6 +1,6 @@
 #pragma once
-#include "BaseScene.h"
-#include "AbstractSceneFactory.h"
+#include "Game/base/BaseScene.h"
+#include "Game/base/AbstractSceneFactory.h"
 #include <memory>
 #include <string>
 

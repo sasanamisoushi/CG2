@@ -1,5 +1,5 @@
-#include "D3DResourceLeakChecker.h"
-#include "Game.h"
+#include "engine/Graphics/D3DResourceLeakChecker.h"
+#include "Game/base/Game.h"
 
 #pragma comment(lib,"Dbghelp.lib")
 

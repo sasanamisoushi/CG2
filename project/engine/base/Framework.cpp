@@ -1,8 +1,8 @@
 #include "Framework.h"
-#include "SrvManager.h"
-#include "TextureManager.h"
-#include "ModelManager.h"
-#include "AudioManager.h"
+#include "engine/Graphics/SrvManager.h"
+#include "engine/Resource/TextureManager.h"
+#include "3D/ModelManager.h"
+#include "engine/Audio/AudioManager.h"
 
 void Framework::Initialize() {
 

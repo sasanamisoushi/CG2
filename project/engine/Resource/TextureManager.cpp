@@ -1,6 +1,6 @@
 #include "TextureManager.h"
 #include <engine/Graphics/DirectXCommon.h>
-
+#include <filesystem>
 
 
 
@@ -32,39 +32,37 @@ void TextureManager::Initialize(DirectXCommon *common,SrvManager *srvManager) {
 
 void TextureManager::LoadTexture(const std::string &filePath) {
 
-	//読み込み済みテクスチャを検索
-	//auto it = std::find_if(
-	//	textureDatas.begin(),
-	//	textureDatas.end(),
-	//	[&](TextureData &textureData) {return textureData.filePath == filePath; }
-	//);
-	//if (it != textureDatas.end()) {
-	//	//読み込み済みなら早期return
-	//	return;
-	//}
 	if (textureDatas.contains(filePath)) {
 		return;
 	}
 
-	//テクスチャ枚数上限チェック
-	//assert(textureDatas.size() + kSRVIndexTop < DirectXCommon::kMaxSRVCount);
-	//assert(srvManger->Allocate());
-
+	
 	//テクスチャファイルを読んでプログラムで扱えるようにする
 	DirectX::ScratchImage image{};
 	std::wstring filePathW = su.ConvertString(filePath);
-	HRESULT hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+	HRESULT hr = S_FALSE;
+		
+	// 拡張子によって読み込み処理を分岐する
+	std::filesystem::path path(filePath);
+	if (path.extension() == ".dds") {
+		// スカイボックスなどで使うDDｓファイルの読み込み
+		hr = DirectX::LoadFromDDSFile(filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+	} else {
+		// 従来のPNGやJPGなどのWICファイルの読み込み
+		hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+	}
 	assert(SUCCEEDED(hr));
 
 
-	//ミップマップの作成
+	//ミップマップの作成(DDS等の圧縮フォーマット時はスキップする対応)
 	DirectX::ScratchImage mipImages{};
-	hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
-	assert(SUCCEEDED(hr));
+	if (DirectX::IsCompressed(image.GetMetadata().format)) {
+		mipImages = std::move(image);
+	} else {
+		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
+		assert(SUCCEEDED(hr));
+	}
 
-	//textureDatas.emplace_back();
-	//テクスチャデータを追加
-	//textureDatas.reserve(textureDatas.size() + 1);
 	//追加したテクスチャデータの参照を取得する
 	TextureData &textureData = textureDatas[filePath];
 	textureData.metadata = mipImages.GetMetadata();
@@ -82,8 +80,21 @@ void TextureManager::LoadTexture(const std::string &filePath) {
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = textureData.metadata.format;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = UINT(textureData.metadata.mipLevels);
+	
+	// メタデータからキューブマップかどうか判定してSRVの次元を変える
+	if (textureData.metadata.IsCubemap()) {
+		// スカイボックス用のキューブマップテクスチャとして設定
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+		srvDesc.TextureCube.MostDetailedMip = 0;
+		srvDesc.TextureCube.MipLevels = UINT(textureData.metadata.mipLevels);
+		srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
+	} else {
+		// 通常の2Dテクスチャとして設定
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = UINT(textureData.metadata.mipLevels);
+	}
+
+	
 	//SRVの生成
 	dxCommon->GetDevice()->CreateShaderResourceView(textureData.resource.Get(), &srvDesc, textureData.srvHandleCPU);
 }

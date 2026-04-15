@@ -1,6 +1,6 @@
 #include "SceneFactory.h"
-#include "TitleScene.h"
-#include "GamePlayScene.h"
+#include "Game/Scene/TitleScene.h"
+#include "Game/Scene/GamePlayScene.h"
 #include <cassert>
 
 std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneName) {

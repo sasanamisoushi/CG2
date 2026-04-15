@@ -1,6 +1,6 @@
 #include "TitleScene.h"
-#include "Object3dCommon.h"
-#include "Input.h"
+#include "3D/Object3dCommon.h"
+#include "engine/Input/Input.h"
 #include "SceneManager.h"
 
 void TitleScene::Initialize() {

@@ -1,7 +1,7 @@
 #include "Game.h"
-#include "ModelManager.h"
-#include "AudioManager.h"
-#include "SrvManager.h"
+#include "3D/ModelManager.h"
+#include "engine/Audio/AudioManager.h"
+#include "engine/Graphics/SrvManager.h"
 #include "SceneManager.h"
 
 void Game::Initialize() {

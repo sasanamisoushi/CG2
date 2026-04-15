@@ -1,5 +1,5 @@
 #pragma once
-#include "AbstractSceneFactory.h"
+#include "Game/base/AbstractSceneFactory.h"
 
 class SceneFactory :public AbstractSceneFactory {
 public:

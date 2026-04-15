@@ -1,7 +1,7 @@
 #pragma once
-#include "Camera.h"
-#include "Object3d.h"
-#include "BaseScene.h"
+#include "engine/Camera/Camera.h"
+#include "3D/Object3d.h"
+#include "Game/base/BaseScene.h"
 
 class TitleScene : public BaseScene {
 public:

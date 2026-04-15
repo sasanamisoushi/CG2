@@ -1,6 +1,6 @@
 #include "ImGuiManager.h"
 #include <cstdint>
-#include "SrvManager.h"
+#include "engine/Graphics/SrvManager.h"
 
 void ImGuiManager::Initialize(HWND hwnd, ID3D12Device *device, int numFramesInFlight, DXGI_FORMAT rtvFormat, ID3D12DescriptorHeap *srvHeap) {
 #ifdef ENABLE_IMGUI

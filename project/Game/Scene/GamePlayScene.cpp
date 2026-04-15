@@ -1,18 +1,16 @@
 #include "GamePlayScene.h"
-#include "ModelManager.h"
+#include "3D/ModelManager.h"
 #include <Windows.h>
-#include "DirectXCommon.h"
-#include "SpriteCommon.h"
-#include "Object3dCommon.h"
-#include "Input.h"
-#include "ImGuiManager.h"
+#include "engine/Graphics/DirectXCommon.h"
+#include "2D/SpriteCommon.h"
+#include "3D/Object3dCommon.h"
+#include "engine/Input/Input.h"
+#include "engine/Debug/ImGuiManager.h"
 #include <externals/imgui/imgui.h>
 
 
 
 void GamePlayScene::Initialize() {
-
-	
 
 	//カメラ・シーンリソース
 	camera = std::make_unique<Camera>();
@@ -23,6 +21,13 @@ void GamePlayScene::Initialize() {
 	//スプライトの初期化
 	sprite = std::make_unique<Sprite>();
 	sprite->Initialize(SpriteCommon::GetInstance() , "resources/uvChecker.png");
+
+	// SkyboxCommon に DirectX の情報を渡して初期化する！
+	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
+
+	// ★追加：スカイボックスの生成と初期化
+	skybox = std::make_unique<Skybox>();
+	skybox->Initialize("resources/rostock_laage_airport_4k.dds");
 
 	//モデル・パーティクル
 	ModelManager::GetInstance()->LoadModel("plane.obj");
@@ -75,6 +80,9 @@ void GamePlayScene::Update() {
 
 	//カメラの更新
 	camera->Update();
+
+	// カメラの更新後にスカイボックスも更新（カメラの行列を渡す）
+	skybox->Update(camera.get());
 
 	for (Object3d *object3d : objects) {
 		object3d->Update();
@@ -142,6 +150,30 @@ void GamePlayScene::Update() {
 	}
 
 	ImGui::End();
+
+	ImGui::Begin("Camera Settings");
+
+	// ① 現在のカメラの回転角と座標を取得
+	Vector3 camRot = camera->GetRotate();
+	Vector3 camPos = camera->GetTranslate();
+
+	// ② ImGuiで扱いやすいように配列に格納
+	float camRotArr[3] = { camRot.x, camRot.y, camRot.z };
+	float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
+
+	// ③ スライダー（ドラッグ操作）で値を変更できるようにする
+	// ※ 0.01f はマウスでドラッグしたときの変化スピードです
+	if (ImGui::DragFloat3("Rotation (Pitch, Yaw, Roll)", camRotArr, 0.01f)) {
+		// 値が変更されたらカメラに反映
+		camera->SetRotate({ camRotArr[0], camRotArr[1], camRotArr[2] });
+	}
+
+	// （おまけ）位置も変えたい場合
+	if (ImGui::DragFloat3("Position (X, Y, Z)", camPosArr, 0.1f)) {
+		camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
+	}
+
+	ImGui::End();
 #endif
 	sprite->Update();
 }
@@ -158,6 +190,9 @@ void GamePlayScene::Draw() {
 	if (sphereModel) {
 		sphereModel->Draw();
 	}
+
+	// スカイボックスの描画
+	skybox->Draw();
 
 	//Spriteの描画基準
 	SpriteCommon::GetInstance()->SetCommonPipelineState();

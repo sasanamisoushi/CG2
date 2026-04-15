@@ -1,10 +1,10 @@
 #pragma once
 #include "WinApp.h"
-#include "DirectXCommon.h"
-#include "ImGuiManager.h"
-#include "Input.h"
-#include "SpriteCommon.h"
-#include "Object3dCommon.h"
+#include "engine/Graphics/DirectXCommon.h"
+#include "engine/Debug/ImGuiManager.h"
+#include "engine/Input/Input.h"
+#include "2D/SpriteCommon.h"
+#include "3D/Object3dCommon.h"
 
 class Framework {
 public:

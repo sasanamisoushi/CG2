@@ -1,11 +1,12 @@
 #pragma once
-#include "Camera.h"
-#include "Sprite.h"
-#include "Object3d.h"
-#include "ParticleManager.h"
-#include "ParticleEmitter.h"
-#include "AudioManager.h"
-#include "BaseScene.h"
+#include "engine/Camera/Camera.h"
+#include "2D/Sprite.h"
+#include "3D/Object3d.h"
+#include "engine/Particle/ParticleManager.h"
+#include "engine/Particle/ParticleEmitter.h"
+#include "engine/Audio/AudioManager.h"
+#include "Game/base/BaseScene.h"
+#include "3D/Skybox.h"
 #include <memory>
 #include <vector>
 
@@ -30,6 +31,8 @@ private:
 	//シーンリソース
 	std::unique_ptr<Camera> camera;
 	std::unique_ptr<Sprite> sprite;
+
+	std::unique_ptr<Skybox> skybox;
 
 	//パーティクル
 	std::unique_ptr<ParticleManager> particleManager;
