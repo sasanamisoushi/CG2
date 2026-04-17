@@ -27,7 +27,7 @@ void GamePlayScene::Initialize() {
 
 	// ★追加：スカイボックスの生成と初期化
 	skybox = std::make_unique<Skybox>();
-	skybox->Initialize("resources/rostock_laage_airport_4k.dds");
+	skybox->Initialize("resources/SkyBox.dds");
 
 	//モデル・パーティクル
 	ModelManager::GetInstance()->LoadModel("plane.obj");
