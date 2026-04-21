@@ -10,6 +10,7 @@ struct Material
 
 ConstantBuffer<Material> gMaterial : register(b0);
 Texture2D<float32_t4> gTexture : register(t0);
+TextureCube<float32_t4> gEnvironmentMap : register(t1); // 環境マップ用のキューブテクスチャ (t1レジスタに割り当て)
 SamplerState gSampler : register(s0);
 
 struct DirectionalLight
@@ -28,6 +29,14 @@ struct Camera
 };
 ConstantBuffer<Camera> gCamera : register(b2);
 
+// 環境マップ用の設定パラメータ (b3レジスタ)
+struct EnvMapParam
+{
+    int32_t enable; // 0:OFF, 1:ON
+    float32_t weight; // 反射の強さ
+};
+ConstantBuffer<EnvMapParam> gEnvMapParam : register(b3);
+
 struct PixelShaderOutput
 {
     float32_t4 color : SV_TARGET0;
@@ -41,8 +50,11 @@ PixelShaderOutput main(VertexShaderOutput input)
     float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
     float32_t3 toEye = normalize(gCamera.worldPosition - input.worldPosition);
 
+    if (gMaterial.enableLighting != 0)
+    {
+    
     // 1. 光源へ向かうベクトルを求める (directionは光の進む向きなのでマイナスをかける)
-    float32_t3 lightDirection = normalize(-gDirectionalLight.direction);
+        float32_t3 lightDirection = normalize(-gDirectionalLight.direction);
 
     // 2. 視線(toEye)と光(lightDirection)のハーフベクトルを求める
     float32_t3 halfVector = normalize(lightDirection + toEye);
@@ -52,24 +64,38 @@ PixelShaderOutput main(VertexShaderOutput input)
 
     // 4. ハイライトの強さを計算
     float specularPow = pow(saturate(NDotH), gMaterial.shininess);
-    
-    
-    if (gMaterial.enableLighting != 0)
-    {
-         float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
+   
+    float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
+    float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
         
-        float3 diffuse = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+    float3 diffuse = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
         
-        float3 specular = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow * float3(1.0f, 1.0f, 1.0f);
+    float3 specular = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow * float3(1.0f, 1.0f, 1.0f);
         
-        output.color.rgb = diffuse + specular;
-        output.color.a = gMaterial.color.a * textureColor.a;
+    output.color.rgb = diffuse + specular;
+        if (gEnvMapParam.enable != 0) // ONのときだけ実行
+        {
+        // 入射ベクトル
+            float3 incident = -toEye;
+        
+        // 反射ベクトルを計算(入射ベクトルと法線を使用)
+
+            float3 refVector = reflect(incident, normalize(input.normal));
+        
+        // キューブマップから反射した方向の色をサンプリング
+            float4 envColor = gEnvironmentMap.Sample(gSampler, refVector);
+        
+        // 元の色（ディフューズ＋スペキュラー）と、環境マップの色を合成
+        // lerpの第3引数(0.3f)は「反射の強さ(30%映り込む)」です。金属っぽくするなら0.8等に上げます。
+            output.color.rgb = lerp(output.color.rgb, envColor.rgb, 0.3f);
+        }
     }
     else
     {
-        output.color = gMaterial.color * textureColor;
+        output.color.rgb = gMaterial.color.rgb * textureColor.rgb;
     }
+    
+    output.color.a = gMaterial.color.a * textureColor.a;
     
     //textureのa値が0.5以下のときにPixelを破棄
     if (textureColor.a <= 0.5)

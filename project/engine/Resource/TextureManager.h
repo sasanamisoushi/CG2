@@ -32,6 +32,8 @@ public:
 	//メタデータの取得
 	const DirectX::TexMetadata &GetMetaData(const std::string& filePath);
 	
+	// コマンドリストに指定したテクスチャをセットする
+	void SetGraphicsRootDescriptorTable(ID3D12GraphicsCommandList *commandList, UINT rootParameterIndex, const std::string &filePath);
 
 private:
 	static TextureManager *instance;

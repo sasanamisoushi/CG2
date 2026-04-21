@@ -31,6 +31,13 @@ struct CameraForGPU {
 	Vector3 worldPosition;
 };
 
+// 環境マップの設定構造体（HLSLと合わせる）
+struct EnvMapParam {
+	int32_t enable;
+	float weight;
+	float padding[2];  // 8バイト
+};
+
 class Object3d {
 public: 
 
@@ -51,6 +58,9 @@ public:
 
 	// カメラデータ作成関数
 	void CreateCameraData();
+
+	// データ作成関数
+	void CreateEnvMapParamData();
 
 	Transform transform;
 	//Transform cameraTransform;
@@ -98,5 +108,10 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource;
 	CameraForGPU *cameraData = nullptr;
 	
+
+	// 環境マップパラメータ用のリソースとポインタ
+	Microsoft::WRL::ComPtr<ID3D12Resource> envMapParamResource_;
+	EnvMapParam *envMapParamData_ = nullptr;
+
 };
 

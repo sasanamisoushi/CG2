@@ -48,13 +48,20 @@ void Object3dCommon::CreateRootSignature() {
 	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
+	// t1 環境マップ用のレンジ
+	D3D12_DESCRIPTOR_RANGE descriptorRangeEnvMap[1] = {};
+	descriptorRangeEnvMap[0].BaseShaderRegister = 1;
+	descriptorRangeEnvMap[0].NumDescriptors = 1;
+	descriptorRangeEnvMap[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorRangeEnvMap[0].OffsetInDescriptorsFromTableStart= D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
 	// RootSignature作成
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	descriptionRootSignature.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
-	// RootParameter作成 (4つ定義)
-	D3D12_ROOT_PARAMETER rootParamerers[5] = {};
+	// RootParameter作成 
+	D3D12_ROOT_PARAMETER rootParamerers[7] = {};
 
 	// 0: マテリアルCBV (b0, PixelShader)
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -81,6 +88,17 @@ void Object3dCommon::CreateRootSignature() {
 	rootParamerers[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[4].Descriptor.ShaderRegister = 2;
+
+	// 5: 環境マップDescriptorTable (t1, PixelShader)
+	rootParamerers[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParamerers[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[5].DescriptorTable.pDescriptorRanges = descriptorRangeEnvMap;
+	rootParamerers[5].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeEnvMap);
+
+	// 6: 環境マップパラメータCBV (b3, PixelShader)
+	rootParamerers[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParamerers[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[6].Descriptor.ShaderRegister = 3; // b3 に対応
 
 	descriptionRootSignature.pParameters = rootParamerers;
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);

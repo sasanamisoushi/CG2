@@ -5,12 +5,15 @@
 #include <sstream>
 #include <string>
 #include <wrl.h>
+#include <externals/imgui/imgui.h>
 
 using Microsoft::WRL::ComPtr;
 
 void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	this->object3dCommon = object3dCommon;
+
+	TextureManager::GetInstance()->LoadTexture("resources/SkyBox.dds");
 
 	////モデルの読み込み
 	//modelData = LoadObjFile("resources", "plane.obj");
@@ -30,6 +33,9 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	// カメラ用のデータの生成
 	CreateCameraData();
 
+	// データ作成関数
+	CreateEnvMapParamData();
+
 	transform={ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 	//cameraTransform={ { 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, { 0.0f,0.0f,-10.0f } };
 
@@ -41,6 +47,29 @@ void Object3d::Update() {
 
 	transform.rotate.y += 0.01f;
 
+	// ImGuiで環境マップの設定ウィンドウを作る
+#ifdef ENABLE_IMGUI 
+	ImGui::Begin("Environment Map Settings");
+
+	// オブジェクト自身のメモリアドレスをIDにして、ImGuiの混乱を防ぐ！
+	ImGui::PushID(this);
+
+	// bool変換用の一時変数
+	bool isEnvMapEnabled = envMapParamData_->enable != 0;
+	if (ImGui::Checkbox("Enable EnvMap", &isEnvMapEnabled)) {
+		envMapParamData_->enable = isEnvMapEnabled ? 1 : 0;
+	}
+
+	// 反射率のスライダー (0.0 ～ 1.0)
+	ImGui::SliderFloat("Reflectivity", &envMapParamData_->weight, 0.0f, 1.0f);
+
+	// Pushしたら必ずPopする！
+	ImGui::PopID();
+
+	ImGui::End();
+#endif
+
+	
 	
 
 	Matrix4x4 worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
@@ -75,6 +104,11 @@ void Object3d::Draw() {
 
 	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(
 		4, cameraResource->GetGPUVirtualAddress());
+
+	// 環境マップをインデックス5(t1)にセットする
+	TextureManager::GetInstance()->SetGraphicsRootDescriptorTable(object3dCommon->GetDxCommon()->GetCommandList(), 5, "resources/SkyBox.dds");
+
+	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(6, envMapParamResource_->GetGPUVirtualAddress());
 
 	//3Dモデルが割り当てられたら描画する
 	if (model) {
@@ -253,6 +287,17 @@ void Object3d::CreateCameraData() {
 	cameraData->worldPosition = { 0.0f, 0.0f, 0.0f };
 
 
+}
+
+void Object3d::CreateEnvMapParamData() {
+
+	// リソース生成 (CreateBufferResource内部で256バイトアライメントされている前提)
+	envMapParamResource_ = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(EnvMapParam));
+	// マップ
+	envMapParamResource_->Map(0, nullptr, reinterpret_cast<void **>(&envMapParamData_));
+	// 初期値
+	envMapParamData_->enable = 1;      // 最初はON
+	envMapParamData_->weight = 0.3f;   // 30%の反射
 }
 
 void Object3d::SetModel(const std::string &filepath) {

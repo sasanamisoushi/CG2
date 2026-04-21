@@ -135,3 +135,11 @@ const DirectX::TexMetadata &TextureManager::GetMetaData(const std::string &fileP
 	TextureData &textureData = textureDatas[filePath];
 	return textureData.metadata;
 }
+
+void TextureManager::SetGraphicsRootDescriptorTable(ID3D12GraphicsCommandList *commandList, UINT rootParameterIndex, const std::string &filePath) {
+	// 指定されたファイルパスのテクスチャが読み込まれているかチェック
+	assert(textureDatas.contains(filePath) && "Texture is not loaded.");
+
+	// GPUハンドルを取得して、コマンドリストの指定インデックスにセットする
+	commandList->SetGraphicsRootDescriptorTable(rootParameterIndex, textureDatas.at(filePath).srvHandleGPU);
+}
