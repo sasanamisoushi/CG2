@@ -87,7 +87,7 @@ PixelShaderOutput main(VertexShaderOutput input)
         
         // 元の色（ディフューズ＋スペキュラー）と、環境マップの色を合成
         // lerpの第3引数(0.3f)は「反射の強さ(30%映り込む)」です。金属っぽくするなら0.8等に上げます。
-            output.color.rgb = lerp(output.color.rgb, envColor.rgb, 0.3f);
+            output.color.rgb = output.color.rgb + (envColor.rgb * gEnvMapParam.weight);
         }
     }
     else
