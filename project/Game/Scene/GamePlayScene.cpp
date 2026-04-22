@@ -25,7 +25,7 @@ void GamePlayScene::Initialize() {
 	// SkyboxCommon に DirectX の情報を渡して初期化する！
 	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
-	// ★追加：スカイボックスの生成と初期化
+	// スカイボックスの生成と初期化
 	skybox = std::make_unique<Skybox>();
 	skybox->Initialize("resources/SkyBox.dds");
 
@@ -34,19 +34,42 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
 
-	//1つ目のオブジェクト
-	objA = std::make_unique<Object3d>();
-	objA->Initialize(Object3dCommon::GetInstance());
-	objA->SetModel("plane.obj");
-	objA->transform.translate = { -2.0f,0.0f,0.0f };
-	objects.push_back(objA.get());
+	////1つ目のオブジェクト
+	//objA = std::make_unique<Object3d>();
+	//objA->Initialize(Object3dCommon::GetInstance());
+	//objA->SetModel("plane.obj");
+	//objA->transform.translate = { -2.0f,0.0f,0.0f };
+	//objects.push_back(objA.get());
 
 	//２つ目のオブジェクト
-	objB = std::make_unique<Object3d>();
+	/*objB = std::make_unique<Object3d>();
 	objB->Initialize(Object3dCommon::GetInstance());
 	objB->SetModel("Sphere");
 	objB->transform.translate = { 2.0f,0.0f,0.0f };
-	objects.push_back(objB.get());
+	objects.push_back(objB.get());*/
+
+	//======================================================
+	// プリミティブの生成！
+	//======================================================
+
+	// 平面
+	myPlane = std::make_unique<Primitive>();
+	// ここで PrimitiveType::Plane を渡すだけで平面になる！
+	myPlane->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Plane);
+	myPlane->SetTranslate({ 0.0f, 2.0f, 0.0f }); // 上の方に配置
+	objects.push_back(myPlane.get()); // objects配列に入れればUpdateとDrawは自動で呼ばれる
+
+	// 球体
+	myShere = std::make_unique<Primitive>();
+	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
+	myShere->SetTranslate({ 2.0f,0.0f,0.0f });
+	objects.push_back(myShere.get());
+
+	// ボックス
+	myBox = std::make_unique<Primitive>();
+	myBox->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Box);
+	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
+	objects.push_back(myBox.get());
 
 	//パーティクル
 	particleManager = std::make_unique<ParticleManager>();
@@ -118,38 +141,38 @@ void GamePlayScene::Update() {
 
 	ImGui::End();
 
-	ImGui::Begin("Settings");
+	//ImGui::Begin("Settings");
 
 	
-	if (objB!= nullptr) {
-		// ライトのデータ（ポインタ）を取得
-		DirectionalLight *lightData = objB->GetDirectionalLightData();
+	//if (objB!= nullptr) {
+	//	// ライトのデータ（ポインタ）を取得
+	//	DirectionalLight *lightData = objB->GetDirectionalLightData();
 
-		if (lightData != nullptr) {
-			// ① ライトの色（RGBA）
-			ImGui::ColorEdit4("Light Color", &lightData->color.x);
+	//	if (lightData != nullptr) {
+	//		// ① ライトの色（RGBA）
+	//		ImGui::ColorEdit4("Light Color", &lightData->color.x);
 
-			// ② ライトの向き（X, Y, Z）
-			ImGui::DragFloat3("Light Direction", &lightData->direction.x, 0.01f, -1.0f, 1.0f);
+	//		// ② ライトの向き（X, Y, Z）
+	//		ImGui::DragFloat3("Light Direction", &lightData->direction.x, 0.01f, -1.0f, 1.0f);
 
-			// ③ ライトの明るさ
-			ImGui::DragFloat("Light Intensity", &lightData->intensity, 0.01f, 0.0f, 10.0f);
-		}
+	//		// ③ ライトの明るさ
+	//		ImGui::DragFloat("Light Intensity", &lightData->intensity, 0.01f, 0.0f, 10.0f);
+	//	}
 
-		// ① 現在のスケールを取得する（関数名はご自身の環境に合わせてください）
-		Vector3 currentScale = objB->GetScale();
+	//	// ① 現在のスケールを取得する（関数名はご自身の環境に合わせてください）
+	//	Vector3 currentScale = objB->GetScale();
 
-		// ImGuiで使いやすいように配列に入れる
-		float scale[3] = { currentScale.x, currentScale.y, currentScale.z };
+	//	// ImGuiで使いやすいように配列に入れる
+	//	float scale[3] = { currentScale.x, currentScale.y, currentScale.z };
 
-		// ② スケールを変更できるスライダー（X, Y, Z を個別にイジれる）
-		ImGui::DragFloat3("Scale", scale, 0.01f, 0.1f, 10.0f);
+	//	// ② スケールを変更できるスライダー（X, Y, Z を個別にイジれる）
+	//	ImGui::DragFloat3("Scale", scale, 0.01f, 0.1f, 10.0f);
 
-		// ③ 変更されたスケールをオブジェクトに反映する
-		objB->SetScale({ scale[0], scale[1], scale[2] });
-	}
+	//	// ③ 変更されたスケールをオブジェクトに反映する
+	//	objB->SetScale({ scale[0], scale[1], scale[2] });
+	//}
 
-	ImGui::End();
+	//ImGui::End();
 
 	ImGui::Begin("Camera Settings");
 
@@ -186,10 +209,7 @@ void GamePlayScene::Draw() {
 		object3d->Draw();
 	}
 
-	Model *sphereModel = ModelManager::GetInstance()->FindModel("Sphere");
-	if (sphereModel) {
-		sphereModel->Draw();
-	}
+	
 
 	// スカイボックスの描画
 	skybox->Draw();

@@ -66,3 +66,19 @@ void ModelManager::CreateSphereModel(const std::string &modelName, int subdivisi
 	// マップに登録
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
+
+void ModelManager::CreatePlaneModel(const std::string &modelName) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializePlane(modelCommon.get());
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}
+
+void ModelManager::CreateBoxModel(const std::string &modelName) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializeBox(modelCommon.get());
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}

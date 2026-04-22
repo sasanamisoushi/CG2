@@ -7,6 +7,7 @@
 #include "engine/Audio/AudioManager.h"
 #include "Game/base/BaseScene.h"
 #include "3D/Skybox.h"
+#include "3D/primitive.h"
 #include <memory>
 #include <vector>
 
@@ -40,8 +41,6 @@ private:
 
 	//モデル
 	std::vector<Object3d *> objects;
-	std::unique_ptr<Object3d> objA;
-	std::unique_ptr<Object3d> objB;
 
 	//音声データ
 	SoundData soundData1;
@@ -50,5 +49,10 @@ private:
 	// 再生中のボイスを管理するポイインタ
 	IXAudio2SourceVoice *pVoice1 = nullptr;
 	IXAudio2SourceVoice *pVoice2 = nullptr;
+
+	// プリミティブ
+	std::unique_ptr<Primitive> myPlane;
+	std::unique_ptr<Primitive> myShere;
+	std::unique_ptr<Primitive> myBox;
 };
 

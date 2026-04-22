@@ -22,6 +22,12 @@ public:
 	// 球モデルの作成
 	void CreateSphereModel(const std::string &modelName, int subdivision);
 
+	// 平面モデルの作成
+	void CreatePlaneModel(const std::string &modelName);
+
+	// ボックスモデルの作成
+	void CreateBoxModel(const std::string &modelName);
+
 private:
 	static ModelManager *instance;
 

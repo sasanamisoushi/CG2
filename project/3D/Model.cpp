@@ -257,3 +257,107 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 	modelData.material.textureIndex =
 		TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
 }
+
+void Model::InitializePlane(ModelCommon *modelCommon) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	// 平面を構成する4つの頂点（XY平面、幅2、高さ2）
+	VertexData v[4];
+	// 左下
+	v[0].position = { -1.0f, -1.0f, 0.0f, 1.0f };
+	v[0].texcoord = { 0.0f, 1.0f };
+	v[0].normal = { 0.0f, 0.0f, -1.0f };
+	// 左上
+	v[1].position = { -1.0f, 1.0f, 0.0f, 1.0f };
+	v[1].texcoord = { 0.0f, 0.0f };
+	v[1].normal = { 0.0f, 0.0f, -1.0f };
+	// 右下
+	v[2].position = { 1.0f, -1.0f, 0.0f, 1.0f };
+	v[2].texcoord = { 1.0f, 1.0f };
+	v[2].normal = { 0.0f, 0.0f, -1.0f };
+	// 右上
+	v[3].position = { 1.0f, 1.0f, 0.0f, 1.0f };
+	v[3].texcoord = { 1.0f, 0.0f };
+	v[3].normal = { 0.0f, 0.0f, -1.0f };
+
+	// 三角形リストとして展開（インデックスを使わない直書き）
+	// 三角形1（左下、左上、右下）
+	modelData.vertices.push_back(v[0]);
+	modelData.vertices.push_back(v[1]);
+	modelData.vertices.push_back(v[2]);
+	// 三角形2（左上、右上、右下）
+	modelData.vertices.push_back(v[1]);
+	modelData.vertices.push_back(v[3]);
+	modelData.vertices.push_back(v[2]);
+
+	// バッファ作成
+	CreateVertexData();
+	CreateMaterialData();
+
+	// テクスチャの設定（仮としてuvCheckerを使用）
+	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::InitializeBox(ModelCommon *modelCommon) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	// 箱の角になる8つの頂点座標（幅2、高さ2、奥行き2）
+	Vector4 p[8] = {
+		{-1.0f, -1.0f, -1.0f, 1.0f}, // 0: 左下・手前
+		{-1.0f,  1.0f, -1.0f, 1.0f}, // 1: 左上・手前
+		{ 1.0f, -1.0f, -1.0f, 1.0f}, // 2: 右下・手前
+		{ 1.0f,  1.0f, -1.0f, 1.0f}, // 3: 右上・手前
+		{-1.0f, -1.0f,  1.0f, 1.0f}, // 4: 左下・奥
+		{-1.0f,  1.0f,  1.0f, 1.0f}, // 5: 左上・奥
+		{ 1.0f, -1.0f,  1.0f, 1.0f}, // 6: 右下・奥
+		{ 1.0f,  1.0f,  1.0f, 1.0f}  // 7: 右上・奥
+	};
+
+	// 6つの面が向いている方向（法線）
+	Vector3 nFront = { 0.0f,  0.0f, -1.0f };
+	Vector3 nBack = { 0.0f,  0.0f,  1.0f };
+	Vector3 nLeft = { -1.0f,  0.0f,  0.0f };
+	Vector3 nRight = { 1.0f,  0.0f,  0.0f };
+	Vector3 nTop = { 0.0f,  1.0f,  0.0f };
+	Vector3 nBottom = { 0.0f, -1.0f,  0.0f };
+
+	// テクスチャのUV座標
+	Vector2 uv00 = { 0.0f, 1.0f };
+	Vector2 uv01 = { 0.0f, 0.0f };
+	Vector2 uv10 = { 1.0f, 1.0f };
+	Vector2 uv11 = { 1.0f, 0.0f };
+
+	// 面（四角形＝三角形2枚）を作る便利関数
+	auto addFace = [&](int i0, int i1, int i2, int i3, Vector3 n) {
+		modelData.vertices.push_back({ p[i0], uv00, n });
+		modelData.vertices.push_back({ p[i1], uv01, n });
+		modelData.vertices.push_back({ p[i2], uv10, n });
+
+		modelData.vertices.push_back({ p[i1], uv01, n });
+		modelData.vertices.push_back({ p[i3], uv11, n });
+		modelData.vertices.push_back({ p[i2], uv10, n });
+		};
+
+	// 前, 奥, 左, 右, 上, 下 の6面を作る
+	addFace(0, 1, 2, 3, nFront);
+	addFace(6, 7, 4, 5, nBack);
+	addFace(4, 5, 0, 1, nLeft);
+	addFace(2, 3, 6, 7, nRight);
+	addFace(1, 5, 3, 7, nTop);
+	addFace(4, 0, 6, 2, nBottom);
+
+	// バッファ作成
+	CreateVertexData();
+	CreateMaterialData();
+
+	// テクスチャの設定
+	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}

@@ -52,6 +52,12 @@ public:
 	// 球の初期化
 	void InitializeSphere(ModelCommon *modelCommon, int subdivision);
 
+	// 平面の初期化
+	void InitializePlane(ModelCommon *modelCommon);
+
+	// ボックスの初期化
+	void InitializeBox(ModelCommon *modelCommon);
+
 private:
 	ModelCommon *modelCommon_;
 

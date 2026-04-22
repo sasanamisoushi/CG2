@@ -75,7 +75,7 @@ IDxcBlob *CompileShader(
 	assert(SUCCEEDED(hr));
 
 	// 7. 成功したらログを出す
-	message =StringUtility::ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile));
+	message = StringUtility::ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile));
 	logger.Log(message);
 
 	// ComPtrを使っているので手動Releaseは不要です
@@ -86,9 +86,9 @@ IDxcBlob *CompileShader(
 
 
 void ParticleManager::Initialize(DirectXCommon *dxCommon) {
-   // -------------------------------------------------------------
-   // 引数でDirectXCommonとSrvManagerのポインタを受け取って記録する
-   // -------------------------------------------------------------
+	// -------------------------------------------------------------
+	// 引数でDirectXCommonとSrvManagerのポインタを受け取って記録する
+	// -------------------------------------------------------------
 
 	dxCommon_ = dxCommon;
 
@@ -182,7 +182,7 @@ void ParticleManager::Initialize(DirectXCommon *dxCommon) {
 	vertexResource_->Unmap(0, nullptr);
 }
 
-void ParticleManager::Update(Camera* camera) {
+void ParticleManager::Update(Camera *camera) {
 	assert(camera); // カメラがないと描画計算ができません
 
 	// 1. カメラ情報の取得
@@ -237,8 +237,17 @@ void ParticleManager::Update(Camera* camera) {
 			Matrix4x4 scaleMat = myMath.MkeScaleMatrix(it->transform.scale);
 			Matrix4x4 translateMat = myMath.MakeTranslateMatrix(it->transform.translate);
 
+			// Z軸の回転行列を作成
+			// （MyMathに MakeRotateZMatrix が無ければ、直接計算して作ります）
+			Matrix4x4 rotateZMat = myMath.MakeIdentity4x4();
+			rotateZMat.m[0][0] = std::cos(it->transform.rotate.z);
+			rotateZMat.m[0][1] = std::sin(it->transform.rotate.z);
+			rotateZMat.m[1][0] = -std::sin(it->transform.rotate.z);
+			rotateZMat.m[1][1] = std::cos(it->transform.rotate.z);
+
 			// 行列の合成 (Scale * Billboard * Translate)
-			Matrix4x4 worldMatrix = myMath.Multiply(scaleMat, matBillboard);
+			Matrix4x4 worldMatrix = myMath.Multiply(scaleMat, rotateZMat);
+			worldMatrix = myMath.Multiply(worldMatrix, matBillboard);
 			worldMatrix = myMath.Multiply(worldMatrix, translateMat);
 
 
@@ -405,18 +414,23 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 	static std::random_device seed_gen;
 	static std::mt19937_64 engine(seed_gen());
 
-	// ランダムの分布設定 (必要に応じて数値を調整してください)
+	//// ランダムの分布設定 (必要に応じて数値を調整してください)
 	std::uniform_real_distribution<float> distDir(-1.0f, 1.0f);   // 方向用 (-1.0 ~ 1.0)
-	std::uniform_real_distribution<float> distPos(-0.1f, 0.1f);   // 発生位置のズレ
-	std::uniform_real_distribution<float> distLife(1.0f, 3.0f);   // 寿命 (1秒 ~ 3秒)
+	//std::uniform_real_distribution<float> distPos(-0.1f, 0.1f);   // 発生位置のズレ
+	//std::uniform_real_distribution<float> distLife(1.0f, 3.0f);   // 寿命 (1秒 ~ 3秒)
+
+	std::uniform_real_distribution<float> distRotate(-3.14159265f, 3.14159265f);
+	std::uniform_real_distribution<float> distScale(0.4f, 1.5f);
+	std::uniform_real_distribution<float> distPos(-0.1f, 0.1f);
+	std::uniform_real_distribution<float> distLife(0.5f, 1.0f); // ヒットエフェクトなので寿命は短めに
 
 	// 3. 指定された数だけパーティクルを生成
 	for (uint32_t i = 0; i < count; ++i) {
 		Particle newParticle{};
 
 		// ■ Transform (位置・スケール・回転)
-		newParticle.transform.scale = { 1.0f, 1.0f, 1.0f };
-		newParticle.transform.rotate = { 0.0f, 0.0f, 0.0f };
+		newParticle.transform.scale = { 0.05f, distScale(engine), 1.0f };
+		newParticle.transform.rotate = { 0.0f, 0.0f, distRotate(engine) };
 
 		// 指定された座標に、少しランダムなズレを加える（一点から重なって出ないように）
 		newParticle.transform.translate = {
@@ -434,6 +448,9 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 			distDir(engine) * kSpeed,
 			distDir(engine) * kSpeed
 		};
+
+		// Velocity (速度)
+		newParticle.velocity = { 0.0f, 0.0f, 0.0f };
 
 		// ■ Color (色)
 		newParticle.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白
@@ -481,7 +498,7 @@ void ParticleManager::CreateRootSignature() {
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;
 	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
-	
+
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[3].Descriptor.ShaderRegister = 1;
@@ -534,7 +551,7 @@ void ParticleManager::CreatePipelineState() {
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
-	
+
 
 	//RasiterzerStateの設定
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -546,7 +563,7 @@ void ParticleManager::CreatePipelineState() {
 	//シェーダーのコンパイル
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob;
 	vertexShaderBlob = CompileShader(L"resources/shaders/Particle.VS.hlsl",
-		L"vs_6_0", dxcUtils.Get(),dxcCompiler.Get(),includeHandler.Get());
+		L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get());
 	assert(vertexShaderBlob != nullptr);
 
 	Microsoft::WRL::ComPtr<IDxcBlob> pixelShaderBlob;
@@ -590,7 +607,7 @@ void ParticleManager::CreatePipelineState() {
 	//PixelShader
 	graphicsPipelineStateDesc.PS = { pixelShaderBlob->GetBufferPointer(),
 	pixelShaderBlob->GetBufferSize() };
-	
+
 	//BlendStateの設定
 	D3D12_BLEND_DESC blendDesc{};
 	//すべての色要素を書き込む

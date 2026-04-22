@@ -28,7 +28,8 @@ void ParticleEmitter::Emit() {
         // pManager_を通してEmitを呼び出す
         // name -> name_ (メンバ変数)
         // transform.translate -> position_ (メンバ変数)
-        // count -> 3 (ひとまず3個。変数化したい場合はヘッダーに count_ を追加)
-        pManager_->Emit(name_, position_, 3);
+        // count -> n (ひとまずn個。変数化したい場合はヘッダーに count_ を追加)
+        pManager_->Emit(name_, position_, 8);
     }
+
 }
