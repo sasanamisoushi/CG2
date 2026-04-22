@@ -24,7 +24,7 @@ void PostEffect::Initialize() {
     rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParams[1].Constants.ShaderRegister = 0; // b0レジスタ
-    rootParams[1].Constants.Num32BitValues = 1; // int 1つ分
+    rootParams[1].Constants.Num32BitValues = 4; // int 1つ分
 
     D3D12_STATIC_SAMPLER_DESC sampler = {};
     sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -88,7 +88,7 @@ void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
     commandList->SetGraphicsRootDescriptorTable(0, srvHandle);
 
     // 1番目：定数（effectType_）をGPUに直接セット！
-    commandList->SetGraphicsRoot32BitConstants(1, 1, &effectType_, 0);
+    commandList->SetGraphicsRoot32BitConstants(1, 4, &param_, 0);
 
     // 魔法の三角形を描画（頂点バッファなしで、頂点3つを描画と指示するだけ）
     commandList->DrawInstanced(3, 1, 0, 0);
@@ -97,11 +97,22 @@ void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
 void PostEffect::DrawImGui() {
 #ifdef ENABLE_IMGUI
     ImGui::Begin("Post Effect Settings");
-    // ラジオボタンで切り替え（選んだものが effectType_ に入る）
-    ImGui::RadioButton("Normal", &effectType_, 0);
-    ImGui::RadioButton("Grayscale", &effectType_, 1);
-    ImGui::RadioButton("Invert", &effectType_, 2);
-    ImGui::RadioButton("Sepia", &effectType_, 3);
+
+    // エフェクト選択
+    const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia", "Vignette", "3x3 Box Filter", "5x5 Box Filter","Gaussian Blur" };
+    ImGui::Combo("Type", &param_.effectType, items, IM_ARRAYSIZE(items));
+
+    ImGui::Separator();
+
+    // エフェクトごとの数値調整
+    if (param_.effectType == 4) { // Vignette
+        ImGui::Text("Vignette Parameters");
+        ImGui::SliderFloat("Radius", &param_.vignetteRadius, 0.0f, 1.0f);
+        ImGui::SliderFloat("Softness", &param_.vignetteSoftness, 0.01f, 1.0f);
+    } else if (param_.effectType >= 5 && param_.effectType <= 7) { // Box Filter
+        ImGui::Text("Blur Parameters");
+        ImGui::SliderFloat("Intensity", &param_.blurIntensity, 0.0f, 10.0f);
+    }
     ImGui::End();
 #endif
 }
