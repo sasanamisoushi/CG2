@@ -2,6 +2,8 @@
 #include <memory>
 #include "Framework.h"
 #include "SceneFactory.h"
+#include "engine/Graphics/RenderTexture.h"
+#include "engine/Graphics/PostEffect.h"
 
 class Game : public Framework {
 public:
@@ -22,5 +24,11 @@ private:
 
 	//シーンファクトリー
 	std::unique_ptr<AbstractSceneFactory> sceneFactory_;
+
+	// オフスクリーンレンダリング用のテクスチャ
+	std::unique_ptr<RenderTexture> renderTexture_;
+
+	// ポストエフェクト
+	std::unique_ptr<PostEffect> postEffect_;
 };
 

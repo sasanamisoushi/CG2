@@ -67,10 +67,13 @@ public:
 	void InitializeImGui();
 
 	//描画前処理
-	void PreDraw(class SrvManager *srvManager);
+	void PreDraw(class SrvManager *srvManager, D3D12_CPU_DESCRIPTOR_HANDLE renderTextureRtvHandle);
 
 	//描画後処理
 	void PostDraw();
+
+	//スワップチェーンの描画前処理
+	void PreDrawSwapchain();
 
 	//getter
 	ID3D12Device *GetDevice() { return device.Get(); }
@@ -105,6 +108,8 @@ public:
 
 	//最大SRV数
 	static const uint32_t kMaxSRVCount;
+
+	D3D12_CPU_DESCRIPTOR_HANDLE GetNewRtvHandle();
 
 private:
 
@@ -199,7 +204,8 @@ private:
 		return (size + 255) & ~255;
 	}
 	
-
+	// RTVの現在の使用数
+	uint32_t rtvHeapIndex_ = 2;
 };
 
 

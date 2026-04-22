@@ -135,6 +135,12 @@
     <ClCompile Include="3D\Primitive.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="engine\Graphics\RenderTexture.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Graphics\PostEffect.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\shaders\Object3d.VS.hlsl" />
@@ -242,6 +248,12 @@
     <ClInclude Include="3D\Primitive.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="engine\Graphics\RenderTexture.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Graphics\PostEffect.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\shaders\object3d.hlsli" />
@@ -252,5 +264,8 @@
     <None Include="resources\shaders\Sprite.VS.hlsl" />
     <None Include="resources\shaders\Particle.hlsli" />
     <None Include="resources\shaders\Skybox.hlsli" />
+    <None Include="resources\shaders\CopyImage.hlsli" />
+    <None Include="resources\shaders\CopyImage.PS.hlsl" />
+    <None Include="resources\shaders\CopyImage.VS.hlsl" />
   </ItemGroup>
 </Project>

@@ -269,8 +269,8 @@ void DirectXCommon::CreateDescriptorHeaps() {
 	this->descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 
-	//RTV用のヒープでディスクリプタの数は２。　RTVはShader内で触る物ではないので、shaderVisibleはfalse
-	this->rtvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
+	//RTV用のヒープでディスクリプタの数は10。　RTVはShader内で触る物ではないので、shaderVisibleはfalse
+	this->rtvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 10, false);
 
 	//SRV用のヒープでディスクリプタの数は128。SRVはShaderVisibleはtrue
 	this->srvDescriptorHeap = CreateDescriptorHesp(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kMaxSRVCount, true);
@@ -403,31 +403,31 @@ void DirectXCommon::InitializeImGui() {
 		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 }
 
-void DirectXCommon::PreDraw(SrvManager *srvManager) {
+void DirectXCommon::PreDraw(SrvManager *srvManager, D3D12_CPU_DESCRIPTOR_HANDLE renderTextureRtvHandle) {
 
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
 	
-	//今回のバリアはTransition
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	//Noneにしておく
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	//バリアを張る対象のリソース。現在のバックバッファに対して使う
-	barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
-	//前のResourceState
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-	//後のResourceState
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	//TransitionBarrierを張る
-	commandList->ResourceBarrier(1, &barrier);
+	////今回のバリアはTransition
+	//barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	////Noneにしておく
+	//barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	////バリアを張る対象のリソース。現在のバックバッファに対して使う
+	//barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
+	////前のResourceState
+	//barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	////後のResourceState
+	//barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	////TransitionBarrierを張る
+	//commandList->ResourceBarrier(1, &barrier);
 
 	//描画先のRTVとDSVを設定する
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+	commandList->OMSetRenderTargets(1, &renderTextureRtvHandle, false, &dsvHandle);
 
 	//指定した色での画面全体をクリアする
 	float clearColor[] = { 0.1f,0.25,0.5,1.0f };
-	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+	commandList->ClearRenderTargetView(renderTextureRtvHandle, clearColor, 0, nullptr);
 
 	//指定した深度で画面全体をクリアする
 	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -490,6 +490,31 @@ void DirectXCommon::PostDraw() {
 	assert(SUCCEEDED(hr));
 	hr = commandList->Reset(commandAllocator.Get(), nullptr);
 	assert(SUCCEEDED(hr));
+}
+
+void DirectXCommon::PreDrawSwapchain() {
+	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+
+	// ここで初めてスワップチェーン用のバリアを張る
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = swapChainResources[backBufferIndex].Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	commandList->ResourceBarrier(1, &barrier);
+
+	// スライド3枚目：Swapchainに対してOMSetRenderTargets
+	// ※Depth(dsvHandle)は不要なので nullptr を渡す！
+	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
+
+	// スライド3枚目：Swapchainの画面をクリア
+	float clearColor[] = { 0.0f, 0.0f, 0.0f, 1.0f }; // 画面の余白は黒
+	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+
+	// ※SwapchainではDepthを使わないので ClearDepthStencilView は呼ばない！
+
+	commandList->RSSetViewports(1, &viewport);
+	commandList->RSSetScissorRects(1, &scissorRecct);
 }
 
 Microsoft::WRL::ComPtr<IDxcBlob> DirectXCommon::CompileShader(const std::wstring &filePath, const wchar_t *profile) {
@@ -670,6 +695,19 @@ D3D12_GPU_DESCRIPTOR_HANDLE DirectXCommon::GetGPUDescriptorHandle(const Microsof
 	D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
 	handleGPU.ptr += (descriptorSize * index);
 	return handleGPU;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE DirectXCommon::GetNewRtvHandle() {
+	// ヒープの先頭アドレスを取得
+	D3D12_CPU_DESCRIPTOR_HANDLE handle = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
+	// 現在の空き番号（rtvHeapIndex_）の場所までアドレスをずらす
+	handle.ptr += (descriptorSizeRTV * rtvHeapIndex_);
+
+	// 次に呼ばれた時のために番号を1増やす（3, 4, 5...と増えていく）
+	rtvHeapIndex_++;
+
+	return handle;
 }
 
 void DirectXCommon::InitialieFixFPS() {
