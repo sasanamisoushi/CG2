@@ -1,5 +1,6 @@
 #include "PostEffect.h"
 #include <cassert>
+#include <externals/imgui/imgui.h>
 
 void PostEffect::Initialize() {
 
@@ -13,11 +14,17 @@ void PostEffect::Initialize() {
     range[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
     range[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParams[1] = {};
+    D3D12_ROOT_PARAMETER rootParams[2] = {};
     rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
     rootParams[0].DescriptorTable.pDescriptorRanges = range;
     rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
+
+    // 32ビット定数（b0に int を1つ送る設定）
+    rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[1].Constants.ShaderRegister = 0; // b0レジスタ
+    rootParams[1].Constants.Num32BitValues = 1; // int 1つ分
 
     D3D12_STATIC_SAMPLER_DESC sampler = {};
     sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -32,7 +39,7 @@ void PostEffect::Initialize() {
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     rootSignatureDesc.pParameters = rootParams;
-    rootSignatureDesc.NumParameters = 1;
+    rootSignatureDesc.NumParameters = 2;
     rootSignatureDesc.pStaticSamplers = &sampler;
     rootSignatureDesc.NumStaticSamplers = 1;
 
@@ -77,9 +84,24 @@ void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
     commandList->SetPipelineState(pipelineState_.Get());
     commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    // ★重要：RenderTextureの画像（SRV）をセットする
+    // RenderTextureの画像（SRV）をセットする
     commandList->SetGraphicsRootDescriptorTable(0, srvHandle);
+
+    // 1番目：定数（effectType_）をGPUに直接セット！
+    commandList->SetGraphicsRoot32BitConstants(1, 1, &effectType_, 0);
 
     // 魔法の三角形を描画（頂点バッファなしで、頂点3つを描画と指示するだけ）
     commandList->DrawInstanced(3, 1, 0, 0);
+}
+
+void PostEffect::DrawImGui() {
+#ifdef ENABLE_IMGUI
+    ImGui::Begin("Post Effect Settings");
+    // ラジオボタンで切り替え（選んだものが effectType_ に入る）
+    ImGui::RadioButton("Normal", &effectType_, 0);
+    ImGui::RadioButton("Grayscale", &effectType_, 1);
+    ImGui::RadioButton("Invert", &effectType_, 2);
+    ImGui::RadioButton("Sepia", &effectType_, 3);
+    ImGui::End();
+#endif
 }

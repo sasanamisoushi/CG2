@@ -46,6 +46,8 @@ void Game::Update() {
 #ifdef ENABLE_IMGUI
 	//-----ImGuiのフレーム開始処理-----
 	imGuiManager->BeginFrame();
+
+	postEffect_->DrawImGui();
 #endif
 
 	SceneManager::GetInstance()->Update();
