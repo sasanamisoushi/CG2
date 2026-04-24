@@ -54,5 +54,22 @@ private:
 	std::unique_ptr<Primitive> myPlane;
 	std::unique_ptr<Primitive> myShere;
 	std::unique_ptr<Primitive> myBox;
+	std::unique_ptr<Primitive> myRing;
+	std::unique_ptr<Primitive> myPartialRing;
+
+	// 表示切替フラグ
+	bool showNormalRing = true;
+	bool showPartialRing = true;
+
+	// Partial Ring用パラメータ
+	int prSubdivision = 64;
+	float prOuterRadius = 1.2f;
+	float prInnerRadius = 0.4f;
+	bool prIsUvHorizontal = false;
+	float prInnerColor[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+	float prOuterColor[4] = { 1.0f, 0.5f, 0.0f, 1.0f };
+	float prStartAngle = 0.0f;
+	float prEndAngle = 180.0f;
+	float prFadeAngle = 30.0f;
 };
 

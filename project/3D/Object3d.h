@@ -77,6 +77,7 @@ public:
 	const Vector3 &GetRotate()const { return transform.rotate; }
 	const Vector3 &GetTranslate()const { return transform.translate; }
 	DirectionalLight *GetDirectionalLightData() const { return directionLightData; }
+	Model* GetModel() const { return model; }
 
 private:
 

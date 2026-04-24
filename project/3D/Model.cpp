@@ -172,9 +172,9 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 				Vector4 position = positions[elementIndices[0] - 1];
 				Vector2 texcord = texcoords[elementIndices[1] - 1];
 				Vector3 normal = normals[elementIndices[2] - 1];
-				VertexData vertex = { position,texcord,normal };
+				VertexData vertex = { position,texcord,normal, {1.0f, 1.0f, 1.0f, 1.0f} };
 				modelData.vertices.push_back(vertex);
-				triangle[faceVertex] = { position,texcord,normal };
+				triangle[faceVertex] = vertex;
 			}
 		} else if (identifier == "mtllib") {
 			//matrialTemplateLidraryファイルの名前を取得する
@@ -213,6 +213,9 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 
 			// UV座標の計算
 			vertex.texcoord = { float(lonIndex) / subdivision,1.0f - float(latIndex) / subdivision };
+			
+			// 頂点カラーのデフォルト
+			vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 		
 			tempVertices.push_back(vertex);
 		}
@@ -268,18 +271,22 @@ void Model::InitializePlane(ModelCommon *modelCommon) {
 	v[0].position = { -1.0f, -1.0f, 0.0f, 1.0f };
 	v[0].texcoord = { 0.0f, 1.0f };
 	v[0].normal = { 0.0f, 0.0f, -1.0f };
+	v[0].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	// 左上
 	v[1].position = { -1.0f, 1.0f, 0.0f, 1.0f };
 	v[1].texcoord = { 0.0f, 0.0f };
 	v[1].normal = { 0.0f, 0.0f, -1.0f };
+	v[1].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	// 右下
 	v[2].position = { 1.0f, -1.0f, 0.0f, 1.0f };
 	v[2].texcoord = { 1.0f, 1.0f };
 	v[2].normal = { 0.0f, 0.0f, -1.0f };
+	v[2].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	// 右上
 	v[3].position = { 1.0f, 1.0f, 0.0f, 1.0f };
 	v[3].texcoord = { 1.0f, 0.0f };
 	v[3].normal = { 0.0f, 0.0f, -1.0f };
+	v[3].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 	// 三角形リストとして展開（インデックスを使わない直書き）
 	// 三角形1（左下、左上、右下）
@@ -295,7 +302,7 @@ void Model::InitializePlane(ModelCommon *modelCommon) {
 	CreateVertexData();
 	CreateMaterialData();
 
-	// テクスチャの設定（仮としてuvCheckerを使用）
+	// テクスチャの設定
 	textureFilePath_ = "resources/uvChecker.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
@@ -334,13 +341,14 @@ void Model::InitializeBox(ModelCommon *modelCommon) {
 
 	// 面（四角形＝三角形2枚）を作る便利関数
 	auto addFace = [&](int i0, int i1, int i2, int i3, Vector3 n) {
-		modelData.vertices.push_back({ p[i0], uv00, n });
-		modelData.vertices.push_back({ p[i1], uv01, n });
-		modelData.vertices.push_back({ p[i2], uv10, n });
+		Vector4 c = { 1.0f, 1.0f, 1.0f, 1.0f };
+		modelData.vertices.push_back({ p[i0], uv00, n, c });
+		modelData.vertices.push_back({ p[i1], uv01, n, c });
+		modelData.vertices.push_back({ p[i2], uv10, n, c });
 
-		modelData.vertices.push_back({ p[i1], uv01, n });
-		modelData.vertices.push_back({ p[i3], uv11, n });
-		modelData.vertices.push_back({ p[i2], uv10, n });
+		modelData.vertices.push_back({ p[i1], uv01, n, c });
+		modelData.vertices.push_back({ p[i3], uv11, n, c });
+		modelData.vertices.push_back({ p[i2], uv10, n, c });
 		};
 
 	// 前, 奥, 左, 右, 上, 下 の6面を作る
@@ -357,6 +365,97 @@ void Model::InitializeBox(ModelCommon *modelCommon) {
 
 	// テクスチャの設定
 	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float outerRadius, float innerRadius,
+	bool isUvHorizontal, const Vector4& innerColor, const Vector4& outerColor,
+	float startAngleDegree, float endAngleDegree, float fadeAngleDegree) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	const float pi = 3.1415926535f;
+	
+	// 角度の補正（終了角度が開始角度以下なら360度足すなど）
+	if (endAngleDegree <= startAngleDegree) endAngleDegree += 360.0f;
+	
+	float startRad = startAngleDegree * pi / 180.0f;
+	float endRad = endAngleDegree * pi / 180.0f;
+	float fadeRad = fadeAngleDegree * pi / 180.0f;
+	float totalRad = endRad - startRad;
+
+	std::vector<VertexData> tempVertices;
+
+	// リングの頂点を計算
+	for (int i = 0; i <= subdivision; ++i) {
+		float t = (float)i / subdivision;
+		float theta = startRad + t * totalRad;
+		float c = std::cos(theta);
+		float s = std::sin(theta);
+		
+		// アルファフェードの計算
+		float alpha = 1.0f;
+		if (fadeRad > 0.0f) {
+			float distFromStart = theta - startRad;
+			float distFromEnd = endRad - theta;
+			float minEdgeDist = (std::min)(distFromStart, distFromEnd);
+			if (minEdgeDist < fadeRad) {
+				alpha = minEdgeDist / fadeRad;
+			}
+		}
+
+		Vector4 outColor = { outerColor.x, outerColor.y, outerColor.z, outerColor.w * alpha };
+		Vector4 inColor = { innerColor.x, innerColor.y, innerColor.z, innerColor.w * alpha };
+
+		// テクスチャ座標の計算
+		float uv_u = isUvHorizontal ? t : 0.0f;
+		float uv_v = isUvHorizontal ? 0.0f : t;
+
+		// 外側の頂点
+		VertexData vOuter;
+		vOuter.position = { outerRadius * c, outerRadius * s, 0.0f, 1.0f };
+		vOuter.texcoord = { isUvHorizontal ? t : 0.0f, isUvHorizontal ? 0.0f : t };
+		vOuter.normal = { 0.0f, 0.0f, -1.0f };
+		vOuter.color = outColor;
+
+		// 内側の頂点
+		VertexData vInner;
+		vInner.position = { innerRadius * c, innerRadius * s, 0.0f, 1.0f };
+		vInner.texcoord = { isUvHorizontal ? t : 1.0f, isUvHorizontal ? 1.0f : t };
+		vInner.normal = { 0.0f, 0.0f, -1.0f };
+		vInner.color = inColor;
+
+		tempVertices.push_back(vOuter); // index 2*i
+		tempVertices.push_back(vInner); // index 2*i + 1
+	}
+
+	// 三角形リストとして展開
+	// 前面から見て時計回り（左手座標系の標準）になるように頂点順序を設定
+	for (int i = 0; i < subdivision; ++i) {
+		int outer0 = 2 * i;
+		int inner0 = 2 * i + 1;
+		int outer1 = 2 * (i + 1);
+		int inner1 = 2 * (i + 1) + 1;
+
+		// 三角形1: outer0 -> inner0 -> inner1
+		modelData.vertices.push_back(tempVertices[outer0]);
+		modelData.vertices.push_back(tempVertices[inner0]);
+		modelData.vertices.push_back(tempVertices[inner1]);
+
+		// 三角形2: outer0 -> inner1 -> outer1
+		modelData.vertices.push_back(tempVertices[outer0]);
+		modelData.vertices.push_back(tempVertices[inner1]);
+		modelData.vertices.push_back(tempVertices[outer1]);
+	}
+
+	// 頂点データとマテリアルデータのバッファ作成
+	CreateVertexData();
+	CreateMaterialData();
+
+	// テクスチャの設定
+	textureFilePath_ = "resources/gradationLine.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);

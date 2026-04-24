@@ -14,7 +14,8 @@ struct VertexShaderInput
 {
     float32_t4 position : POSITION0;
     float32_t2 texcoord : TEXCOORD0;
-    float32_t3 normal : NORMAL0; //05_03で追加
+    float32_t3 normal : NORMAL0;
+    float32_t4 color : COLOR0;
 };
 
 VertexShaderOutput main(VertexShaderInput input)
@@ -24,5 +25,6 @@ VertexShaderOutput main(VertexShaderInput input)
     output.texcoord = input.texcoord;
     output.normal = normalize(mul(input.normal, (float32_t3x3) gTransformationMatrix.WorldInverseTranspose));
     output.worldPosition = mul(input.position, gTransformationMatrix.World).xyz;
+    output.color = input.color;
     return output;
 }

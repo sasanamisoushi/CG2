@@ -28,6 +28,11 @@ public:
 	// ボックスモデルの作成
 	void CreateBoxModel(const std::string &modelName);
 
+	// リングモデルの作成
+	void CreateRingModel(const std::string &modelName, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.5f,
+		bool isUvHorizontal = true, const Vector4& innerColor = { 1.0f, 1.0f, 1.0f, 1.0f }, const Vector4& outerColor = { 1.0f, 1.0f, 1.0f, 1.0f },
+		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f, float fadeAngleDegree = 0.0f);
+
 private:
 	static ModelManager *instance;
 

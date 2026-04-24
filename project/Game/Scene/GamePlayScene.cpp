@@ -52,12 +52,11 @@ void GamePlayScene::Initialize() {
 	// プリミティブの生成！
 	//======================================================
 
-	// 平面
+	// 平面（元のチェッカーボード）
 	myPlane = std::make_unique<Primitive>();
-	// ここで PrimitiveType::Plane を渡すだけで平面になる！
 	myPlane->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Plane);
-	myPlane->SetTranslate({ 0.0f, 2.0f, 0.0f }); // 上の方に配置
-	objects.push_back(myPlane.get()); // objects配列に入れればUpdateとDrawは自動で呼ばれる
+	myPlane->SetTranslate({ 0.0f, 2.0f, 0.0f }); // 元の上の方の配置
+	objects.push_back(myPlane.get());
 
 	// 球体
 	myShere = std::make_unique<Primitive>();
@@ -71,10 +70,20 @@ void GamePlayScene::Initialize() {
 	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
 	objects.push_back(myBox.get());
 
+	// リング
+	myRing = std::make_unique<Primitive>();
+	myRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Ring);
+	myRing->SetTranslate({ 0.0f, 0.0f, 0.0f }); // パーティクルと同じ中心位置に合わせる
+
+	// 部分リング (三日月)
+	myPartialRing = std::make_unique<Primitive>();
+	myPartialRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::PartialRing);
+	myPartialRing->SetTranslate({ 0.0f, 0.0f, 0.0f });
+
 	//パーティクル
 	particleManager = std::make_unique<ParticleManager>();
 	particleManager->Initialize(DirectXCommon::GetInstance());
-	particleManager->CreateParticleGroup("test", "resources/circle.png");
+	particleManager->CreateParticleGroup("test", "resources/circle2.png");
 	particleEmitter = std::make_unique<ParticleEmitter>("test", Vector3{ 0.0f,0.0f,0.0f }, particleManager.get());
 
 	//音声再生
@@ -107,6 +116,51 @@ void GamePlayScene::Update() {
 	// カメラの更新後にスカイボックスも更新（カメラの行列を渡す）
 	skybox->Update(camera.get());
 
+	if (myRing && showNormalRing) {
+		static float ringTime = 0.0f;
+		ringTime += 0.05f;
+
+		// オブジェクト自体の回転や拡縮は行わず、UVスクロールのみでエフェクトを表現する
+		// パーティクルのエフェクトを囲むようにスケールを調整
+		myRing->SetRotate({ 0.0f, 0.0f, 0.0f });
+		myRing->SetScale({ 2.0f, 2.0f, 1.0f });
+
+		// UVスクロールとスケーリング
+		Model* ringModel = myRing->GetModel();
+		if (ringModel) {
+			Vector3 uvScale = { 10.0f, 1.0f, 1.0f }; // U方向にScaleして細かい模様にする
+			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
+			// 資料の指示通り、U方向（X成分）を時間でスクロールさせて円を回転させる
+			Vector3 uvTranslate = { ringTime * 0.1f, 0.0f, 0.0f }; 
+			
+			MyMath math;
+			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
+			ringModel->SetUvTransform(uvTransform);
+		}
+		myRing->Update();
+	}
+
+	if (myPartialRing && showPartialRing) {
+		static float pRingTime = 0.0f;
+		pRingTime += 0.05f;
+
+		// 部分リングはV方向をスクロールさせたり、Z軸回転させたりしてアニメーションできる
+		myPartialRing->SetRotate({ 0.0f, 0.0f, pRingTime * -0.5f }); // Z回転で三日月を回す
+		myPartialRing->SetScale({ 2.0f, 2.0f, 1.0f });
+
+		Model* pRingModel = myPartialRing->GetModel();
+		if (pRingModel) {
+			Vector3 uvScale = { 1.0f, 10.0f, 1.0f }; // V方向にScale
+			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
+			Vector3 uvTranslate = { 0.0f, pRingTime * 0.1f, 0.0f }; // V方向へスクロール
+			
+			MyMath math;
+			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
+			pRingModel->SetUvTransform(uvTransform);
+		}
+		myPartialRing->Update();
+	}
+
 	for (Object3d *object3d : objects) {
 		object3d->Update();
 	}
@@ -124,10 +178,37 @@ void GamePlayScene::Update() {
 	ImGui::ShowDemoWindow();
 
 	//ウィンドウのサイズを設定
-	ImGui::SetNextWindowSize(ImVec2(500.0f, 100.0f));
+	ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
 
 	//ウィンドウの作成
 	ImGui::Begin("Exercise");
+
+	ImGui::Text("Ring Settings");
+	ImGui::Checkbox("Show Normal Ring", &showNormalRing);
+	ImGui::Checkbox("Show Partial Ring", &showPartialRing);
+
+	bool pRingChanged = false;
+	if (ImGui::SliderInt("Subdivision", &prSubdivision, 3, 128)) pRingChanged = true;
+	if (ImGui::SliderFloat("Outer Radius", &prOuterRadius, 0.1f, 5.0f)) pRingChanged = true;
+	if (ImGui::SliderFloat("Inner Radius", &prInnerRadius, 0.1f, 5.0f)) pRingChanged = true;
+	if (ImGui::Checkbox("UV Horizontal", &prIsUvHorizontal)) pRingChanged = true;
+	if (ImGui::ColorEdit4("Inner Color", prInnerColor)) pRingChanged = true;
+	if (ImGui::ColorEdit4("Outer Color", prOuterColor)) pRingChanged = true;
+	if (ImGui::SliderFloat("Start Angle", &prStartAngle, 0.0f, 360.0f)) pRingChanged = true;
+	if (ImGui::SliderFloat("End Angle", &prEndAngle, 0.0f, 360.0f)) pRingChanged = true;
+	if (ImGui::SliderFloat("Fade Angle", &prFadeAngle, 0.0f, 180.0f)) pRingChanged = true;
+
+	if (pRingChanged && myPartialRing) {
+		Model* model = myPartialRing->GetModel();
+		if (model) {
+			model->InitializeRing(
+				model->GetModelCommon(), prSubdivision, prOuterRadius, prInnerRadius,
+				prIsUvHorizontal, { prInnerColor[0], prInnerColor[1], prInnerColor[2], prInnerColor[3] },
+				{ prOuterColor[0], prOuterColor[1], prOuterColor[2], prOuterColor[3] },
+				prStartAngle, prEndAngle, prFadeAngle
+			);
+		}
+	}
 
 	//スプライトの座標を配列に格納
 	Vector2 currentPos = sprite->GetPosition();
@@ -208,6 +289,8 @@ void GamePlayScene::Draw() {
 	for (Object3d *object3d : objects) {
 		object3d->Draw();
 	}
+	if (myRing && showNormalRing) myRing->Draw();
+	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 
 	
 

@@ -8,6 +8,7 @@ struct  VertexData {
 	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
+	Vector4 color;
 };
 
 struct MaterialData {
@@ -57,6 +58,19 @@ public:
 
 	// ボックスの初期化
 	void InitializeBox(ModelCommon *modelCommon);
+
+	// リングの初期化
+	void InitializeRing(ModelCommon *modelCommon, int subdivision = 32, float outerRadius = 1.0f, float innerRadius = 0.5f,
+		bool isUvHorizontal = true, const Vector4& innerColor = { 1.0f, 1.0f, 1.0f, 1.0f }, const Vector4& outerColor = { 1.0f, 1.0f, 1.0f, 1.0f },
+		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f, float fadeAngleDegree = 0.0f);
+
+	void SetUvTransform(const Matrix4x4& transform) {
+		if (materialData) {
+			materialData->uvTransform = transform;
+		}
+	}
+
+	ModelCommon* GetModelCommon() const { return modelCommon_; }
 
 private:
 	ModelCommon *modelCommon_;

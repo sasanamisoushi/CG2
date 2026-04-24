@@ -68,7 +68,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     float Ndotl = dot(normalize(input.normal), -gDirectionalLight.direction);
     float cos = pow(Ndotl * 0.5f + 0.5f, 2.0f);
         
-    float3 diffuse = gMaterial.color.rgb * textureColor.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
+    float3 diffuse = gMaterial.color.rgb * textureColor.rgb * input.color.rgb * gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
         
     float3 specular = gDirectionalLight.color.rgb * gDirectionalLight.intensity * specularPow * float3(1.0f, 1.0f, 1.0f);
         
@@ -92,10 +92,10 @@ PixelShaderOutput main(VertexShaderOutput input)
     }
     else
     {
-        output.color.rgb = gMaterial.color.rgb * textureColor.rgb;
+        output.color.rgb = gMaterial.color.rgb * textureColor.rgb * input.color.rgb;
     }
     
-    output.color.a = gMaterial.color.a * textureColor.a;
+    output.color.a = gMaterial.color.a * textureColor.a * input.color.a;
     
     //textureのa値が0.5以下のときにPixelを破棄
     if (textureColor.a <= 0.5)

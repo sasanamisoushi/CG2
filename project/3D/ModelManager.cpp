@@ -82,3 +82,13 @@ void ModelManager::CreateBoxModel(const std::string &modelName) {
 	newModel->InitializeBox(modelCommon.get());
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
+
+void ModelManager::CreateRingModel(const std::string &modelName, int subdivision, float outerRadius, float innerRadius,
+	bool isUvHorizontal, const Vector4& innerColor, const Vector4& outerColor,
+	float startAngleDegree, float endAngleDegree, float fadeAngleDegree) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializeRing(modelCommon.get(), subdivision, outerRadius, innerRadius, isUvHorizontal, innerColor, outerColor, startAngleDegree, endAngleDegree, fadeAngleDegree);
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}

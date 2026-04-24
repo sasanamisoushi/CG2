@@ -6,6 +6,8 @@ enum class PrimitiveType {
 	Plane,
 	Sphere,
 	Box,
+	Ring,
+	PartialRing,
 };
 
 class Primitive : public Object3d {
