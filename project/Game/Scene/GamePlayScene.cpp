@@ -80,6 +80,12 @@ void GamePlayScene::Initialize() {
 	myPartialRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::PartialRing);
 	myPartialRing->SetTranslate({ 0.0f, 0.0f, 0.0f });
 
+	// 円柱エフェクト
+	myCylinder = std::make_unique<Primitive>();
+	myCylinder->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Cylinder);
+	myCylinder->SetTranslate({ 0.0f, 0.0f, 0.0f });
+	myCylinder->SetScale({ 2.0f, 2.0f, 2.0f });
+
 	//パーティクル
 	particleManager = std::make_unique<ParticleManager>();
 	particleManager->Initialize(DirectXCommon::GetInstance());
@@ -161,6 +167,29 @@ void GamePlayScene::Update() {
 		myPartialRing->Update();
 	}
 
+	if (myCylinder && showCylinder) {
+		cylinderUVOffset[0] += cylinderUVScrollSpeed[0];
+		cylinderUVOffset[1] += cylinderUVScrollSpeed[1];
+
+		Model* cModel = myCylinder->GetModel();
+		if (cModel) {
+			Vector3 uvScale = { 1.0f, 1.0f, 1.0f };
+			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
+			Vector3 uvTranslate = { cylinderUVOffset[0], cylinderUVOffset[1], 0.0f };
+			
+			MyMath math;
+			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
+			cModel->SetUvTransform(uvTransform);
+			cModel->SetAlphaReference(cylinderAlphaReference);
+		}
+		
+		// ImGuiの変数をCylinderに適用
+		myCylinder->SetTranslate({ cylinderPos[0], cylinderPos[1], cylinderPos[2] });
+		myCylinder->SetScale({ cylinderScale[0], cylinderScale[1], cylinderScale[2] });
+
+		myCylinder->Update();
+	}
+
 	for (Object3d *object3d : objects) {
 		object3d->Update();
 	}
@@ -186,6 +215,46 @@ void GamePlayScene::Update() {
 	ImGui::Text("Ring Settings");
 	ImGui::Checkbox("Show Normal Ring", &showNormalRing);
 	ImGui::Checkbox("Show Partial Ring", &showPartialRing);
+	ImGui::Checkbox("Show Cylinder", &showCylinder);
+
+	ImGui::Separator();
+	ImGui::Text("Cylinder Settings");
+	ImGui::DragFloat3("Cylinder Position", cylinderPos, 0.01f);
+	ImGui::DragFloat3("Cylinder Scale", cylinderScale, 0.01f);
+	ImGui::DragFloat2("UV Scroll Speed", cylinderUVScrollSpeed, 0.001f);
+	ImGui::SliderFloat("Alpha Reference", &cylinderAlphaReference, 0.0f, 1.0f);
+
+	bool cChanged = false;
+	if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;
+	if (ImGui::SliderInt("Vertical Subdivision", &cylinderVerticalSubdivision, 1, 32)) cChanged = true;
+	if (ImGui::DragFloat("Top Radius X", &cylinderTopRadiusX, 0.01f)) cChanged = true;
+	if (ImGui::DragFloat("Top Radius Z", &cylinderTopRadiusZ, 0.01f)) cChanged = true;
+	if (ImGui::DragFloat("Bottom Radius X", &cylinderBottomRadiusX, 0.01f)) cChanged = true;
+	if (ImGui::DragFloat("Bottom Radius Z", &cylinderBottomRadiusZ, 0.01f)) cChanged = true;
+	if (ImGui::DragFloat("Height", &cylinderHeight, 0.01f)) cChanged = true;
+	if (ImGui::ColorEdit4("Top Color", cylinderTopColor)) cChanged = true;
+	if (ImGui::ColorEdit4("Bottom Color", cylinderBottomColor)) cChanged = true;
+	if (ImGui::SliderFloat("Start Angle##Cyl", &cylinderStartAngle, 0.0f, 360.0f)) cChanged = true;
+	if (ImGui::SliderFloat("End Angle##Cyl", &cylinderEndAngle, 0.0f, 360.0f)) cChanged = true;
+	if (ImGui::Checkbox("Flip UV", &cylinderIsUvFlipped)) cChanged = true;
+
+	if (myCylinder && cChanged) {
+		Model* model = myCylinder->GetModel();
+		if (model) {
+			model->InitializeCylinder(model->GetModelCommon(), 
+				cylinderSubdivision, cylinderVerticalSubdivision,
+				cylinderTopRadiusX, cylinderTopRadiusZ,
+				cylinderBottomRadiusX, cylinderBottomRadiusZ,
+				cylinderHeight,
+				{ cylinderTopColor[0], cylinderTopColor[1], cylinderTopColor[2], cylinderTopColor[3] },
+				{ cylinderBottomColor[0], cylinderBottomColor[1], cylinderBottomColor[2], cylinderBottomColor[3] },
+				cylinderStartAngle, cylinderEndAngle,
+				cylinderIsUvFlipped);
+		}
+	}
+
+	ImGui::Separator();
+	ImGui::Text("Partial Ring Settings");
 
 	bool pRingChanged = false;
 	if (ImGui::SliderInt("Subdivision", &prSubdivision, 3, 128)) pRingChanged = true;
@@ -261,6 +330,32 @@ void GamePlayScene::Update() {
 	Vector3 camRot = camera->GetRotate();
 	Vector3 camPos = camera->GetTranslate();
 
+	// ImGuiウィンドウ上にマウスがない場合、画面のドラッグでカメラを動かす
+	if (!ImGui::GetIO().WantCaptureMouse) {
+		// 左ドラッグでカメラ回転
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+			ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+			camRot.y += delta.x * 0.01f; // 左右ドラッグでY軸回転 (Yaw)
+			camRot.x += delta.y * 0.01f; // 上下ドラッグでX軸回転 (Pitch)
+			camera->SetRotate(camRot);
+		}
+		// 右ドラッグでカメラの平行移動
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+			ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+			camPos.x -= delta.x * 0.05f;
+			camPos.y += delta.y * 0.05f;
+			camera->SetTranslate(camPos);
+		}
+		// マウスホイールで前進・後退
+		float wheel = ImGui::GetIO().MouseWheel;
+		if (wheel != 0.0f) {
+			camPos.z += wheel * 1.0f;
+			camera->SetTranslate(camPos);
+		}
+	}
+
 	// ② ImGuiで扱いやすいように配列に格納
 	float camRotArr[3] = { camRot.x, camRot.y, camRot.z };
 	float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
@@ -289,13 +384,15 @@ void GamePlayScene::Draw() {
 	for (Object3d *object3d : objects) {
 		object3d->Draw();
 	}
-	if (myRing && showNormalRing) myRing->Draw();
-	if (myPartialRing && showPartialRing) myPartialRing->Draw();
-
 	
-
 	// スカイボックスの描画
 	skybox->Draw();
+	
+	// エフェクト系の描画 (深度書き込み無効)
+	Object3dCommon::GetInstance()->SetEffectDrawSettings();
+	if (myRing && showNormalRing) myRing->Draw();
+	if (myPartialRing && showPartialRing) myPartialRing->Draw();
+	if (myCylinder && showCylinder) myCylinder->Draw();
 
 	//Spriteの描画基準
 	SpriteCommon::GetInstance()->SetCommonPipelineState();

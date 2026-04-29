@@ -93,6 +93,7 @@ void Model::CreateMaterialData() {
 	materialData->uvTransform = math->MakeIdentity4x4();
 
 	materialData->shininess = 40.0f;
+	materialData->alphaReference = modelData.material.alphaReference;
 }
 
 MaterialData Model::LoadMaterialTemplateFile(const std::string &directoryPath, const std::string &filename) {
@@ -213,10 +214,10 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 
 			// UV座標の計算
 			vertex.texcoord = { float(lonIndex) / subdivision,1.0f - float(latIndex) / subdivision };
-			
+
 			// 頂点カラーのデフォルト
 			vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-		
+
 			tempVertices.push_back(vertex);
 		}
 	}
@@ -247,18 +248,6 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 	// 頂点データとマテリアルデータのバッファ作成
 	CreateVertexData();
 	CreateMaterialData();
-
-	// テクスチャの設定
-	textureFilePath_ = "resources/monsterBall.png";
-
-	// modelData側のマテリアルにもファイルパスを記録
-	modelData.material.textureFilePath = textureFilePath_;
-
-	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
-
-	// 読み込んだテクスチャの「番号」を取得してマテリアルにセットする
-	modelData.material.textureIndex =
-		TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
 }
 
 void Model::InitializePlane(ModelCommon *modelCommon) {
@@ -416,7 +405,7 @@ void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float oute
 		// 外側の頂点
 		VertexData vOuter;
 		vOuter.position = { outerRadius * c, outerRadius * s, 0.0f, 1.0f };
-		vOuter.texcoord = { isUvHorizontal ? t : 0.0f, isUvHorizontal ? 0.0f : t };
+		vOuter.texcoord = { uv_u, uv_v };
 		vOuter.normal = { 0.0f, 0.0f, -1.0f };
 		vOuter.color = outColor;
 
@@ -453,6 +442,96 @@ void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float oute
 	// 頂点データとマテリアルデータのバッファ作成
 	CreateVertexData();
 	CreateMaterialData();
+
+	// テクスチャの設定
+	textureFilePath_ = "resources/gradationLine.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::InitializeCylinder(ModelCommon *modelCommon,
+	int subdivision, int verticalSubdivision,
+	float topRadiusX, float topRadiusZ,
+	float bottomRadiusX, float bottomRadiusZ,
+	float height,
+	const Vector4& topColor, const Vector4& bottomColor,
+	float startAngleDegree, float endAngleDegree,
+	bool isUvFlipped) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	const float pi = 3.1415926535f;
+	if (endAngleDegree <= startAngleDegree) endAngleDegree += 360.0f;
+
+	float startRad = startAngleDegree * pi / 180.0f;
+	float endRad = endAngleDegree * pi / 180.0f;
+	float totalRad = endRad - startRad;
+
+	// 頂点格子を生成
+	std::vector<std::vector<VertexData>> grid(verticalSubdivision + 1, std::vector<VertexData>(subdivision + 1));
+
+	for (int v = 0; v <= verticalSubdivision; ++v) {
+		float vt = (float)v / verticalSubdivision;
+		float y = height * vt;
+		float radiusX = bottomRadiusX + (topRadiusX - bottomRadiusX) * vt;
+		float radiusZ = bottomRadiusZ + (topRadiusZ - bottomRadiusZ) * vt;
+		Vector4 color = {
+			bottomColor.x + (topColor.x - bottomColor.x) * vt,
+			bottomColor.y + (topColor.y - bottomColor.y) * vt,
+			bottomColor.z + (topColor.z - bottomColor.z) * vt,
+			bottomColor.w + (topColor.w - bottomColor.w) * vt
+		};
+
+		for (int h = 0; h <= subdivision; ++h) {
+			float ht = (float)h / subdivision;
+			float theta = startRad + ht * totalRad;
+			float sin = std::sin(theta);
+			float cos = std::cos(theta);
+
+			VertexData vertex;
+			vertex.position = { -sin * radiusX, y, cos * radiusZ, 1.0f };
+
+			float u = ht;
+			float v_coord = isUvFlipped ? vt : (1.0f - vt);
+			vertex.texcoord = { u, v_coord };
+
+			// 法線は外向き
+			vertex.normal = { -sin, 0.0f, cos };
+			vertex.color = color;
+
+			grid[v][h] = vertex;
+		}
+	}
+
+	// 三角形リストとして展開
+	for (int v = 0; v < verticalSubdivision; ++v) {
+		for (int h = 0; h < subdivision; ++h) {
+			const VertexData& v0 = grid[v][h];
+			const VertexData& v1 = grid[v + 1][h];
+			const VertexData& v2 = grid[v][h + 1];
+			const VertexData& v3 = grid[v + 1][h + 1];
+
+			// 三角形1: v0 -> v1 -> v3
+			modelData.vertices.push_back(v0);
+			modelData.vertices.push_back(v3);
+			modelData.vertices.push_back(v1);
+
+			// 三角形2: v0 -> v3 -> v2
+			modelData.vertices.push_back(v0);
+			modelData.vertices.push_back(v2);
+			modelData.vertices.push_back(v3);
+		}
+	}
+
+	// 頂点データとマテリアルデータのバッファ作成
+	CreateVertexData();
+	CreateMaterialData();
+
+	// デフォルトでライティングを無効化
+	if (materialData) {
+		materialData->enableLighting = 0;
+	}
 
 	// テクスチャの設定
 	textureFilePath_ = "resources/gradationLine.png";

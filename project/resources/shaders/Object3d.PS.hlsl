@@ -6,6 +6,7 @@ struct Material
     int32_t enableLighting;
     float32_t4x4 uvTransform;
     float32_t shininess;
+    float32_t alphaReference;
 };
 
 ConstantBuffer<Material> gMaterial : register(b0);
@@ -97,8 +98,8 @@ PixelShaderOutput main(VertexShaderOutput input)
     
     output.color.a = gMaterial.color.a * textureColor.a * input.color.a;
     
-    //textureのa値が0.5以下のときにPixelを破棄
-    if (textureColor.a <= 0.5)
+    //textureのa値が閾値以下のときにPixelを破棄
+    if (textureColor.a <= gMaterial.alphaReference)
     {
         discard;
     }

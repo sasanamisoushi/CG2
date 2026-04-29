@@ -8,6 +8,7 @@ enum class PrimitiveType {
 	Box,
 	Ring,
 	PartialRing,
+	Cylinder,
 };
 
 class Primitive : public Object3d {

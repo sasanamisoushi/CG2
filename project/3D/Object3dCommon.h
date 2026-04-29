@@ -14,6 +14,9 @@ public:
 	//共通描画設定
 	void SetCommonDrawSettings();
 
+	//エフェクト用描画設定
+	void SetEffectDrawSettings();
+
 	//シェーダーの読み込み
 	void LoadShaders();
 
@@ -45,6 +48,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> effectPipelineState_;
 
 	// Shader blobs
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob;

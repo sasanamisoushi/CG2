@@ -14,6 +14,7 @@ struct  VertexData {
 struct MaterialData {
 	std::string textureFilePath;
 	uint32_t textureIndex = 0;
+	float alphaReference = 0.5f;
 };
 
 struct ModelData {
@@ -27,6 +28,8 @@ struct Material {
 	float padding[3];
 	Matrix4x4 uvTransform;
 	float shininess;
+	float alphaReference;
+	float padding2[2];
 };
 
 class Model {
@@ -64,9 +67,34 @@ public:
 		bool isUvHorizontal = true, const Vector4& innerColor = { 1.0f, 1.0f, 1.0f, 1.0f }, const Vector4& outerColor = { 1.0f, 1.0f, 1.0f, 1.0f },
 		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f, float fadeAngleDegree = 0.0f);
 
+	// 円柱（Cylinder）の初期化（拡張版）
+	void InitializeCylinder(ModelCommon *modelCommon,
+		int subdivision = 32,
+		int verticalSubdivision = 1,
+		float topRadiusX = 1.0f, float topRadiusZ = 1.0f,
+		float bottomRadiusX = 1.0f, float bottomRadiusZ = 1.0f,
+		float height = 3.0f,
+		const Vector4& topColor = { 1.0f, 1.0f, 1.0f, 1.0f },
+		const Vector4& bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f },
+		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f,
+		bool isUvFlipped = false);
+
 	void SetUvTransform(const Matrix4x4& transform) {
 		if (materialData) {
 			materialData->uvTransform = transform;
+		}
+	}
+
+	void SetAlphaReference(float alphaRef) {
+		if (materialData) {
+			materialData->alphaReference = alphaRef;
+		}
+		modelData.material.alphaReference = alphaRef;
+	}
+
+	void SetColor(const Vector4& color) {
+		if (materialData) {
+			materialData->color = color;
 		}
 	}
 

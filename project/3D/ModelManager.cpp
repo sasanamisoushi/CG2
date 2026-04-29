@@ -92,3 +92,11 @@ void ModelManager::CreateRingModel(const std::string &modelName, int subdivision
 	newModel->InitializeRing(modelCommon.get(), subdivision, outerRadius, innerRadius, isUvHorizontal, innerColor, outerColor, startAngleDegree, endAngleDegree, fadeAngleDegree);
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
+
+void ModelManager::CreateCylinderModel(const std::string &modelName, int subdivision, float topRadius, float bottomRadius, float height) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializeCylinder(modelCommon.get(), subdivision, topRadius, bottomRadius, height);
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}

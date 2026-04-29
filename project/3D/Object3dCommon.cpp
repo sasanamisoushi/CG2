@@ -27,6 +27,15 @@ void Object3dCommon::SetCommonDrawSettings() {
 	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
+void Object3dCommon::SetEffectDrawSettings() {
+	//ルートシグネチャをセットするコマンド
+	dxCommon_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
+	//エフェクト用のグラフィックスパイプラインをセットするコマンド
+	dxCommon_->GetCommandList()->SetPipelineState(effectPipelineState_.Get());
+	//プリミティブポロジーをセットするコマンド
+	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
 void Object3dCommon::LoadShaders() {
 	//Shaderをコンパイルする
 	vertexShaderBlob = dxCommon_->CompileShader(L"resources/shaders/Object3D.VS.hlsl",
@@ -63,15 +72,15 @@ void Object3dCommon::CreateRootSignature() {
 	// RootParameter作成 
 	D3D12_ROOT_PARAMETER rootParamerers[7] = {};
 
-	// 0: マテリアルCBV (b0, PixelShader)
+	// 0: マテリアルCBV (b0, Vertex/PixelShader)
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParamerers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	rootParamerers[0].Descriptor.ShaderRegister = 0;
 
-	// 1: WVP/World行列CBV (b0, VertexShader)
+	// 1: WVP/World行列CBV (b1, VertexShader)
 	rootParamerers[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	rootParamerers[1].Descriptor.ShaderRegister = 0;
+	rootParamerers[1].Descriptor.ShaderRegister = 1;
 
 	// 2: テクスチャDescriptorTable (t0, PixelShader)
 	rootParamerers[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -195,4 +204,10 @@ void Object3dCommon::CreateGraphicsPipeline() {
 	HRESULT hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&pipelineState_));
 	assert(SUCCEEDED(hr) && "パイプラインの作成に失敗しました！");
 
+	// エフェクト用パイプラインの生成 (深度書き込み無効)
+	graphicsPipelineStateDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	
+	effectPipelineState_ = nullptr;
+	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&effectPipelineState_));
+	assert(SUCCEEDED(hr) && "エフェクト用パイプラインの作成に失敗しました！");
 }

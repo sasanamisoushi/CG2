@@ -39,5 +39,13 @@ void Primitive::Initialize(Object3dCommon *object3dCommon, PrimitiveType type) {
 			false, { 1.0f, 1.0f, 0.0f, 0.0f }, { 1.0f, 0.5f, 0.0f, 1.0f }, 0.0f, 180.0f, 30.0f);
 		SetModel("Primitive_PartialRing");
 		break;
+	//------------円柱------------
+	case PrimitiveType::Cylinder:
+		ModelManager::GetInstance()->CreateCylinderModel("Primitive_Cylinder");
+		SetModel("Primitive_Cylinder");
+		if (GetModel()) {
+			GetModel()->SetAlphaReference(0.0f); // Effect用に0以外discardしないように
+		}
+		break;
 	}
 }

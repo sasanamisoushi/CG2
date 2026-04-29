@@ -56,10 +56,12 @@ private:
 	std::unique_ptr<Primitive> myBox;
 	std::unique_ptr<Primitive> myRing;
 	std::unique_ptr<Primitive> myPartialRing;
+	std::unique_ptr<Primitive> myCylinder;
 
 	// 表示切替フラグ
 	bool showNormalRing = true;
 	bool showPartialRing = true;
+	bool showCylinder = true;
 
 	// Partial Ring用パラメータ
 	int prSubdivision = 64;
@@ -71,5 +73,25 @@ private:
 	float prStartAngle = 0.0f;
 	float prEndAngle = 180.0f;
 	float prFadeAngle = 30.0f;
+
+	// Cylinder用パラメータ
+	float cylinderPos[3] = { 0.0f, 0.0f, 0.0f };
+	float cylinderScale[3] = { 1.0f, 1.0f, 1.0f };
+	float cylinderUVOffset[2] = { 0.0f, 0.0f };
+	float cylinderUVScrollSpeed[2] = { 0.01f, 0.0f };
+	float cylinderAlphaReference = 0.0f;
+
+	int cylinderSubdivision = 32;
+	int cylinderVerticalSubdivision = 1;
+	float cylinderTopRadiusX = 1.0f;
+	float cylinderTopRadiusZ = 1.0f;
+	float cylinderBottomRadiusX = 1.0f;
+	float cylinderBottomRadiusZ = 1.0f;
+	float cylinderHeight = 3.0f;
+	float cylinderTopColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float cylinderBottomColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float cylinderStartAngle = 0.0f;
+	float cylinderEndAngle = 360.0f;
+	bool cylinderIsUvFlipped = false;
 };
 

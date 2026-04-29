@@ -33,6 +33,9 @@ public:
 		bool isUvHorizontal = true, const Vector4& innerColor = { 1.0f, 1.0f, 1.0f, 1.0f }, const Vector4& outerColor = { 1.0f, 1.0f, 1.0f, 1.0f },
 		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f, float fadeAngleDegree = 0.0f);
 
+	// 円柱モデルの作成
+	void CreateCylinderModel(const std::string &modelName, int subdivision = 32, float topRadius = 1.0f, float bottomRadius = 1.0f, float height = 3.0f);
+
 private:
 	static ModelManager *instance;
 
