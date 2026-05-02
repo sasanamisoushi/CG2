@@ -31,6 +31,13 @@ struct Vector4 {
 	float w;
 };
 
+struct Quaternion {
+	float x;
+	float y;
+	float z;
+	float w;
+};
+
 struct Matrix4x4 {
 	float m[4][4];
 
@@ -82,6 +89,12 @@ public:
 
 	// アフィン変換行列
 	Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate);
+
+	// クォータニオンから回転行列を作成
+	Matrix4x4 MakeRotateMatrix(const Quaternion& quaternion);
+
+	// クォータニオンによるアフィン変換行列
+	Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Quaternion &rotate, const Vector3 &translate);
 
 	//座標変換
 	Vector3 Transform(const Vector3 &vector, const Matrix4x4 &matrix);

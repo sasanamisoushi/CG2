@@ -70,6 +70,9 @@ void GamePlayScene::Initialize() {
 	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
 	objects.push_back(myBox.get());
 
+	// アニメーションの読み込み
+	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
+
 	// リング
 	myRing = std::make_unique<Primitive>();
 	myRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Ring);
@@ -114,6 +117,24 @@ void GamePlayScene::Finalize() {
 void GamePlayScene::Update() {
 	if (Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
+	}
+
+	if (myBox && animationData.duration > 0.0f) {
+		if (playAnimation) {
+			animationTime += 1.0f / 60.0f;
+			animationTime = std::fmod(animationTime, animationData.duration);
+		}
+		
+		if (!animationData.nodeAnimations.empty()) {
+			NodeAnimation& rootNodeAnimation = animationData.nodeAnimations.begin()->second;
+			Vector3 translate = CalculateValue(rootNodeAnimation.translate.keyframes, animationTime);
+			Quaternion rotate = CalculateValue(rootNodeAnimation.rotate.keyframes, animationTime);
+			Vector3 scale = CalculateValue(rootNodeAnimation.scale.keyframes, animationTime);
+			
+			myBox->SetTranslate(translate);
+			myBox->SetQuaternionRotate(rotate);
+			myBox->SetScale(scale);
+		}
 	}
 
 	//カメラの更新
@@ -216,6 +237,11 @@ void GamePlayScene::Update() {
 	ImGui::Checkbox("Show Normal Ring", &showNormalRing);
 	ImGui::Checkbox("Show Partial Ring", &showPartialRing);
 	ImGui::Checkbox("Show Cylinder", &showCylinder);
+
+	ImGui::Separator();
+	ImGui::Text("Animation Control");
+	ImGui::Checkbox("Play Animation", &playAnimation);
+	ImGui::SliderFloat("Animation Time", &animationTime, 0.0f, animationData.duration);
 
 	ImGui::Separator();
 	ImGui::Text("Cylinder Settings");

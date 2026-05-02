@@ -78,6 +78,42 @@ Matrix4x4 MyMath::MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, 
 	return result;
 }
 
+// クォータニオンから回転行列を作成
+Matrix4x4 MyMath::MakeRotateMatrix(const Quaternion& q) {
+	Matrix4x4 result = MakeIdentity4x4();
+	float xx = q.x * q.x;
+	float yy = q.y * q.y;
+	float zz = q.z * q.z;
+	float xy = q.x * q.y;
+	float xz = q.x * q.z;
+	float yz = q.y * q.z;
+	float wx = q.w * q.x;
+	float wy = q.w * q.y;
+	float wz = q.w * q.z;
+
+	result.m[0][0] = 1.0f - 2.0f * (yy + zz);
+	result.m[0][1] = 2.0f * (xy + wz);
+	result.m[0][2] = 2.0f * (xz - wy);
+
+	result.m[1][0] = 2.0f * (xy - wz);
+	result.m[1][1] = 1.0f - 2.0f * (xx + zz);
+	result.m[1][2] = 2.0f * (yz + wx);
+
+	result.m[2][0] = 2.0f * (xz + wy);
+	result.m[2][1] = 2.0f * (yz - wx);
+	result.m[2][2] = 1.0f - 2.0f * (xx + yy);
+
+	return result;
+}
+
+// クォータニオンによるアフィン変換行列
+Matrix4x4 MyMath::MakeAffineMatrix(const Vector3 &scale, const Quaternion &rotate, const Vector3 &translate) {
+	Matrix4x4 rot = MakeRotateMatrix(rotate);
+	Matrix4x4 result = Multiply(Multiply(MkeScaleMatrix(scale), rot), MakeTranslateMatrix(translate));
+
+	return result;
+}
+
 
 
 //座標変換

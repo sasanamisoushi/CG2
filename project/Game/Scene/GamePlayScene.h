@@ -8,6 +8,7 @@
 #include "Game/base/BaseScene.h"
 #include "3D/Skybox.h"
 #include "3D/primitive.h"
+#include "3D/Animation.h"
 #include <memory>
 #include <vector>
 
@@ -93,5 +94,10 @@ private:
 	float cylinderStartAngle = 0.0f;
 	float cylinderEndAngle = 360.0f;
 	bool cylinderIsUvFlipped = false;
+
+	// アニメーション用
+	Animation animationData;
+	float animationTime = 0.0f;
+	bool playAnimation = true;
 };
 

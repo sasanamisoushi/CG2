@@ -68,9 +68,10 @@ public:
 	//セッター
 	void SetModel(const std::string &filepath);
 	void SetScale(const Vector3 &scale) { this->transform.scale = scale; }
-	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; }
+	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; this->useQuaternion_ = false; }
 	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }
 	void SetCamera(Camera *camera) { this->camera = camera; }
+	void SetQuaternionRotate(const Quaternion& q) { this->quaternionRotate_ = q; this->useQuaternion_ = true; }
 
 	//ゲッター
 	const Vector3 &GetScale()const { return transform.scale; }
@@ -114,5 +115,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12Resource> envMapParamResource_;
 	EnvMapParam *envMapParamData_ = nullptr;
 
+	bool useQuaternion_ = false;
+	Quaternion quaternionRotate_ = {0.0f, 0.0f, 0.0f, 1.0f};
 };
 

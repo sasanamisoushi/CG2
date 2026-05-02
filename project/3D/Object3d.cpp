@@ -39,7 +39,7 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 
 void Object3d::Update() {
 
-	transform.rotate.y += 0.01f;
+	//transform.rotate.y += 0.01f;
 
 	// ImGuiで環境マップの設定ウィンドウを作る
 #ifdef ENABLE_IMGUI 
@@ -66,7 +66,12 @@ void Object3d::Update() {
 	
 	
 
-	Matrix4x4 worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+	Matrix4x4 worldMatrix;
+	if (useQuaternion_) {
+		worldMatrix = math->MakeAffineMatrix(transform.scale, quaternionRotate_, transform.translate);
+	} else {
+		worldMatrix = math->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+	}
 
 	//projectionMatrix
 	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClientHeight), 0.1f, 100.0f);

@@ -97,6 +97,13 @@ void ModelManager::CreateCylinderModel(const std::string &modelName, int subdivi
 	if (models.contains(modelName)) return;
 
 	std::unique_ptr<Model> newModel = std::make_unique<Model>();
-	newModel->InitializeCylinder(modelCommon.get(), subdivision, topRadius, bottomRadius, height);
+	newModel->InitializeCylinder(
+		modelCommon.get(), 
+		subdivision, 
+		1, // verticalSubdivision
+		topRadius, topRadius, // topRadiusX, topRadiusZ
+		bottomRadius, bottomRadius, // bottomRadiusX, bottomRadiusZ
+		height
+	);
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
