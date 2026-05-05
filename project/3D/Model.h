@@ -2,13 +2,44 @@
 #include "ModelCommon.h"
 #include "MyMath.h"
 #include <memory>
+#include <optional>
+#include <map>
+#include <string>
+#include <vector>
+
+struct aiNode;
 
 
-struct  VertexData {
+struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
 	Vector4 color;
+	float weight[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	int32_t index[4] = { 0, 0, 0, 0 };
+};
+
+struct VertexWeightData {
+	float weight;
+	uint32_t vertexIndex;
+};
+
+struct JointWeightData {
+	Matrix4x4 inverseBindMatrix;
+	std::vector<VertexWeightData> vertexWeights;
+};
+
+struct WellKnownPalette {
+	Matrix4x4 skeletonSpaceMatrix;
+	Matrix4x4 skeletonSpaceNormalMatrix;
+};
+
+struct SkinCluster {
+	std::vector<Matrix4x4> inverseBindMatrices;
+	Microsoft::WRL::ComPtr<ID3D12Resource> paletteResource;
+	WellKnownPalette* mappedPalette = nullptr;
+	D3D12_GPU_VIRTUAL_ADDRESS paletteAddress = 0;
+	std::vector<int32_t> boneIndexToJointIndex; // モデルのボーンIndexからSkeletonのJointIndexへのマッピング
 };
 
 struct MaterialData {
@@ -17,9 +48,41 @@ struct MaterialData {
 	float alphaReference = 0.5f;
 };
 
+#include "engine/Camera/Camera.h"
+
+struct Node {
+	QuaternionTransform transform;
+	Matrix4x4 localMatrix;
+	std::string name;
+	std::vector<Node> children;
+};
+
+struct Joint {
+    QuaternionTransform transform; // Transform情報
+    Matrix4x4 localMatrix; // localMatrix
+    Matrix4x4 skeletonSpaceMatrix; // skeletonSpaceでの変換行列
+    std::string name; // 名前
+    std::vector<int32_t> children; // 子JointのIndexのリスト。いなければ空
+    int32_t index; // 自身のIndex
+    std::optional<int32_t> parent; // 親JointのIndex。いなければnull
+};
+
+struct Skeleton {
+    int32_t root; // RootJointのIndex
+    std::map<std::string, int32_t> jointMap; // Joint名とIndexとの辞書
+    std::vector<Joint> joints; // 所属しているジョイント
+};
+
+Skeleton CreateSkeleton(const Node& rootNode);
+void Update(Skeleton& skeleton);
+
 struct ModelData {
 	std::vector<VertexData>vertices;
 	MaterialData material;
+	Node rootNode;
+	std::map<std::string, JointWeightData> skinClusterData; // スキニング用のデータ
+	std::vector<std::string> boneNames; // ボーンIndex順のジョイント名
+	bool isSkinned = false; // スキニングモデルかどうか
 };
 
 struct Material {
@@ -50,8 +113,17 @@ public:
 	//.mtlファイルの読み込み
 	static MaterialData LoadMaterialTemplateFile(const std::string &directoryPath, const std::string &filename);
 
+	// Nodeの読み取り
+	static Node ReadNode(aiNode* node);
+	
+	// GLTF等からノード階層のみを読み取る
+	static Node LoadNodeHierarchy(const std::string& directoryPath, const std::string& filename);
+
 	//.objファイルの読み取り
 	static ModelData LoadObjFile(const std::string &directoryPath, const std::string &filename);
+
+	// .gltf等のメッシュ読み取り (Assimpを使用)
+	static ModelData LoadGltfFile(const std::string &directoryPath, const std::string &filename);
 
 	// 球の初期化
 	void InitializeSphere(ModelCommon *modelCommon, int subdivision);
@@ -91,6 +163,9 @@ public:
 		}
 		modelData.material.alphaReference = alphaRef;
 	}
+
+	SkinCluster CreateSkinCluster(const Skeleton& skeleton);
+	void UpdateSkinCluster(SkinCluster& skinCluster, const Skeleton& skeleton);
 
 	void SetColor(const Vector4& color) {
 		if (materialData) {

@@ -113,6 +113,12 @@ void Object3d::Draw() {
 
 	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(6, envMapParamResource_->GetGPUVirtualAddress());
 
+	if (skinCluster.paletteResource) {
+		object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootShaderResourceView(7, skinCluster.paletteAddress);
+	} else {
+		object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootShaderResourceView(7, wvpResource->GetGPUVirtualAddress());
+	}
+
 	//3Dモデルが割り当てられたら描画する
 	if (model) {
 		model->Draw();

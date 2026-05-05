@@ -68,10 +68,29 @@ void GamePlayScene::Initialize() {
 	myBox = std::make_unique<Primitive>();
 	myBox->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Box);
 	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
-	objects.push_back(myBox.get());
+	// objects.push_back(myBox.get()); // Boxの代わりにモデルを使う
 
-	// アニメーションの読み込み
+	// 動的モデル
+	myModelObject = std::make_unique<Object3d>();
+	myModelObject->Initialize(Object3dCommon::GetInstance());
+	ModelManager::GetInstance()->LoadModel("AnimatedCube/AnimatedCube.gltf");
+	myModelObject->SetModel("AnimatedCube/AnimatedCube.gltf");
+	objects.push_back(myModelObject.get());
+
+	// アニメーションとノード階層の読み込み
 	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
+	Node rootNode = Model::LoadNodeHierarchy("resources/AnimatedCube", "AnimatedCube.gltf");
+	skeleton = CreateSkeleton(rootNode);
+
+	myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
+
+	// 骨描画用のスフィアをあらかじめ用意しておく（最大関節数ぶん程度）
+	for (int i = 0; i < 64; ++i) {
+		auto sphere = std::make_unique<Primitive>();
+		sphere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
+		sphere->SetScale({ 0.1f, 0.1f, 0.1f }); // 小さなスフィアにする
+		boneSpheres.push_back(std::move(sphere));
+	}
 
 	// リング
 	myRing = std::make_unique<Primitive>();
@@ -125,15 +144,36 @@ void GamePlayScene::Update() {
 			animationTime = std::fmod(animationTime, animationData.duration);
 		}
 		
-		if (!animationData.nodeAnimations.empty()) {
-			NodeAnimation& rootNodeAnimation = animationData.nodeAnimations.begin()->second;
-			Vector3 translate = CalculateValue(rootNodeAnimation.translate.keyframes, animationTime);
-			Quaternion rotate = CalculateValue(rootNodeAnimation.rotate.keyframes, animationTime);
-			Vector3 scale = CalculateValue(rootNodeAnimation.scale.keyframes, animationTime);
-			
-			myBox->SetTranslate(translate);
-			myBox->SetQuaternionRotate(rotate);
-			myBox->SetScale(scale);
+		// アニメーションの更新と骨への適用
+		ApplyAnimation(skeleton, animationData, animationTime);
+		::Update(skeleton);
+		if (myModelObject->GetModel()) {
+			myModelObject->GetModel()->UpdateSkinCluster(myModelObject->skinCluster, skeleton);
+		}
+
+		// 今のやつに合わせた状態で使うため、Skeletonから計算結果を取り出してBox/Modelに適用する
+		if (!skeleton.joints.empty()) {
+			myBox->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
+			myBox->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
+			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
+
+			// スキニングが実装されたため、モデル本体のTransformは上書きせずそのまま（Identity等）にする
+			// myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
+			// myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
+			// myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
+		}
+
+		// 骨描画の更新
+		if (showBones) {
+			for (size_t i = 0; i < skeleton.joints.size() && i < boneSpheres.size(); ++i) {
+				Vector3 pos = {
+					skeleton.joints[i].skeletonSpaceMatrix.m[3][0],
+					skeleton.joints[i].skeletonSpaceMatrix.m[3][1],
+					skeleton.joints[i].skeletonSpaceMatrix.m[3][2]
+				};
+				boneSpheres[i]->SetTranslate(pos);
+				boneSpheres[i]->Update();
+			}
 		}
 	}
 
@@ -220,8 +260,10 @@ void GamePlayScene::Update() {
 	size.y = 300.0f;
 	sprite->SetSize(size);
 
-	particleEmitter->Update();
-	particleManager->Update(camera.get());
+	if (showParticles) {
+		particleEmitter->Update();
+		particleManager->Update(camera.get());
+	}
 
 #ifdef ENABLE_IMGUI
 	//開発用UIの処理
@@ -240,7 +282,28 @@ void GamePlayScene::Update() {
 
 	ImGui::Separator();
 	ImGui::Text("Animation Control");
+	const char* animationNames[] = { "AnimatedCube", "simpleSkin", "sneakWalk", "walk" };
+	if (ImGui::Combo("Animation", &currentAnimationIndex, animationNames, IM_ARRAYSIZE(animationNames))) {
+		std::string dir, file, loadFile;
+		if (currentAnimationIndex == 0) { dir = "resources/AnimatedCube"; file = "AnimatedCube.gltf"; loadFile = "AnimatedCube/AnimatedCube.gltf"; }
+		else if (currentAnimationIndex == 1) { dir = "resources/simpleSkin"; file = "simpleSkin.gltf"; loadFile = "simpleSkin/simpleSkin.gltf"; }
+		else if (currentAnimationIndex == 2) { dir = "resources/human"; file = "sneakWalk.gltf"; loadFile = "human/sneakWalk.gltf"; }
+		else if (currentAnimationIndex == 3) { dir = "resources/human"; file = "walk.gltf"; loadFile = "human/walk.gltf"; }
+		
+		animationData = LoadAnimationFile(dir, file);
+		Node rootNode = Model::LoadNodeHierarchy(dir, file);
+		skeleton = CreateSkeleton(rootNode);
+		animationTime = 0.0f;
+
+		ModelManager::GetInstance()->LoadModel(loadFile);
+		myModelObject->SetModel(loadFile);
+		if (myModelObject->GetModel()) {
+			myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
+		}
+	}
 	ImGui::Checkbox("Play Animation", &playAnimation);
+	ImGui::Checkbox("Show Bones", &showBones);
+	ImGui::Checkbox("Show Particles", &showParticles);
 	ImGui::SliderFloat("Animation Time", &animationTime, 0.0f, animationData.duration);
 
 	ImGui::Separator();
@@ -411,6 +474,12 @@ void GamePlayScene::Draw() {
 		object3d->Draw();
 	}
 	
+	if (showBones) {
+		for (size_t i = 0; i < skeleton.joints.size() && i < boneSpheres.size(); ++i) {
+			boneSpheres[i]->Draw();
+		}
+	}
+	
 	// スカイボックスの描画
 	skybox->Draw();
 	
@@ -425,5 +494,7 @@ void GamePlayScene::Draw() {
 	//スプライト描画
 	sprite->Draw();
 
-	particleManager->Draw();
+	if (showParticles) {
+		particleManager->Draw();
+	}
 }

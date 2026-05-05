@@ -70,7 +70,7 @@ void Object3dCommon::CreateRootSignature() {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	// RootParameter作成 
-	D3D12_ROOT_PARAMETER rootParamerers[7] = {};
+	D3D12_ROOT_PARAMETER rootParamerers[8] = {};
 
 	// 0: マテリアルCBV (b0, Vertex/PixelShader)
 	rootParamerers[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -108,6 +108,11 @@ void Object3dCommon::CreateRootSignature() {
 	rootParamerers[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParamerers[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParamerers[6].Descriptor.ShaderRegister = 3; // b3 に対応
+
+	// 7: マトリックスパレットSRV (t0, VertexShader)
+	rootParamerers[7].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+	rootParamerers[7].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParamerers[7].Descriptor.ShaderRegister = 0; // t0 in VS
 
 	descriptionRootSignature.pParameters = rootParamerers;
 	descriptionRootSignature.NumParameters = _countof(rootParamerers);
@@ -149,6 +154,8 @@ void Object3dCommon::CreateGraphicsPipeline() {
 		{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 		{"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 		{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{"WEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{"INDEX", 0, DXGI_FORMAT_R32G32B32A32_SINT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
 	};
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc = {};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;

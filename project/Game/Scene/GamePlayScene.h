@@ -9,6 +9,7 @@
 #include "3D/Skybox.h"
 #include "3D/primitive.h"
 #include "3D/Animation.h"
+#include "3D/Model.h"
 #include <memory>
 #include <vector>
 
@@ -59,6 +60,8 @@ private:
 	std::unique_ptr<Primitive> myPartialRing;
 	std::unique_ptr<Primitive> myCylinder;
 
+	std::unique_ptr<Object3d> myModelObject;
+
 	// 表示切替フラグ
 	bool showNormalRing = true;
 	bool showPartialRing = true;
@@ -99,5 +102,14 @@ private:
 	Animation animationData;
 	float animationTime = 0.0f;
 	bool playAnimation = true;
+
+	// スケルトン
+	Skeleton skeleton;
+	bool showBones = false;
+	std::vector<std::unique_ptr<Primitive>> boneSpheres;
+
+	// UIと状態管理
+	bool showParticles = true;
+	int currentAnimationIndex = 0;
 };
 

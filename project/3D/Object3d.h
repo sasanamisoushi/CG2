@@ -62,7 +62,7 @@ public:
 	// データ作成関数
 	void CreateEnvMapParamData();
 
-	Transform transform;
+	EulerTransform transform;
 	//Transform cameraTransform;
 
 	//セッター
@@ -79,6 +79,8 @@ public:
 	const Vector3 &GetTranslate()const { return transform.translate; }
 	DirectionalLight *GetDirectionalLightData() const { return directionLightData; }
 	Model* GetModel() const { return model; }
+
+	SkinCluster skinCluster;
 
 private:
 

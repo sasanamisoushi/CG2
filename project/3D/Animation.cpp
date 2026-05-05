@@ -4,6 +4,7 @@
 #include <assimp/postprocess.h>
 #include <cassert>
 #include <cmath>
+#include "Model.h"
 
 Animation LoadAnimationFile(const std::string& directoryPath, const std::string& filename) {
     Animation animation; // 今回作るアニメーション
@@ -15,7 +16,8 @@ Animation LoadAnimationFile(const std::string& directoryPath, const std::string&
         return animation;
     }
     aiAnimation* animationAssimp = scene->mAnimations[0]; // 最初のアニメーションだけ採用
-    animation.duration = float(animationAssimp->mDuration / animationAssimp->mTicksPerSecond); // 時間の単位を秒に変換
+    float ticksPerSecond = animationAssimp->mTicksPerSecond != 0.0 ? float(animationAssimp->mTicksPerSecond) : 1.0f;
+    animation.duration = float(animationAssimp->mDuration / ticksPerSecond); // 時間の単位を秒に変換
 
     // assimpでは個々のNodeのAnimationをchannelと呼んでいるのでchannelを回してNodeAnimationの情報をとってくる
     for (uint32_t channelIndex = 0; channelIndex < animationAssimp->mNumChannels; ++channelIndex) {
@@ -25,7 +27,7 @@ Animation LoadAnimationFile(const std::string& directoryPath, const std::string&
         for (uint32_t keyIndex = 0; keyIndex < nodeAnimationAssimp->mNumPositionKeys; ++keyIndex) {
             aiVectorKey& keyAssimp = nodeAnimationAssimp->mPositionKeys[keyIndex];
             KeyframeVector3 keyframe;
-            keyframe.time = float(keyAssimp.mTime / animationAssimp->mTicksPerSecond); // ここも秒に変換
+            keyframe.time = float(keyAssimp.mTime / ticksPerSecond); // ここも秒に変換
             keyframe.value = {-keyAssimp.mValue.x, keyAssimp.mValue.y, keyAssimp.mValue.z}; // 右手->左手
             nodeAnimation.translate.keyframes.push_back(keyframe);
         }
@@ -33,7 +35,7 @@ Animation LoadAnimationFile(const std::string& directoryPath, const std::string&
         for (uint32_t keyIndex = 0; keyIndex < nodeAnimationAssimp->mNumRotationKeys; ++keyIndex) {
             aiQuatKey& keyAssimp = nodeAnimationAssimp->mRotationKeys[keyIndex];
             KeyframeQuaternion keyframe;
-            keyframe.time = float(keyAssimp.mTime / animationAssimp->mTicksPerSecond);
+            keyframe.time = float(keyAssimp.mTime / ticksPerSecond);
             // RotateはQuaternionで、右手->左手に変換するために、yとzを反転させる必要がある。
             keyframe.value = {keyAssimp.mValue.x, -keyAssimp.mValue.y, -keyAssimp.mValue.z, keyAssimp.mValue.w};
             nodeAnimation.rotate.keyframes.push_back(keyframe);
@@ -42,7 +44,7 @@ Animation LoadAnimationFile(const std::string& directoryPath, const std::string&
         for (uint32_t keyIndex = 0; keyIndex < nodeAnimationAssimp->mNumScalingKeys; ++keyIndex) {
             aiVectorKey& keyAssimp = nodeAnimationAssimp->mScalingKeys[keyIndex];
             KeyframeVector3 keyframe;
-            keyframe.time = float(keyAssimp.mTime / animationAssimp->mTicksPerSecond);
+            keyframe.time = float(keyAssimp.mTime / ticksPerSecond);
             // Scaleはそのまま
             keyframe.value = {keyAssimp.mValue.x, keyAssimp.mValue.y, keyAssimp.mValue.z};
             nodeAnimation.scale.keyframes.push_back(keyframe);
@@ -126,4 +128,21 @@ Quaternion CalculateValue(const std::vector<KeyframeQuaternion>& keyframes, floa
         }
     }
     return keyframes.back().value;
+}
+
+void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animationTime) {
+    for (Joint& joint : skeleton.joints) {
+        if (auto it = animation.nodeAnimations.find(joint.name); it != animation.nodeAnimations.end()) {
+            const NodeAnimation& rootNodeAnimation = it->second;
+            if (!rootNodeAnimation.translate.keyframes.empty()) {
+                joint.transform.translate = CalculateValue(rootNodeAnimation.translate.keyframes, animationTime);
+            }
+            if (!rootNodeAnimation.rotate.keyframes.empty()) {
+                joint.transform.rotate = CalculateValue(rootNodeAnimation.rotate.keyframes, animationTime);
+            }
+            if (!rootNodeAnimation.scale.keyframes.empty()) {
+                joint.transform.scale = CalculateValue(rootNodeAnimation.scale.keyframes, animationTime);
+            }
+        }
+    }
 }

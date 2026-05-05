@@ -52,7 +52,7 @@ public:
 		Matrix4x4 World;
 	};
 	
-	struct Transform {
+	struct EulerTransform {
 		Vector3 scale;
 		Vector3 rotate;
 		Vector3 translate;

@@ -36,3 +36,6 @@ Animation LoadAnimationFile(const std::string& directoryPath, const std::string&
 // 任意の時刻の値を取得する
 Vector3 CalculateValue(const std::vector<KeyframeVector3>& keyframes, float time);
 Quaternion CalculateValue(const std::vector<KeyframeQuaternion>& keyframes, float time);
+
+struct Skeleton;
+void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animationTime);
