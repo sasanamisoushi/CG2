@@ -25,10 +25,13 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 	}
 
 
-	//鬆らせ繝・・繧ｿ菴懈・
+	//頂点データ作成
 	CreateVertexData();
 
-	//繝槭ユ繝ｪ繧｢繝ｫ繝・・繧ｿ菴懈・
+	//インデックスデータ作成
+	CreateIndexData();
+
+	//マテリアルデータ作成
 	CreateMaterialData();
 
 
@@ -49,7 +52,9 @@ void Model::Draw() {
 	SrvManager::GetInstance()->PreDraw();
 
 	modelCommon_->GetDxCommon()->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
-	//modelCommon_->GetDxCommon()->GetCommandList()->IASetIndexBuffer(nullptr);
+	if (!modelData.indices.empty()) {
+		modelCommon_->GetDxCommon()->GetCommandList()->IASetIndexBuffer(&indexBufferView);
+	}
 
 	//蠖｢迥ｶ繧定ｨｭ螳壹１SO縺ｫ險ｭ螳壹＠縺ｦ縺・ｋ繧ゅ・縺ｨ縺ｯ縺ｾ縺溷挨縲ょ酔縺倥ｂ縺ｮ繧定ｨｭ螳壹☆繧九→閠・∴縺ｦ鄂ｮ縺代・繧医＞
 	modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -59,8 +64,12 @@ void Model::Draw() {
 
 	//SRV縺ｮDescriptor縺ｮ蜈磯ｭ繧定ｨｭ螳・
 	modelCommon_->GetDxCommon()->GetCommandList()->SetGraphicsRootDescriptorTable(2, TextureManager::GetInstance()->GetSrvHandleGPU(textureFilePath_));
-	//謠冗判
-	modelCommon_->GetDxCommon()->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+	
+	if (!modelData.indices.empty()) {
+		modelCommon_->GetDxCommon()->GetCommandList()->DrawIndexedInstanced(UINT(modelData.indices.size()), 1, 0, 0, 0);
+	} else {
+		modelCommon_->GetDxCommon()->GetCommandList()->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
+	}
 }
 
 
@@ -88,6 +97,22 @@ void Model::CreateVertexData() {
 	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 }
 
+void Model::CreateIndexData() {
+	if (modelData.indices.empty()) {
+		return;
+	}
+
+	indexResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(uint32_t) * modelData.indices.size());
+
+	indexBufferView.BufferLocation = indexResource->GetGPUVirtualAddress();
+	indexBufferView.SizeInBytes = UINT(sizeof(uint32_t) * modelData.indices.size());
+	indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+	uint32_t* mappedIndex = nullptr;
+	indexResource->Map(0, nullptr, reinterpret_cast<void**>(&mappedIndex));
+	std::memcpy(mappedIndex, modelData.indices.data(), sizeof(uint32_t) * modelData.indices.size());
+	indexResource->Unmap(0, nullptr);
+}
 
 void Model::CreateMaterialData() {
 	matetialResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(Material));
@@ -202,99 +227,108 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
 	assert(scene && scene->HasMeshes());
 
-	aiMesh* mesh = scene->mMeshes[0];
-	std::vector<VertexData> tempVertices;
-	for (uint32_t i = 0; i < mesh->mNumVertices; ++i) {
-		VertexData vertex;
-		vertex.position = { mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z, 1.0f };
-		// 蜿ｳ謇九°繧牙ｷｦ謇九∈
-		vertex.position.x *= -1.0f;
-		
-		if (mesh->HasNormals()) {
-			vertex.normal = { mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z };
-			vertex.normal.x *= -1.0f;
-		} else {
-			vertex.normal = { 0.0f, 0.0f, -1.0f };
+	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
+		aiMesh* mesh = scene->mMeshes[meshIndex];
+		assert(mesh->HasNormals());
+		assert(mesh->HasTextureCoords(0));
+
+		uint32_t baseVertex = (uint32_t)modelData.vertices.size();
+		modelData.vertices.resize(baseVertex + mesh->mNumVertices);
+
+		for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex) {
+			aiVector3D& position = mesh->mVertices[vertexIndex];
+			aiVector3D& normal = mesh->mNormals[vertexIndex];
+			aiVector3D& texcoord = mesh->mTextureCoords[0][vertexIndex];
+
+			VertexData& vertex = modelData.vertices[baseVertex + vertexIndex];
+			// 右手系->左手系への変換を忘れずに
+			vertex.position = { -position.x, position.y, position.z, 1.0f };
+			vertex.normal = { -normal.x, normal.y, normal.z };
+			vertex.texcoord = { texcoord.x, texcoord.y };
+			vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 		}
-		
-		if (mesh->HasTextureCoords(0)) {
-			vertex.texcoord = { mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y };
-		} else {
-			vertex.texcoord = { 0.0f, 0.0f };
+
+		for (uint32_t faceIndex = 0; faceIndex < mesh->mNumFaces; ++faceIndex) {
+			aiFace& face = mesh->mFaces[faceIndex];
+			assert(face.mNumIndices == 3);
+			for (uint32_t element = 0; element < face.mNumIndices; ++element) {
+				uint32_t vertexIndex = face.mIndices[element];
+				modelData.indices.push_back(baseVertex + vertexIndex);
+			}
+			// 面の向きを左手系にあわせるためインデックスの順番を入れ替える
+			std::swap(modelData.indices[modelData.indices.size() - 2], modelData.indices[modelData.indices.size() - 1]);
 		}
-		
-		vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-		tempVertices.push_back(vertex);
-	}
-	
-	for (uint32_t i = 0; i < mesh->mNumFaces; ++i) {
-		aiFace face = mesh->mFaces[i];
-		assert(face.mNumIndices == 3);
-		// 髱｢縺ｮ蜷代″繧貞ｷｦ謇狗ｳｻ縺ｫ縺ゅｏ縺帙ｋ (0, 1, 2) -> (0, 2, 1)
-		modelData.vertices.push_back(tempVertices[face.mIndices[0]]);
-		modelData.vertices.push_back(tempVertices[face.mIndices[2]]);
-		modelData.vertices.push_back(tempVertices[face.mIndices[1]]);
-	}
 
-	if (mesh->HasBones()) {
-		modelData.isSkinned = true;
-		for (uint32_t i = 0; i < mesh->mNumBones; ++i) {
-			aiBone* bone = mesh->mBones[i];
-			std::string jointName = bone->mName.C_Str();
-			modelData.boneNames.push_back(jointName);
-			JointWeightData& jointWeightData = modelData.skinClusterData[jointName];
-
-			aiMatrix4x4 m = bone->mOffsetMatrix;
-			Matrix4x4 invBind = {
-				m.a1, m.b1, m.c1, m.d1,
-				m.a2, m.b2, m.c2, m.d2,
-				m.a3, m.b3, m.c3, m.d3,
-				m.a4, m.b4, m.c4, m.d4
-			};
-			
-			// x霆ｸ蜿崎ｻ｢繧帝←逕ｨ (m_left = flipX * invBind * flipX)
-			invBind.m[0][1] *= -1.0f;
-			invBind.m[0][2] *= -1.0f;
-			invBind.m[0][3] *= -1.0f;
-			invBind.m[1][0] *= -1.0f;
-			invBind.m[2][0] *= -1.0f;
-			invBind.m[3][0] *= -1.0f;
-
-			jointWeightData.inverseBindMatrix = invBind;
-
-			for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
-				jointWeightData.vertexWeights.push_back({ bone->mWeights[weightIndex].mWeight, bone->mWeights[weightIndex].mVertexId });
-				uint32_t vId = bone->mWeights[weightIndex].mVertexId;
-				float weight = bone->mWeights[weightIndex].mWeight;
-				for (int slot = 0; slot < 4; ++slot) {
-					if (tempVertices[vId].weight[slot] == 0.0f) {
-						tempVertices[vId].weight[slot] = weight;
-						tempVertices[vId].index[slot] = i; // 繝｢繝・Ν縺ｮ繝懊・繝ｳIndex
+		if (mesh->HasBones()) {
+			modelData.isSkinned = true;
+			for (uint32_t i = 0; i < mesh->mNumBones; ++i) {
+				aiBone* bone = mesh->mBones[i];
+				std::string jointName = bone->mName.C_Str();
+				
+				// 既に登録済みのボーンかチェック
+				bool boneExists = false;
+				for (const auto& name : modelData.boneNames) {
+					if (name == jointName) {
+						boneExists = true;
 						break;
+					}
+				}
+				if (!boneExists) {
+					modelData.boneNames.push_back(jointName);
+				}
+				
+				JointWeightData& jointWeightData = modelData.skinClusterData[jointName];
+
+				aiMatrix4x4 m = bone->mOffsetMatrix;
+				Matrix4x4 invBind = {
+					m.a1, m.b1, m.c1, m.d1,
+					m.a2, m.b2, m.c2, m.d2,
+					m.a3, m.b3, m.c3, m.d3,
+					m.a4, m.b4, m.c4, m.d4
+				};
+				
+				// x軸反転を適用 (m_left = flipX * invBind * flipX)
+				invBind.m[0][1] *= -1.0f;
+				invBind.m[0][2] *= -1.0f;
+				invBind.m[0][3] *= -1.0f;
+				invBind.m[1][0] *= -1.0f;
+				invBind.m[2][0] *= -1.0f;
+				invBind.m[3][0] *= -1.0f;
+
+				jointWeightData.inverseBindMatrix = invBind;
+
+				for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
+					jointWeightData.vertexWeights.push_back({ bone->mWeights[weightIndex].mWeight, baseVertex + bone->mWeights[weightIndex].mVertexId });
+					uint32_t vId = baseVertex + bone->mWeights[weightIndex].mVertexId;
+					float weight = bone->mWeights[weightIndex].mWeight;
+					for (int slot = 0; slot < 4; ++slot) {
+						if (modelData.vertices[vId].weight[slot] == 0.0f) {
+							modelData.vertices[vId].weight[slot] = weight;
+							// モデルのボーンIndexを取得
+							uint32_t boneIndex = 0;
+							for (uint32_t b = 0; b < modelData.boneNames.size(); ++b) {
+								if (modelData.boneNames[b] == jointName) {
+									boneIndex = b;
+									break;
+								}
+							}
+							modelData.vertices[vId].index[slot] = boneIndex;
+							break;
+						}
 					}
 				}
 			}
 		}
-	}
 
-	// tempVertices縺ｫ譖ｸ縺崎ｾｼ繧薙□繧ｦ繧ｧ繧､繝医→繧､繝ｳ繝・ャ繧ｯ繧ｹ繧知odelData.vertices縺ｫ蜿肴丐縺吶ｋ縺溘ａ縺ｫ蜀肴ｧ狗ｯ峨☆繧・
-	modelData.vertices.clear();
-	for (uint32_t i = 0; i < mesh->mNumFaces; ++i) {
-		aiFace face = mesh->mFaces[i];
-		// 髱｢縺ｮ蜷代″繧貞ｷｦ謇狗ｳｻ縺ｫ縺ゅｏ縺帙ｋ (0, 1, 2) -> (0, 2, 1)
-		modelData.vertices.push_back(tempVertices[face.mIndices[0]]);
-		modelData.vertices.push_back(tempVertices[face.mIndices[2]]);
-		modelData.vertices.push_back(tempVertices[face.mIndices[1]]);
-	}
-
-	if (scene->HasMaterials()) {
-		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-		if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
-			aiString aiPath;
-			material->GetTexture(aiTextureType_DIFFUSE, 0, &aiPath);
-			std::string texFile = aiPath.C_Str();
-			std::string baseDir = filePath.substr(0, filePath.find_last_of('/'));
-			modelData.material.textureFilePath = baseDir + "/" + texFile;
+		if (scene->HasMaterials()) {
+			aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+			if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
+				aiString aiPath;
+				material->GetTexture(aiTextureType_DIFFUSE, 0, &aiPath);
+				std::string texFile = aiPath.C_Str();
+				std::string baseDir = filePath.substr(0, filePath.find_last_of('/'));
+				modelData.material.textureFilePath = baseDir + "/" + texFile;
+			}
 		}
 	}
 	return modelData;

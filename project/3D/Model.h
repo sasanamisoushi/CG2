@@ -78,6 +78,7 @@ void Update(Skeleton& skeleton);
 
 struct ModelData {
 	std::vector<VertexData>vertices;
+	std::vector<uint32_t> indices;
 	MaterialData material;
 	Node rootNode;
 	std::map<std::string, JointWeightData> skinClusterData; // スキニング用のデータ
@@ -106,6 +107,9 @@ public:
 
 	//頂点データ作成
 	void CreateVertexData();
+
+	//インデックスデータ作成
+	void CreateIndexData();
 
 	//マテリアルデータ作成
 	void CreateMaterialData();
@@ -189,6 +193,11 @@ private:
 	VertexData *vertexData = nullptr;
 	//バッファリソースの使い道を補足するバッファビュー
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView;
+
+	//インデックスバッファリソース
+	Microsoft::WRL::ComPtr<ID3D12Resource> indexResource;
+	//インデックスバッファビュー
+	D3D12_INDEX_BUFFER_VIEW indexBufferView{};
 
 	//マテリアルリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> matetialResource;
