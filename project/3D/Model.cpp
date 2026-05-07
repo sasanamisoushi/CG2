@@ -224,7 +224,7 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 	ModelData modelData;
 	Assimp::Importer importer;
 	std::string filePath = directoryPath + "/" + filename;
-	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenNormals);
+	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_Triangulate | aiProcess_GenNormals);
 	assert(scene && scene->HasMeshes());
 
 	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
@@ -343,8 +343,7 @@ Node Model::ReadNode(aiNode* node) {
     result.transform.rotate = { rotate.x, -rotate.y, -rotate.z, rotate.w }; // x霆ｸ繧貞渚霆｢縲√＆繧峨↓蝗櫁ｻ｢譁ｹ蜷代′騾・↑縺ｮ縺ｧ霆ｸ繧貞渚霆｢縺輔○繧・
     result.transform.translate = { -translate.x, translate.y, translate.z }; // x霆ｸ繧貞渚霆｢
     
-    MyMath math;
-    result.localMatrix = math.MakeAffineMatrix(result.transform.scale, result.transform.rotate, result.transform.translate);
+    result.localMatrix = MyMath::MakeAffineMatrix(result.transform.scale, result.transform.rotate, result.transform.translate);
     
     result.name = node->mName.C_Str();
     result.children.resize(node->mNumChildren);
@@ -366,8 +365,7 @@ int32_t CreateJoint(const Node& node, const std::optional<int32_t>& parent, std:
     Joint joint;
     joint.name = node.name;
     joint.localMatrix = node.localMatrix;
-    MyMath math;
-    joint.skeletonSpaceMatrix = math.MakeIdentity4x4();
+    joint.skeletonSpaceMatrix = MyMath::MakeIdentity4x4();
     joint.transform = node.transform;
     joint.index = int32_t(joints.size()); // 迴ｾ蝨ｨ逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ謨ｰ繧棚ndex縺ｫ
     joint.parent = parent;
@@ -384,8 +382,7 @@ int32_t CreateJoint(const Node& node, const std::optional<int32_t>& parent, std:
 void Update(Skeleton& skeleton) {
     // 縺吶∋縺ｦ縺ｮJoint繧呈峩譁ｰ縲りｦｪ縺瑚凶縺・・縺ｧ騾壼ｸｸ繝ｫ繝ｼ繝励〒蜃ｦ逅・庄閭ｽ縺ｫ縺ｪ縺｣縺ｦ縺・ｋ
     for (Joint& joint : skeleton.joints) {
-        MyMath math;
-        joint.localMatrix = math.MakeAffineMatrix(joint.transform.scale, joint.transform.rotate, joint.transform.translate);
+        joint.localMatrix = MyMath::MakeAffineMatrix(joint.transform.scale, joint.transform.rotate, joint.transform.translate);
         if (joint.parent) { // 隕ｪ縺後＞繧後・隕ｪ縺ｮ陦悟・繧呈寺縺代ｋ
             joint.skeletonSpaceMatrix = joint.localMatrix * skeleton.joints[*joint.parent].skeletonSpaceMatrix;
         } else { // 隕ｪ縺後＞縺ｪ縺・・縺ｧlocalMatrix縺ｨskeletonSpaceMatrix縺ｯ荳閾ｴ縺吶ｋ
@@ -762,6 +759,7 @@ void Model::InitializeCylinder(ModelCommon *modelCommon,
 
 SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
 	SkinCluster skinCluster;
+	skinCluster.isValid = false;
 	if (!modelData.isSkinned || modelData.boneNames.empty()) return skinCluster;
 
 	skinCluster.paletteResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(WellKnownPalette) * modelData.boneNames.size());
@@ -781,11 +779,13 @@ SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
 		}
 		skinCluster.inverseBindMatrices[i] = modelData.skinClusterData[jointName].inverseBindMatrix;
 	}
+	
+	skinCluster.isValid = true;
 	return skinCluster;
 }
 
 void Model::UpdateSkinCluster(SkinCluster& skinCluster, const Skeleton& skeleton) {
-	if (!skinCluster.mappedPalette) return;
+	if (!skinCluster.isValid || !skinCluster.mappedPalette) return;
 
 	for (size_t i = 0; i < skinCluster.boneIndexToJointIndex.size(); ++i) {
 		int32_t jointIndex = skinCluster.boneIndexToJointIndex[i];

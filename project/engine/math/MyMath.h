@@ -66,57 +66,54 @@ struct Matrix3x3 {
 class MyMath {
 public:
 
-	
-	
-
 	//平行移動
-	Matrix4x4 MakeTranslateMatrix(const Vector3 &translate);
+	static Matrix4x4 MakeTranslateMatrix(const Vector3 &translate);
 
 	//拡大縮小
-	Matrix4x4 MkeScaleMatrix(const Vector3 &scale);
+	static Matrix4x4 MkeScaleMatrix(const Vector3 &scale);
 
 	//X軸回転行列
-	Matrix4x4 MakeRoteXMatrix(float radian);
+	static Matrix4x4 MakeRoteXMatrix(float radian);
 
 	// Y軸回転行列
-	Matrix4x4 MakeRotateYMatrix(float radian);
+	static Matrix4x4 MakeRotateYMatrix(float radian);
 
 	//Z軸回転行列
-	Matrix4x4 MakeRotateZMatrix(float radian);
+	static Matrix4x4 MakeRotateZMatrix(float radian);
 
 	// 積
-	Matrix4x4 Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2);
+	static Matrix4x4 Multiply(const Matrix4x4 &m1, const Matrix4x4 &m2);
 
 	// アフィン変換行列
-	Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate);
+	static Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Vector3 &rotate, const Vector3 &translate);
 
 	// クォータニオンから回転行列を作成
-	Matrix4x4 MakeRotateMatrix(const Quaternion& quaternion);
+	static Matrix4x4 MakeRotateMatrix(const Quaternion& quaternion);
 
 	// クォータニオンによるアフィン変換行列
-	Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Quaternion &rotate, const Vector3 &translate);
+	static Matrix4x4 MakeAffineMatrix(const Vector3 &scale, const Quaternion &rotate, const Vector3 &translate);
 
 	//座標変換
-	Vector3 Transform(const Vector3 &vector, const Matrix4x4 &matrix);
+	static Vector3 Transform(const Vector3 &vector, const Matrix4x4 &matrix);
 
 	//遠近投影行列
-	Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearZ, float farZ);
+	static Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearZ, float farZ);
 
 	//正規化デバイス座標
-	Matrix4x4 MakeViewportMatrix(float width, float height);
+	static Matrix4x4 MakeViewportMatrix(float width, float height);
 
 	//単位行列
-	Matrix4x4 MakeIdentity4x4();
+	static Matrix4x4 MakeIdentity4x4();
 
 	//逆行列
-	Matrix4x4 Inverse(const Matrix4x4 &m);
+	static Matrix4x4 Inverse(const Matrix4x4 &m);
 
 	// 転置行列
-	Matrix4x4 Transpose(const Matrix4x4 &m);
+	static Matrix4x4 Transpose(const Matrix4x4 &m);
 
 	//平行投影行列
-	Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
+	static Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 
-	Vector3 Normalize(const Vector3 &v);
+	static Vector3 Normalize(const Vector3 &v);
 };
 

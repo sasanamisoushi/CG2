@@ -40,6 +40,7 @@ struct SkinCluster {
 	WellKnownPalette* mappedPalette = nullptr;
 	D3D12_GPU_VIRTUAL_ADDRESS paletteAddress = 0;
 	std::vector<int32_t> boneIndexToJointIndex; // モデルのボーンIndexからSkeletonのJointIndexへのマッピング
+	bool isValid = false;
 };
 
 struct MaterialData {
