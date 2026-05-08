@@ -63,6 +63,10 @@ void GamePlayScene::Initialize() {
 	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
 	myShere->SetTranslate({ 2.0f,0.0f,0.0f });
 	objects.push_back(myShere.get());
+	// ボーンとしても使われるため、目立つように赤くしておく
+	if (myShere->GetModel()) {
+		myShere->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f });
+	}
 
 	// ボックス
 	myBox = std::make_unique<Primitive>();
@@ -157,10 +161,12 @@ void GamePlayScene::Update() {
 			myBox->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
 
-			// スキニングが実装されたため、モデル本体のTransformは上書きせずそのまま（Identity等）にする
-			// myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
-			// myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
-			// myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
+			// スキニングが実装されたため、スキンなしモデルの場合のみTransformを適用する
+			if (myModelObject->GetModel() && !myModelObject->skinCluster.isValid) {
+				myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
+				myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
+				myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
+			}
 		}
 
 		// 骨描画の更新
@@ -172,6 +178,7 @@ void GamePlayScene::Update() {
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][2]
 				};
 				boneSpheres[i]->SetTranslate(pos);
+				boneSpheres[i]->SetScale({ boneScale, boneScale, boneScale });
 				boneSpheres[i]->Update();
 			}
 		}
@@ -303,6 +310,9 @@ void GamePlayScene::Update() {
 	}
 	ImGui::Checkbox("Play Animation", &playAnimation);
 	ImGui::Checkbox("Show Bones", &showBones);
+	if (showBones) {
+		ImGui::SliderFloat("Bone Scale", &boneScale, 0.01f, 2.0f);
+	}
 	ImGui::Checkbox("Show Particles", &showParticles);
 	ImGui::SliderFloat("Animation Time", &animationTime, 0.0f, animationData.duration);
 

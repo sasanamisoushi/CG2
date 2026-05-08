@@ -106,6 +106,7 @@ private:
 	// スケルトン
 	Skeleton skeleton;
 	bool showBones = false;
+	float boneScale = 0.1f;
 	std::vector<std::unique_ptr<Primitive>> boneSpheres;
 
 	// UIと状態管理
