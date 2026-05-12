@@ -138,6 +138,7 @@ private://メンバ変数
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> computeRootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineStateInit_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineStateEmit_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineStateUpdate_;
 	void CreateComputeRootSignature();
 	void CreateComputePipelineState();
 

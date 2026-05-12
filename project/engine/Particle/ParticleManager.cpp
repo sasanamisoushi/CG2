@@ -426,6 +426,18 @@ void ParticleManager::Draw() {
 			commandList->SetComputeRootConstantBufferView(3, perFrameResource_->GetGPUVirtualAddress());
 			commandList->Dispatch(1, 1, 1);
 
+			// UAVバリア (Emit -> Update間の依存関係を解消)
+			D3D12_RESOURCE_BARRIER barrier{};
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			barrier.UAV.pResource = group.particleResource.Get();
+			commandList->ResourceBarrier(1, &barrier);
+
+			// 更新CSの実行
+			commandList->SetPipelineState(computePipelineStateUpdate_.Get());
+			// RootParameterはEmitと同じものを使うので、再設定は不要
+			commandList->Dispatch(1, 1, 1);
+
 			// バリアを張ってから描画へ (UAV -> SRV)
 			D3D12_RESOURCE_BARRIER barriersToSrv[2] = {
 				CD3DX12_RESOURCE_BARRIER::Transition(group.particleResource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
@@ -962,5 +974,15 @@ void ParticleManager::CreateComputePipelineState() {
 	computePipelineStateEmitDesc.CS = { computeShaderEmitBlob->GetBufferPointer(), computeShaderEmitBlob->GetBufferSize() };
 
 	hr = dxCommon_->GetDevice()->CreateComputePipelineState(&computePipelineStateEmitDesc, IID_PPV_ARGS(&computePipelineStateEmit_));
+	assert(SUCCEEDED(hr));
+
+	ComPtr<IDxcBlob> computeShaderUpdateBlob = CompileShader(L"resources/shaders/UpdateParticle.CS.hlsl", L"cs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get());
+	assert(computeShaderUpdateBlob != nullptr);
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC computePipelineStateUpdateDesc{};
+	computePipelineStateUpdateDesc.pRootSignature = computeRootSignature_.Get();
+	computePipelineStateUpdateDesc.CS = { computeShaderUpdateBlob->GetBufferPointer(), computeShaderUpdateBlob->GetBufferSize() };
+
+	hr = dxCommon_->GetDevice()->CreateComputePipelineState(&computePipelineStateUpdateDesc, IID_PPV_ARGS(&computePipelineStateUpdate_));
 	assert(SUCCEEDED(hr));
 }
