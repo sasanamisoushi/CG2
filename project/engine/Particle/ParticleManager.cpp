@@ -108,6 +108,8 @@ void ParticleManager::Initialize(DirectXCommon *dxCommon) {
 
 	CreateRootSignature();
 	CreatePipelineState();
+	CreateComputeRootSignature();
+	CreateComputePipelineState();
 
 	// -------------------------------------------------------------
 	// 頂点データの初期化
@@ -180,6 +182,43 @@ void ParticleManager::Initialize(DirectXCommon *dxCommon) {
 	std::memcpy(vertexMap, vertices, sizeof(vertices));
 
 	vertexResource_->Unmap(0, nullptr);
+
+	// --- GPU Particle 追加分 ---
+	// カメラ用リソースの生成
+	D3D12_HEAP_PROPERTIES cameraHeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC cameraResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(CameraForGPU));
+
+	hr = device->CreateCommittedResource(
+		&cameraHeapProp,
+		D3D12_HEAP_FLAG_NONE,
+		&cameraResDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&cameraResource_)
+	);
+	assert(SUCCEEDED(hr));
+
+	// マッピング
+	hr = cameraResource_->Map(0, nullptr, reinterpret_cast<void **>(&cameraDataPtr_));
+	assert(SUCCEEDED(hr));
+
+	// GPU初期化パラメータ用リソースの生成
+	D3D12_HEAP_PROPERTIES gpuParamHeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+	D3D12_RESOURCE_DESC gpuParamResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(ParticleGPUParam));
+
+	hr = device->CreateCommittedResource(
+		&gpuParamHeapProp,
+		D3D12_HEAP_FLAG_NONE,
+		&gpuParamResDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&gpuParamResource_)
+	);
+	assert(SUCCEEDED(hr));
+
+	// マッピング
+	hr = gpuParamResource_->Map(0, nullptr, reinterpret_cast<void **>(&gpuParamDataPtr_));
+	assert(SUCCEEDED(hr));
 }
 
 void ParticleManager::Update(Camera *camera) {
@@ -197,6 +236,25 @@ void ParticleManager::Update(Camera *camera) {
 	matBillboard.m[3][1] = 0.0f;
 	matBillboard.m[3][2] = 0.0f;
 	matBillboard.m[3][3] = 1.0f;
+
+	// --- GPU Particle 追加分 ---
+	MyMath myMath;
+	// カメラ情報の書き込み
+	cameraDataPtr_->viewProjection = myMath.Multiply(matView, matProjection);
+	cameraDataPtr_->billboard = matBillboard;
+
+	// GPU初期化用パラメータの更新
+	gpuParamDataPtr_->translate = gpuParticleTranslate;
+	gpuParamDataPtr_->scale = gpuParticleScale;
+	gpuParamDataPtr_->color = gpuParticleColor;
+
+	// 再初期化リクエストの処理
+	if (requestGpuInitialize) {
+		for (auto& [name, group] : particleGroups_) {
+			group.isGpuInitialized = false;
+		}
+		requestGpuInitialize = false;
+	}
 
 
 	// 3. 全てのパーティクルグループについて処理する (スライド)
@@ -288,13 +346,40 @@ void ParticleManager::Draw() {
 	commandList->SetGraphicsRootSignature(rootSignature_.Get());
 	commandList->SetPipelineState(graphicsPipelineState_.Get());
 
-	// プリミティブ形状の設定（三角形リスト）
-	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	// プリミティブ形状の設定（トライアングルストリップ）
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView_);
 
 	// 3. グループごとの描画ループ
 	for (auto &[name, group] : particleGroups_) {
+
+		// --- GPU Particle 初回初期化 ---
+		if (group.particleResource && !group.isGpuInitialized) {
+			commandList->SetComputeRootSignature(computeRootSignature_.Get());
+			commandList->SetPipelineState(computePipelineState_.Get());
+
+			ID3D12DescriptorHeap *descriptorHeaps[] = { SrvManager::GetInstance()->GetDescriptorHeap() };
+			commandList->SetDescriptorHeaps(1, descriptorHeaps);
+
+			SrvManager::GetInstance()->SetComputeRootDescriptorTable(0, group.uavIndex);
+			// パラメータCBVのセット
+			commandList->SetComputeRootConstantBufferView(1, gpuParamResource_->GetGPUVirtualAddress());
+			commandList->Dispatch(1, 1, 1);
+
+			// バリアを張ってから描画へ (UAV -> SRV)
+			D3D12_RESOURCE_BARRIER barrier = CD3DX12_RESOURCE_BARRIER::Transition(
+				group.particleResource.Get(),
+				D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+				D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+			);
+			commandList->ResourceBarrier(1, &barrier);
+			group.isGpuInitialized = true;
+
+			// 描画用のパイプラインに戻す
+			commandList->SetGraphicsRootSignature(rootSignature_.Get());
+			commandList->SetPipelineState(graphicsPipelineState_.Get());
+		}
 
 		// 描画するインスタンス数（現在のパーティクル数）
 		UINT instanceCount = static_cast<UINT>(group.particle.size());
@@ -318,11 +403,21 @@ void ParticleManager::Draw() {
 		SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, group.textureSrvIndex);
 
 		// (2) インスタンシングデータのSRVをセット -> RootParameter index 1
-		SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.instancingSrvIndex);
+		if (group.particleResource) {
+			// GPU Particleの場合
+			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.srvIndex);
+			instanceCount = 1024;
+		} else {
+			// CPU Particleの場合
+			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.instancingSrvIndex);
+		}
+
+		// (3) カメラデータをセット -> RootParameter index 4
+		commandList->SetGraphicsRootConstantBufferView(4, cameraResource_->GetGPUVirtualAddress());
 
 		// 5. 描画コマンド発行 (DrawInstanced)
-		// 頂点数6 (四角形=三角形2枚), インスタンス数, ...
-		commandList->DrawInstanced(6, instanceCount, 0, 0);
+		// 頂点数4 (トライアングルストリップで四角形), インスタンス数, ...
+		commandList->DrawInstanced(4, instanceCount, 0, 0);
 	}
 }
 
@@ -397,6 +492,57 @@ void ParticleManager::CreateParticleGroup(const std::string name, const std::str
 
 	// 5. マップに登録
 	particleGroups_[name] = group;
+
+	// --- GPU Particle 追加分 ---
+	// 1. Resource作成 (DEFAULT)
+	D3D12_HEAP_PROPERTIES defaultHeapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+	D3D12_RESOURCE_DESC particleResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(ParticleCS) * 1024);
+	particleResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	hr = dxCommon_->GetDevice()->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&particleResDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&particleGroups_[name].particleResource)
+	);
+	assert(SUCCEEDED(hr));
+
+	// 2. View作成 (UAV & SRV)
+	particleGroups_[name].uavIndex = SrvManager::GetInstance()->Allocate();
+	particleGroups_[name].srvIndex = SrvManager::GetInstance()->Allocate();
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	uavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.FirstElement = 0;
+	uavDesc.Buffer.NumElements = 1024;
+	uavDesc.Buffer.StructureByteStride = sizeof(ParticleCS);
+	uavDesc.Buffer.CounterOffsetInBytes = 0;
+	uavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+
+	dxCommon_->GetDevice()->CreateUnorderedAccessView(
+		particleGroups_[name].particleResource.Get(),
+		nullptr,
+		&uavDesc,
+		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].uavIndex)
+	);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC gpuSrvDesc{};
+	gpuSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	gpuSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	gpuSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	gpuSrvDesc.Buffer.FirstElement = 0;
+	gpuSrvDesc.Buffer.NumElements = 1024;
+	gpuSrvDesc.Buffer.StructureByteStride = sizeof(ParticleCS);
+	gpuSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+
+	dxCommon_->GetDevice()->CreateShaderResourceView(
+		particleGroups_[name].particleResource.Get(),
+		&gpuSrvDesc,
+		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].srvIndex)
+	);
 }
 
 void ParticleManager::Emit(const std::string name, const Vector3 &position, uint32_t count) {
@@ -484,7 +630,7 @@ void ParticleManager::CreateRootSignature() {
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
 	//RootParameter作成。複製設定できるので配列
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[0].Descriptor.ShaderRegister = 0;           //レジスタ番号0とバインド
@@ -502,6 +648,12 @@ void ParticleManager::CreateRootSignature() {
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[3].Descriptor.ShaderRegister = 1;
+
+	// --- GPU Particle 追加分 ---
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParameters[4].Descriptor.ShaderRegister = 0; // b0
+	
 	descriptionRootSignature.pParameters = rootParameters;//ルートパラメータ配列のポインタ
 	descriptionRootSignature.NumParameters = _countof(rootParameters);//配列の長さ
 
@@ -642,4 +794,59 @@ void ParticleManager::CreatePipelineState() {
 		logger.Log("Failed to create GraphicsPipelineState for Particle.\n");
 		assert(false);
 	}
+}
+
+void ParticleManager::CreateComputeRootSignature() {
+	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
+	descriptorRange[0].BaseShaderRegister = 0;
+	descriptorRange[0].NumDescriptors = 1;
+	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_PARAMETER rootParameters[2] = {};
+	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRange;
+	rootParameters[0].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
+
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	rootParameters[1].Descriptor.ShaderRegister = 1;
+
+	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
+	descriptionRootSignature.pParameters = rootParameters;
+	descriptionRootSignature.NumParameters = _countof(rootParameters);
+
+	ComPtr<ID3DBlob> signatureBlob = nullptr;
+	ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&descriptionRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &signatureBlob, &errorBlob);
+	if (FAILED(hr)) {
+		logger.Log(reinterpret_cast<char *>(errorBlob->GetBufferPointer()));
+		assert(false);
+	}
+	hr = dxCommon_->GetDevice()->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&computeRootSignature_));
+	assert(SUCCEEDED(hr));
+}
+
+void ParticleManager::CreateComputePipelineState() {
+	ComPtr<IDxcUtils> dxcUtils = nullptr;
+	ComPtr<IDxcCompiler3> dxcCompiler = nullptr;
+	HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+	assert(SUCCEEDED(hr));
+	hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
+	assert(SUCCEEDED(hr));
+
+	ComPtr<IDxcIncludeHandler> includeHandler = nullptr;
+	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
+	assert(SUCCEEDED(hr));
+
+	ComPtr<IDxcBlob> computeShaderBlob = CompileShader(L"resources/shaders/InitializeParticle.CS.hlsl", L"cs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get());
+	assert(computeShaderBlob != nullptr);
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC computePipelineStateDesc{};
+	computePipelineStateDesc.pRootSignature = computeRootSignature_.Get();
+	computePipelineStateDesc.CS = { computeShaderBlob->GetBufferPointer(), computeShaderBlob->GetBufferSize() };
+
+	hr = dxCommon_->GetDevice()->CreateComputePipelineState(&computePipelineStateDesc, IID_PPV_ARGS(&computePipelineState_));
+	assert(SUCCEEDED(hr));
 }

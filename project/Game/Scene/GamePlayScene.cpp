@@ -62,7 +62,7 @@ void GamePlayScene::Initialize() {
 	myShere = std::make_unique<Primitive>();
 	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
 	myShere->SetTranslate({ 2.0f,0.0f,0.0f });
-	objects.push_back(myShere.get());
+	// objects.push_back(myShere.get());
 	// ボーンとしても使われるため、目立つように赤くしておく
 	if (myShere->GetModel()) {
 		myShere->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f });
@@ -79,7 +79,7 @@ void GamePlayScene::Initialize() {
 	myModelObject->Initialize(Object3dCommon::GetInstance());
 	ModelManager::GetInstance()->LoadModel("AnimatedCube/AnimatedCube.gltf");
 	myModelObject->SetModel("AnimatedCube/AnimatedCube.gltf");
-	objects.push_back(myModelObject.get());
+	//objects.push_back(myModelObject.get());
 
 	// アニメーションとノード階層の読み込み
 	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
@@ -91,13 +91,12 @@ void GamePlayScene::Initialize() {
 
 	myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 
-	// 骨描画用のスフィアをあらかじめ用意しておく（最大関節数ぶん程度）
-	for (int i = 0; i < 128; ++i) {
-		auto sphere = std::make_unique<Primitive>();
-		sphere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
-		sphere->SetScale({ 0.1f, 0.1f, 0.1f }); // 小さなスフィアにする
-		boneSpheres.push_back(std::move(sphere));
-	}
+	// ボーンライン用オブジェクトの初期化
+	ModelManager::GetInstance()->CreateLineModel("SkeletonLines");
+	skeletonLinesObject = std::make_unique<Object3d>();
+	skeletonLinesObject->Initialize(Object3dCommon::GetInstance());
+	skeletonLinesObject->SetModel("SkeletonLines");
+
 
 	// リング
 	myRing = std::make_unique<Primitive>();
@@ -154,7 +153,7 @@ void GamePlayScene::Update() {
 		// アニメーションの更新と骨への適用
 		ApplyAnimation(skeleton, animationData, animationTime);
 		::Update(skeleton);
-		if (myModelObject->GetModel()) {
+		if (enableSkinning && myModelObject->GetModel()) {
 			myModelObject->GetModel()->UpdateSkinCluster(myModelObject->skinCluster, skeleton);
 		}
 
@@ -176,24 +175,65 @@ void GamePlayScene::Update() {
 					// (これを行わないと二重に移動して画面外に消える)
 					myModelObject->SetTranslate({ 0.0f, 0.0f, 0.0f });
 					myModelObject->SetQuaternionRotate({ 0.0f, 0.0f, 0.0f, 1.0f });
-					myModelObject->SetScale({ 1.0f, 1.0f, 1.0f });
+					myModelObject->SetScale({ modelScale, modelScale, modelScale });
 				}
 			}
 		}
 
 		// 骨描画の更新
 		if (showBones) {
-			for (size_t i = 0; i < skeleton.joints.size() && i < boneSpheres.size(); ++i) {
+			std::vector<VertexData> lineVertices;
+
+			for (size_t i = 0; i < skeleton.joints.size(); ++i) {
 				Vector3 pos = {
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][0],
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][1],
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][2]
 				};
-				boneSpheres[i]->SetTranslate(pos);
-				boneSpheres[i]->SetScale({ boneScale, boneScale, boneScale });
-				boneSpheres[i]->Update();
+				// モデル全体のスケールに合わせてボーンの座標もスケーリングする
+				pos.x *= modelScale;
+				pos.y *= modelScale;
+				pos.z *= modelScale;
+
+				// ライン用の頂点を作成（親がいる場合）
+				if (skeleton.joints[i].parent) {
+					int32_t parentIndex = *skeleton.joints[i].parent;
+					Vector3 parentPos = {
+						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][0],
+						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][1],
+						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][2]
+					};
+					parentPos.x *= modelScale;
+					parentPos.y *= modelScale;
+					parentPos.z *= modelScale;
+
+					VertexData v1, v2;
+					v1.position = { parentPos.x, parentPos.y, parentPos.z, 1.0f };
+					v1.normal = { 0.0f, 1.0f, 0.0f };
+					v1.texcoord = { 0.0f, 0.0f };
+					v1.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+
+					v2.position = { pos.x, pos.y, pos.z, 1.0f };
+					v2.normal = { 0.0f, 1.0f, 0.0f };
+					v2.texcoord = { 1.0f, 1.0f };
+					v2.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+
+					lineVertices.push_back(v1);
+					lineVertices.push_back(v2);
+				}
 			}
+
+			// ラインモデルの頂点を更新
+			if (!lineVertices.empty() && skeletonLinesObject->GetModel()) {
+				skeletonLinesObject->GetModel()->UpdateLineVertices(lineVertices);
+			}
+			skeletonLinesObject->Update();
 		}
+	}
+
+	// モデルの更新
+	if (showModel && myModelObject) {
+		myModelObject->Update();
 	}
 
 	//カメラの更新
@@ -292,17 +332,28 @@ void GamePlayScene::Update() {
 	ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
 
 	//ウィンドウの作成
-	ImGui::Begin("Exercise");
+	ImGui::Begin("演習");
 
-	ImGui::Text("Ring Settings");
-	ImGui::Checkbox("Show Normal Ring", &showNormalRing);
-	ImGui::Checkbox("Show Partial Ring", &showPartialRing);
-	ImGui::Checkbox("Show Cylinder", &showCylinder);
+	ImGui::Text("リングの設定");
+	ImGui::Checkbox("通常リングを表示", &showNormalRing);
+	ImGui::Checkbox("部分リングを表示", &showPartialRing);
+	ImGui::Checkbox("シリンダーを表示", &showCylinder);
 
 	ImGui::Separator();
-	ImGui::Text("Animation Control");
+	ImGui::Text("GPUパーティクルの操作");
+	bool gpuChanged = false;
+	if (ImGui::DragFloat3("座標", &particleManager->GetGpuParticleTranslate().x, 0.01f)) gpuChanged = true;
+	if (ImGui::DragFloat3("スケール", &particleManager->GetGpuParticleScale().x, 0.01f)) gpuChanged = true;
+	if (ImGui::ColorEdit4("色", &particleManager->GetGpuParticleColor().x)) gpuChanged = true;
+
+	if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
+		particleManager->RequestGpuInitialize();
+	}
+
+	ImGui::Separator();
+	ImGui::Text("アニメーション制御");
 	const char* animationNames[] = { "AnimatedCube", "simpleSkin", "sneakWalk", "walk" };
-	if (ImGui::Combo("Animation", &currentAnimationIndex, animationNames, IM_ARRAYSIZE(animationNames))) {
+	if (ImGui::Combo("アニメーション", &currentAnimationIndex, animationNames, IM_ARRAYSIZE(animationNames))) {
 		std::string dir, file, loadFile;
 		if (currentAnimationIndex == 0) { dir = "resources/AnimatedCube"; file = "AnimatedCube.gltf"; loadFile = "AnimatedCube/AnimatedCube.gltf"; }
 		else if (currentAnimationIndex == 1) { dir = "resources/simpleSkin"; file = "simpleSkin.gltf"; loadFile = "simpleSkin/simpleSkin.gltf"; }
@@ -322,21 +373,28 @@ void GamePlayScene::Update() {
 		if (myModelObject->GetModel()) {
 			myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 		}
+		
+		// モデルに応じた適切なスケールを自動設定する
+		if (currentAnimationIndex == 0) {
+			modelScale = 0.01f; // AnimatedCubeは巨大なので縮小
+		} else {
+			modelScale = 1.0f;  // simpleSkinなどは等倍で人間サイズ
+		}
 	}
-	ImGui::Checkbox("Play Animation", &playAnimation);
-	ImGui::Checkbox("Show Bones", &showBones);
-	if (showBones) {
-		ImGui::SliderFloat("Bone Scale", &boneScale, 0.01f, 2.0f);
-	}
-	ImGui::Checkbox("Show Particles", &showParticles);
-	ImGui::SliderFloat("Animation Time", &animationTime, 0.0f, animationData.duration);
+	ImGui::Checkbox("モデルを表示", &showModel);
+	ImGui::Checkbox("スキニング (ガワを動かす)", &enableSkinning);
+	ImGui::SliderFloat("モデルスケール", &modelScale, 0.001f, 1.0f);
+	if (ImGui::Checkbox("アニメーション再生", &playAnimation)) {}
+	ImGui::Checkbox("ボーンを表示", &showBones);
+	ImGui::Checkbox("パーティクルを表示", &showParticles);
+	ImGui::SliderFloat("再生時間", &animationTime, 0.0f, animationData.duration);
 
 	ImGui::Separator();
-	ImGui::Text("Cylinder Settings");
-	ImGui::DragFloat3("Cylinder Position", cylinderPos, 0.01f);
-	ImGui::DragFloat3("Cylinder Scale", cylinderScale, 0.01f);
-	ImGui::DragFloat2("UV Scroll Speed", cylinderUVScrollSpeed, 0.001f);
-	ImGui::SliderFloat("Alpha Reference", &cylinderAlphaReference, 0.0f, 1.0f);
+	ImGui::Text("シリンダー設定");
+	ImGui::DragFloat3("シリンダー座標", cylinderPos, 0.01f);
+	ImGui::DragFloat3("シリンダースケール", cylinderScale, 0.01f);
+	ImGui::DragFloat2("UVスクロール速度", cylinderUVScrollSpeed, 0.001f);
+	ImGui::SliderFloat("アルファリファレンス", &cylinderAlphaReference, 0.0f, 1.0f);
 
 	bool cChanged = false;
 	if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;
@@ -498,13 +556,19 @@ void GamePlayScene::Draw() {
 	for (Object3d *object3d : objects) {
 		object3d->Draw();
 	}
+
+	// アニメーションモデルの個別描画制御
+	if (showModel && myModelObject) {
+		myModelObject->Draw();
+	}
 	
 	if (showBones) {
 		// ボーン描画の前に設定を確実にする
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
-		for (size_t i = 0; i < skeleton.joints.size() && i < boneSpheres.size(); ++i) {
-			boneSpheres[i]->Update(); // 最新の座標で行列更新
-			boneSpheres[i]->Draw();
+
+		// ボーンラインの描画
+		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
+			skeletonLinesObject->Draw();
 		}
 	}
 	

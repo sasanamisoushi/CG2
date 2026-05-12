@@ -101,6 +101,7 @@ struct ModelData {
 	std::map<std::string, JointWeightData> skinClusterData; // スキニング用のデータ
 	std::vector<std::string> boneNames; // ボーンIndex順のジョイント名
 	bool isSkinned = false; // スキニングモデルかどうか
+	bool isLine = false; // ラインプリミティブかどうか
 };
 
 struct Material {
@@ -171,6 +172,10 @@ public:
 		const Vector4& bottomColor = { 1.0f, 1.0f, 1.0f, 1.0f },
 		float startAngleDegree = 0.0f, float endAngleDegree = 360.0f,
 		bool isUvFlipped = false);
+
+	// ラインの初期化
+	void InitializeLine(ModelCommon *modelCommon);
+	void UpdateLineVertices(const std::vector<VertexData>& lines);
 
 	void SetUvTransform(const Matrix4x4& transform) {
 		if (materialData) {

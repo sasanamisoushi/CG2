@@ -7,10 +7,12 @@ void ImGuiManager::Initialize(HWND hwnd, ID3D12Device *device, int numFramesInFl
 	// ImGuiのコンテキストを作成
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
-	ImGuiIO &io = ImGui::GetIO(); (void)io;
-
 	// スタイル設定
 	ImGui::StyleColorsDark();
+
+	// 日本語フォントのロード
+	ImGuiIO &io = ImGui::GetIO();
+	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msgothic.ttc", 13.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
 
 	// WIn32とDX12のバックエンドを初期化
 	ImGui_ImplWin32_Init(hwnd);

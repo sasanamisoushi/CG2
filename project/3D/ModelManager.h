@@ -36,6 +36,11 @@ public:
 	// 円柱モデルの作成
 	void CreateCylinderModel(const std::string &modelName, int subdivision = 32, float topRadius = 1.0f, float bottomRadius = 1.0f, float height = 3.0f);
 
+	// ラインモデルの作成
+	void CreateLineModel(const std::string &modelName);
+
+	ModelCommon *GetModelCommon() const { return modelCommon.get(); }
+
 private:
 	static ModelManager *instance;
 

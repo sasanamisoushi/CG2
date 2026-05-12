@@ -107,3 +107,12 @@ void ModelManager::CreateCylinderModel(const std::string &modelName, int subdivi
 	);
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
+
+void ModelManager::CreateLineModel(const std::string &modelName) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializeLine(modelCommon.get());
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}
+

@@ -63,9 +63,9 @@ private:
 	std::unique_ptr<Object3d> myModelObject;
 
 	// 表示切替フラグ
-	bool showNormalRing = true;
-	bool showPartialRing = true;
-	bool showCylinder = true;
+	bool showNormalRing = false;
+	bool showPartialRing = false;
+	bool showCylinder = false;
 
 	// Partial Ring用パラメータ
 	int prSubdivision = 64;
@@ -106,11 +106,14 @@ private:
 	// スケルトン
 	Skeleton skeleton;
 	bool showBones = false;
-	float boneScale = 0.1f;
-	std::vector<std::unique_ptr<Primitive>> boneSpheres;
+	std::unique_ptr<Model> skeletonLinesModel;
+	std::unique_ptr<Object3d> skeletonLinesObject;
 
 	// UIと状態管理
 	bool showParticles = true;
+	bool showModel = false;
+	bool enableSkinning = false; // スキニング（ガワを動かす）の切り替え
+	float modelScale = 0.01f;
 	int currentAnimationIndex = 0;
 };
 

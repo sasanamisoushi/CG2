@@ -47,5 +47,10 @@ void Primitive::Initialize(Object3dCommon *object3dCommon, PrimitiveType type) {
 			GetModel()->SetAlphaReference(0.0f); // Effect用に0以外discardしないように
 		}
 		break;
+	//------------ライン------------
+	case PrimitiveType::Line:
+		ModelManager::GetInstance()->CreateLineModel("Primitive_Line");
+		SetModel("Primitive_Line");
+		break;
 	}
 }

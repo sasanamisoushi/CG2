@@ -68,7 +68,11 @@ void Model::Draw() {
 	}
 
 	//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えておけばよい
-	modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	if (modelData.isLine) {
+		modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+	} else {
+		modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	}
 
 	//マテリアルCBufferの場所を設定
 	modelCommon_->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(0, matetialResource->GetGPUVirtualAddress());
@@ -505,6 +509,12 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 	// 頂点データとマテリアルデータのバッファ作成
 	CreateVertexData();
 	CreateMaterialData();
+
+	// テクスチャの設定（これが無いと透明・黒になって見えなくなる）
+	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
 }
 
 void Model::InitializePlane(ModelCommon *modelCommon) {
@@ -796,6 +806,56 @@ void Model::InitializeCylinder(ModelCommon *modelCommon,
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::InitializeLine(ModelCommon *modelCommon) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	VertexData v1, v2;
+	v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
+	v1.normal = { 0.0f, 1.0f, 0.0f };
+	v1.texcoord = { 0.0f, 0.0f };
+	v1.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+	v2.position = { 0.0f, 1.0f, 0.0f, 1.0f };
+	v2.normal = { 0.0f, 1.0f, 0.0f };
+	v2.texcoord = { 1.0f, 1.0f };
+	v2.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+	modelData.vertices.push_back(v1);
+	modelData.vertices.push_back(v2);
+
+	modelData.isLine = true;
+
+	CreateVertexData();
+	CreateMaterialData();
+
+	if (materialData) {
+		materialData->enableLighting = 0; // ラインはライティング不要
+	}
+
+	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::UpdateLineVertices(const std::vector<VertexData>& lines) {
+	if (lines.empty()) return;
+	
+	bool needRecreate = (modelData.vertices.size() != lines.size());
+	modelData.vertices = lines;
+
+	if (needRecreate || !vertexResource) {
+		CreateVertexData();
+	} else {
+		// 既存のvertexResource(UPLOADヒープ)をマップして更新する
+		VertexData* mappedData = nullptr;
+		vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
+		vertexResource->Unmap(0, nullptr);
+	}
 }
 
 SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
