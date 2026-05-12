@@ -342,9 +342,12 @@ void GamePlayScene::Update() {
 	ImGui::Separator();
 	ImGui::Text("GPUパーティクルの操作");
 	bool gpuChanged = false;
-	if (ImGui::DragFloat3("座標", &particleManager->GetGpuParticleTranslate().x, 0.01f)) gpuChanged = true;
-	if (ImGui::DragFloat3("スケール", &particleManager->GetGpuParticleScale().x, 0.01f)) gpuChanged = true;
-	if (ImGui::ColorEdit4("色", &particleManager->GetGpuParticleColor().x)) gpuChanged = true;
+	if (auto* emitter = particleManager->GetEmitterSphere()) {
+		if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
+		if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
+		if (ImGui::DragInt("射出数", (int*)&emitter->count, 1, 0, 1000)) gpuChanged = true;
+		if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
+	}
 
 	if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
 		particleManager->RequestGpuInitialize();

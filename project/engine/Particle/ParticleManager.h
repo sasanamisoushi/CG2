@@ -50,13 +50,20 @@ public://構造体定義
 		Matrix4x4 billboard;
 	};
 
-	// GPU初期化用パラメータ
-	struct ParticleGPUParam {
-		Vector3 translate;
-		float pad1;
-		Vector3 scale;
-		float pad2;
-		Vector4 color;
+	// GPUエミッターパラメータ
+	struct EmitterSphere {
+		Vector3 translate; // 位置
+		float radius; // 射出半径
+		uint32_t count; // 射出数
+		float frequency; // 射出間隔
+		float frequencyTime; // 射出間隔調整用時間
+		uint32_t emit; // 射出許可
+	};
+
+	// GPU用PerFrame
+	struct PerFrame {
+		float time;
+		float deltaTime;
 	};
 
 	struct ParticleGroup {
@@ -78,6 +85,10 @@ public://構造体定義
 		Microsoft::WRL::ComPtr<ID3D12Resource> particleResource;
 		uint32_t uavIndex;
 		uint32_t srvIndex;
+		
+		Microsoft::WRL::ComPtr<ID3D12Resource> freeCounterResource;
+		uint32_t freeCounterUavIndex;
+
 		bool isGpuInitialized = false;
 	};
 
@@ -98,9 +109,7 @@ public://メンバ関数
 	void Emit(const std::string name, const Vector3 &position, uint32_t count);
 
 	// getter/setter
-	Vector3& GetGpuParticleTranslate() { return gpuParticleTranslate; }
-	Vector3& GetGpuParticleScale() { return gpuParticleScale; }
-	Vector4& GetGpuParticleColor() { return gpuParticleColor; }
+	EmitterSphere* GetEmitterSphere() { return emitterDataPtr_; }
 	void RequestGpuInitialize() { requestGpuInitialize = true; }
 
 private://メンバ関数
@@ -127,20 +136,21 @@ private://メンバ変数
 
 	// --- GPU Particle 追加分 ---
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> computeRootSignature_;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineStateInit_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> computePipelineStateEmit_;
 	void CreateComputeRootSignature();
 	void CreateComputePipelineState();
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> cameraResource_;
 	CameraForGPU *cameraDataPtr_ = nullptr;
 
-	Microsoft::WRL::ComPtr<ID3D12Resource> gpuParamResource_;
-	ParticleGPUParam *gpuParamDataPtr_ = nullptr;
+	Microsoft::WRL::ComPtr<ID3D12Resource> emitterResource_;
+	EmitterSphere *emitterDataPtr_ = nullptr;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> perFrameResource_;
+	PerFrame *perFrameDataPtr_ = nullptr;
 
 	// --- GPU Particle 操作用 ---
-	Vector3 gpuParticleTranslate = { 0.0f, 0.0f, 0.0f };
-	Vector3 gpuParticleScale = { 1.0f, 1.0f, 1.0f };
-	Vector4 gpuParticleColor = { 1.0f, 1.0f, 1.0f, 1.0f };
 	bool requestGpuInitialize = false;
 
 	//パーティクル管理用リスト
