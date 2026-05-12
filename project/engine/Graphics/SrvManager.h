@@ -28,10 +28,15 @@ public:
 	//SRV生成
 	void CreateSRVforStructuredBuffer(uint32_t srvIndex, ID3D12Resource *pResource, UINT numElements, UINT structureByteStride);
 
+	//UAV生成
+	void CreateUAVforStructuredBuffer(uint32_t uavIndex, ID3D12Resource *pResource, UINT numElements, UINT structureByteStride);
+
 	void PreDraw();
 
 	//SRVセットコマンド
 	void SetGraphicsRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);
+
+	void SetComputeRootDescriptorTable(UINT RootParameterIndex, uint32_t srvIndex);
 
 
 private:

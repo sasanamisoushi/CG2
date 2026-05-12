@@ -1,5 +1,8 @@
 #include "Model.h"
+#include "Object3dCommon.h"
+#include "ModelCommon.h"
 #include "engine/Resource/TextureManager.h"
+#include "engine/Graphics/SrvManager.h"
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -22,6 +25,14 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 		modelData = LoadGltfFile(directorypath, filename);
 	} else {
 		modelData = LoadObjFile(directorypath, filename);
+	}
+
+	// ロード失敗時のフォールバック (頂点が空ならダミーを作る)
+	if (modelData.vertices.empty()) {
+		VertexData v;
+		v.position = { 0, 0, 0, 1 }; v.color = { 1, 0, 0, 1 }; modelData.vertices.push_back(v);
+		v.position = { 0, 1, 0, 1 }; v.color = { 0, 1, 0, 1 }; modelData.vertices.push_back(v);
+		v.position = { 1, 0, 0, 1 }; v.color = { 0, 0, 1, 1 }; modelData.vertices.push_back(v);
 	}
 
 
@@ -49,7 +60,7 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 
 
 void Model::Draw() {
-	SrvManager::GetInstance()->PreDraw();
+	auto commandList = modelCommon_->GetDxCommon()->GetCommandList();
 
 	modelCommon_->GetDxCommon()->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
 	if (!modelData.indices.empty()) {
@@ -74,27 +85,46 @@ void Model::Draw() {
 
 
 void Model::CreateVertexData() {
-	//頂点リソースを作成
-	vertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(VertexData) * modelData.vertices.size());
+	size_t vertexBufferSize = sizeof(VertexData) * modelData.vertices.size();
 
+	if (modelData.isSkinned) {
+		// スキニング用: 変形後の頂点を入れるバッファ (UAV/描画用, DEFAULTヒープ)
+		vertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(vertexBufferSize, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+		
+		// スキニング用: 変形前の頂点を入れるバッファ (SRV用, UPLOADヒープ)
+		inputVertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(vertexBufferSize);
+		VertexData* inputMappedData = nullptr;
+		inputVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&inputMappedData));
+		std::memcpy(inputMappedData, modelData.vertices.data(), vertexBufferSize);
+		inputVertexResource->Unmap(0, nullptr);
 
+		// 初期状態としてバリアを張っておく
+		D3D12_RESOURCE_BARRIER barrier = {};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Transition.pResource = vertexResource.Get();
+		barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+		barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+		modelCommon_->GetDxCommon()->GetCommandList()->ResourceBarrier(1, &barrier);
 
-	//リソースの先頭のアドレスから使う
+		// 初期ポーズを vertexResource にコピーしておく (表示確認のため)
+		// 本来は DEFAULTヒープへのコピーは中間リソースが必要だが、
+		// スキニングCSが走れば上書きされるので、一旦ここでは「何もしない」のではなく
+		// 「バリアだけ確実に張る」ことを徹底する。
+	} else {
+		// 通常モデルは従来通り UPLOADヒープ
+		vertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(vertexBufferSize);
+		inputVertexResource = nullptr;
+		
+		VertexData* mappedData = nullptr;
+		vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+		std::memcpy(mappedData, modelData.vertices.data(), vertexBufferSize);
+		vertexResource->Unmap(0, nullptr);
+	}
+
+	//バッファビューの設定
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-
-	//使用するリソースのサイズは頂点3つのサイズ
-	vertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-	//1頂点当たりのサイズ
+	vertexBufferView.SizeInBytes = UINT(vertexBufferSize);
 	vertexBufferView.StrideInBytes = sizeof(VertexData);
-
-	//頂点リソースデータを書き込む
-	VertexData *vertexData = nullptr;
-
-	//書き込む為のアドレスを取得
-	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData));
-
-	//頂点データをリソースにコピー
-	std::memcpy(vertexData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 }
 
 void Model::CreateIndexData() {
@@ -208,7 +238,11 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 					Vector4 position = positions[elementIndices[0] - 1];
 					Vector2 texcord = texcoords[elementIndices[1] - 1];
 					Vector3 normal = normals[elementIndices[2] - 1];
-					VertexData vertex = { position,texcord,normal, {1.0f, 1.0f, 1.0f, 1.0f} };
+					VertexData vertex;
+					vertex.position = position;
+					vertex.texcoord = { texcord.x, texcord.y, 0.0f, 0.0f };
+					vertex.normal = { normal.x, normal.y, normal.z, 0.0f };
+					vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 					
 					// マップに登録し、頂点配列に追加
 					vertexMap[vertexDefinition] = (uint32_t)modelData.vertices.size();
@@ -251,8 +285,8 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 			VertexData& vertex = modelData.vertices[baseVertex + vertexIndex];
 			// 右手系->左手系への変換を忘れずに
 			vertex.position = { -position.x, position.y, position.z, 1.0f };
-			vertex.normal = { -normal.x, normal.y, normal.z };
-			vertex.texcoord = { texcoord.x, texcoord.y };
+			vertex.normal = { -normal.x, normal.y, normal.z, 0.0f };
+			vertex.texcoord = { texcoord.x, texcoord.y, 0.0f, 0.0f };
 			vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
 		}
 
@@ -269,21 +303,24 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 
 		if (mesh->HasBones()) {
 			modelData.isSkinned = true;
+			
+			// ボーン名の重複なしリストを作成
+			for (uint32_t i = 0; i < mesh->mNumBones; ++i) {
+				std::string jointName = mesh->mBones[i]->mName.C_Str();
+				if (std::find(modelData.boneNames.begin(), modelData.boneNames.end(), jointName) == modelData.boneNames.end()) {
+					modelData.boneNames.push_back(jointName);
+				}
+			}
+
+			// ボーン名 -> Index のマップを作成
+			std::map<std::string, uint32_t> boneNameToIndex;
+			for (uint32_t b = 0; b < modelData.boneNames.size(); ++b) {
+				boneNameToIndex[modelData.boneNames[b]] = b;
+			}
+
 			for (uint32_t i = 0; i < mesh->mNumBones; ++i) {
 				aiBone* bone = mesh->mBones[i];
 				std::string jointName = bone->mName.C_Str();
-				
-				// 既に登録済みのボーンかチェック
-				bool boneExists = false;
-				for (const auto& name : modelData.boneNames) {
-					if (name == jointName) {
-						boneExists = true;
-						break;
-					}
-				}
-				if (!boneExists) {
-					modelData.boneNames.push_back(jointName);
-				}
 				
 				JointWeightData& jointWeightData = modelData.skinClusterData[jointName];
 
@@ -295,7 +332,7 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 					m.a4, m.b4, m.c4, m.d4
 				};
 				
-				// x軸反転を適用 (m_left = flipX * invBind * flipX)
+				// x軸反転を適用 (Assimpが右手系のため左手系に合わせる)
 				invBind.m[0][1] *= -1.0f;
 				invBind.m[0][2] *= -1.0f;
 				invBind.m[0][3] *= -1.0f;
@@ -305,23 +342,18 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 
 				jointWeightData.inverseBindMatrix = invBind;
 
+				uint32_t boneIndex = boneNameToIndex[jointName];
+
 				for (uint32_t weightIndex = 0; weightIndex < bone->mNumWeights; ++weightIndex) {
-					jointWeightData.vertexWeights.push_back({ bone->mWeights[weightIndex].mWeight, baseVertex + bone->mWeights[weightIndex].mVertexId });
 					uint32_t vId = baseVertex + bone->mWeights[weightIndex].mVertexId;
 					float weight = bone->mWeights[weightIndex].mWeight;
-					for (int slot = 0; slot < 4; ++slot) {
-						if (modelData.vertices[vId].weight[slot] == 0.0f) {
-							modelData.vertices[vId].weight[slot] = weight;
-							// モデルのボーンIndexを取得
-							uint32_t boneIndex = 0;
-							for (uint32_t b = 0; b < modelData.boneNames.size(); ++b) {
-								if (modelData.boneNames[b] == jointName) {
-									boneIndex = b;
-									break;
-								}
+					if (vId < modelData.vertices.size()) {
+						for (int slot = 0; slot < 4; ++slot) {
+							if (modelData.vertices[vId].weight[slot] == 0.0f) {
+								modelData.vertices[vId].weight[slot] = weight;
+								modelData.vertices[vId].index[slot] = (int32_t)boneIndex;
+								break;
 							}
-							modelData.vertices[vId].index[slot] = boneIndex;
-							break;
 						}
 					}
 				}
@@ -556,13 +588,14 @@ void Model::InitializeBox(ModelCommon *modelCommon) {
 	// 面（四角形＝三角形2枚）を作る便利関数
 	auto addFace = [&](int i0, int i1, int i2, int i3, Vector3 n) {
 		Vector4 c = { 1.0f, 1.0f, 1.0f, 1.0f };
-		modelData.vertices.push_back({ p[i0], uv00, n, c });
-		modelData.vertices.push_back({ p[i1], uv01, n, c });
-		modelData.vertices.push_back({ p[i2], uv10, n, c });
+		Vector4 norm = { n.x, n.y, n.z, 0.0f };
+		modelData.vertices.push_back({ p[i0], {uv00.x, uv00.y, 0.0f, 0.0f}, norm, c });
+		modelData.vertices.push_back({ p[i1], {uv01.x, uv01.y, 0.0f, 0.0f}, norm, c });
+		modelData.vertices.push_back({ p[i2], {uv10.x, uv10.y, 0.0f, 0.0f}, norm, c });
 
-		modelData.vertices.push_back({ p[i1], uv01, n, c });
-		modelData.vertices.push_back({ p[i3], uv11, n, c });
-		modelData.vertices.push_back({ p[i2], uv10, n, c });
+		modelData.vertices.push_back({ p[i1], {uv01.x, uv01.y, 0.0f, 0.0f}, norm, c });
+		modelData.vertices.push_back({ p[i3], {uv11.x, uv11.y, 0.0f, 0.0f}, norm, c });
+		modelData.vertices.push_back({ p[i2], {uv10.x, uv10.y, 0.0f, 0.0f}, norm, c });
 		};
 
 	// 前, 奥, 左, 右, 上, 下の6面を作る
@@ -770,12 +803,31 @@ SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
 	skinCluster.isValid = false;
 	if (!modelData.isSkinned || modelData.boneNames.empty()) return skinCluster;
 
-	skinCluster.paletteResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(WellKnownPalette) * modelData.boneNames.size());
+	// ボーンインデックスの最大値をチェックして、パレットサイズを確定する
+	uint32_t maxBoneIndex = 0;
+	for (const auto& vertex : modelData.vertices) {
+		for (int i = 0; i < 4; ++i) {
+			if (vertex.weight[i] > 0.0f) {
+				maxBoneIndex = (std::max)(maxBoneIndex, (uint32_t)vertex.index[i]);
+			}
+		}
+	}
+	// パレットのサイズは、ボーン名リストの数と最大インデックスの大きい方にする
+	uint32_t paletteSize = (std::max)((uint32_t)modelData.boneNames.size(), maxBoneIndex + 1);
+
+	// パレットリソースの作成
+	skinCluster.paletteResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(WellKnownPalette) * paletteSize);
 	skinCluster.paletteResource->Map(0, nullptr, reinterpret_cast<void**>(&skinCluster.mappedPalette));
 	skinCluster.paletteAddress = skinCluster.paletteResource->GetGPUVirtualAddress();
 
-	skinCluster.inverseBindMatrices.resize(modelData.boneNames.size());
-	skinCluster.boneIndexToJointIndex.resize(modelData.boneNames.size());
+	// スキニング情報定数バッファの作成
+	skinCluster.skinningInfoResource = modelCommon_->GetDxCommon()->CreateBufferResource(sizeof(SkinningInformation));
+	skinCluster.skinningInfoResource->Map(0, nullptr, reinterpret_cast<void**>(&skinCluster.mappedSkinningInfo));
+	skinCluster.mappedSkinningInfo->numVertices = static_cast<uint32_t>(modelData.vertices.size());
+	skinCluster.mappedSkinningInfo->numBones = paletteSize;
+
+	skinCluster.inverseBindMatrices.resize(paletteSize);
+	skinCluster.boneIndexToJointIndex.resize(paletteSize);
 
 	for (size_t i = 0; i < modelData.boneNames.size(); ++i) {
 		const std::string& jointName = modelData.boneNames[i];
@@ -785,8 +837,29 @@ SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
 		} else {
 			skinCluster.boneIndexToJointIndex[i] = -1;
 		}
-		skinCluster.inverseBindMatrices[i] = modelData.skinClusterData[jointName].inverseBindMatrix;
+		
+		auto itSkin = modelData.skinClusterData.find(jointName);
+		if (itSkin != modelData.skinClusterData.end()) {
+			skinCluster.inverseBindMatrices[i] = itSkin->second.inverseBindMatrix;
+		} else {
+			skinCluster.inverseBindMatrices[i] = math->MakeIdentity4x4();
+		}
 	}
+
+	// ビューの生成 (SrvManager への登録)
+	SrvManager* srvManager = SrvManager::GetInstance();
+	
+	// 入力頂点SRV (t1)
+	skinCluster.srvIndexInputVertex = srvManager->Allocate();
+	srvManager->CreateSRVforStructuredBuffer(skinCluster.srvIndexInputVertex, inputVertexResource.Get(), static_cast<UINT>(modelData.vertices.size()), sizeof(VertexData));
+
+	// 出力頂点UAV (u0)
+	skinCluster.uavIndexOutputVertex = srvManager->Allocate();
+	srvManager->CreateUAVforStructuredBuffer(skinCluster.uavIndexOutputVertex, vertexResource.Get(), static_cast<UINT>(modelData.vertices.size()), sizeof(VertexData));
+
+	// パレットSRV (t0)
+	skinCluster.srvIndexPalette = srvManager->Allocate();
+	srvManager->CreateSRVforStructuredBuffer(skinCluster.srvIndexPalette, skinCluster.paletteResource.Get(), static_cast<UINT>(paletteSize), sizeof(WellKnownPalette));
 	
 	skinCluster.isValid = true;
 	return skinCluster;
@@ -797,16 +870,81 @@ void Model::UpdateSkinCluster(SkinCluster& skinCluster, const Skeleton& skeleton
 
 	for (size_t i = 0; i < skinCluster.boneIndexToJointIndex.size(); ++i) {
 		int32_t jointIndex = skinCluster.boneIndexToJointIndex[i];
-		if (jointIndex >= 0) {
+		if (jointIndex >= 0 && jointIndex < static_cast<int32_t>(skeleton.joints.size())) {
 			Matrix4x4 skeletonSpaceMatrix = skeleton.joints[jointIndex].skeletonSpaceMatrix;
-			skinCluster.mappedPalette[i].skeletonSpaceMatrix = math->Multiply(skinCluster.inverseBindMatrices[i], skeletonSpaceMatrix);
+			// InverseBind * SkeletonSpace
+			Matrix4x4 paletteMatrix = math->Multiply(skinCluster.inverseBindMatrices[i], skeletonSpaceMatrix);
 			
-			// 法線用行列は逆転置
-			Matrix4x4 inv = math->Inverse(skinCluster.mappedPalette[i].skeletonSpaceMatrix);
-			skinCluster.mappedPalette[i].skeletonSpaceNormalMatrix = math->Transpose(inv);
+			// NaNチェック
+			if (std::isnan(paletteMatrix.m[0][0])) {
+				paletteMatrix = math->MakeIdentity4x4();
+			}
+			
+			skinCluster.mappedPalette[i].skeletonSpaceMatrix = paletteMatrix;
 		} else {
 			skinCluster.mappedPalette[i].skeletonSpaceMatrix = math->MakeIdentity4x4();
-			skinCluster.mappedPalette[i].skeletonSpaceNormalMatrix = math->MakeIdentity4x4();
 		}
 	}
+	// 更新されたのでスキニングが必要
+	skinCluster.isUpdated = false;
+}
+
+bool Model::Skinning(SkinCluster& skinCluster) {
+	if (!skinCluster.isValid || !modelData.isSkinned) return false;
+	// すでにこのフレームでスキニング済みならスキップ
+	if (skinCluster.isUpdated) return false;
+
+	uint32_t vertexCount = static_cast<uint32_t>(modelData.vertices.size());
+	if (vertexCount == 0 || vertexCount > 1000000) return false; // 異常な頂点数はスキップ
+
+	ID3D12GraphicsCommandList* commandList = modelCommon_->GetDxCommon()->GetCommandList();
+	SrvManager* srvManager = SrvManager::GetInstance();
+
+	// --- Compute Shader 実行前のバリア (Vertex -> UAV) ---
+	D3D12_RESOURCE_BARRIER barrier = {};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = vertexResource.Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER; 
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	commandList->ResourceBarrier(1, &barrier);
+
+	// パイプライン設定
+	commandList->SetComputeRootSignature(modelCommon_->GetSkinningRootSignature());
+	commandList->SetPipelineState(modelCommon_->GetSkinningPipelineState());
+
+	// 記述子テーブルのセット
+	srvManager->SetComputeRootDescriptorTable(0, skinCluster.srvIndexPalette);
+	srvManager->SetComputeRootDescriptorTable(1, skinCluster.srvIndexInputVertex);
+	srvManager->SetComputeRootDescriptorTable(2, skinCluster.uavIndexOutputVertex);
+	commandList->SetComputeRootConstantBufferView(3, skinCluster.skinningInfoResource->GetGPUVirtualAddress());
+
+	// ボーン数が0の場合はスキップ (skinningInfo はこの関数の冒頭で定義すべき)
+	if (vertexCount == 0) {
+		skinCluster.isUpdated = true;
+		return true; 
+	}
+
+	// Dispatch (スレッド数を64に下げてより細かく実行)
+	commandList->Dispatch((vertexCount + 63) / 64, 1, 1);
+
+	// --- Compute Shader 実行後のバリア (UAV -> Vertex) ---
+	// 1. 書き込み完了を待機 (UAV Barrier)
+	D3D12_RESOURCE_BARRIER uavBarrier = {};
+	uavBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	uavBarrier.UAV.pResource = vertexResource.Get();
+	commandList->ResourceBarrier(1, &uavBarrier);
+
+	// 2. 状態を遷移 (Transition Barrier)
+	D3D12_RESOURCE_BARRIER transBarrier = {};
+	transBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	transBarrier.Transition.pResource = vertexResource.Get();
+	transBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+	transBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+	commandList->ResourceBarrier(1, &transBarrier);
+
+	// 実行済みフラグを立てる
+	skinCluster.isUpdated = true;
+	return true;
 }

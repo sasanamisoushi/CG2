@@ -99,6 +99,14 @@ void Object3d::Draw() {
 		return;
 	}
 
+	// スキニング実行
+	if (skinCluster.isValid) {
+		if (model->Skinning(skinCluster)) {
+			// スキニング(ComputeShader)実行後にグラフィックスパイプラインを再セット
+			object3dCommon->SetCommonDrawSettings();
+		}
+	}
+
 	//TransformationMatrixCbufferの場所を設定
 	object3dCommon->GetDxCommon()->GetCommandList()->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 

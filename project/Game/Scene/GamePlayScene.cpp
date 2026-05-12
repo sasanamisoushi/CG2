@@ -85,11 +85,14 @@ void GamePlayScene::Initialize() {
 	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
 	Node rootNode = Model::LoadNodeHierarchy("resources/AnimatedCube", "AnimatedCube.gltf");
 	skeleton = CreateSkeleton(rootNode);
+	if (!skeleton.joints.empty()) {
+		skeleton.joints[skeleton.root].transform.translate = { 0.0f, 0.0f, 0.0f };
+	}
 
 	myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 
 	// 骨描画用のスフィアをあらかじめ用意しておく（最大関節数ぶん程度）
-	for (int i = 0; i < 64; ++i) {
+	for (int i = 0; i < 128; ++i) {
 		auto sphere = std::make_unique<Primitive>();
 		sphere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
 		sphere->SetScale({ 0.1f, 0.1f, 0.1f }); // 小さなスフィアにする
@@ -162,10 +165,19 @@ void GamePlayScene::Update() {
 			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
 
 			// スキニングが実装されたため、スキンなしモデルの場合のみTransformを適用する
-			if (myModelObject->GetModel() && !myModelObject->skinCluster.isValid) {
-				myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
-				myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
-				myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
+			// スキニングが実装されたため、スキンなしモデルの場合のみTransformを適用する
+			if (myModelObject->GetModel()) {
+				if (!myModelObject->skinCluster.isValid) {
+					myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
+					myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
+					myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
+				} else {
+					// スキニングモデルはアニメーションが行列に含まれるため、ベースのトランスフォームはリセットする
+					// (これを行わないと二重に移動して画面外に消える)
+					myModelObject->SetTranslate({ 0.0f, 0.0f, 0.0f });
+					myModelObject->SetQuaternionRotate({ 0.0f, 0.0f, 0.0f, 1.0f });
+					myModelObject->SetScale({ 1.0f, 1.0f, 1.0f });
+				}
 			}
 		}
 
@@ -300,6 +312,9 @@ void GamePlayScene::Update() {
 		animationData = LoadAnimationFile(dir, file);
 		Node rootNode = Model::LoadNodeHierarchy(dir, file);
 		skeleton = CreateSkeleton(rootNode);
+		if (!skeleton.joints.empty()) {
+			skeleton.joints[skeleton.root].transform.translate = { 0.0f, 0.0f, 0.0f };
+		}
 		animationTime = 0.0f;
 
 		ModelManager::GetInstance()->LoadModel(loadFile);
@@ -485,7 +500,10 @@ void GamePlayScene::Draw() {
 	}
 	
 	if (showBones) {
+		// ボーン描画の前に設定を確実にする
+		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 		for (size_t i = 0; i < skeleton.joints.size() && i < boneSpheres.size(); ++i) {
+			boneSpheres[i]->Update(); // 最新の座標で行列更新
 			boneSpheres[i]->Draw();
 		}
 	}

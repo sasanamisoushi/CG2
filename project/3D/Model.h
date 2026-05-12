@@ -12,8 +12,8 @@ struct aiNode;
 
 struct VertexData {
 	Vector4 position;
-	Vector2 texcoord;
-	Vector3 normal;
+	Vector4 texcoord;
+	Vector4 normal;
 	Vector4 color;
 	float weight[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	int32_t index[4] = { 0, 0, 0, 0 };
@@ -31,7 +31,12 @@ struct JointWeightData {
 
 struct WellKnownPalette {
 	Matrix4x4 skeletonSpaceMatrix;
-	Matrix4x4 skeletonSpaceNormalMatrix;
+};
+
+struct SkinningInformation {
+	uint32_t numVertices;
+	uint32_t numBones;
+	uint32_t padding[62];
 };
 
 struct SkinCluster {
@@ -39,14 +44,25 @@ struct SkinCluster {
 	Microsoft::WRL::ComPtr<ID3D12Resource> paletteResource;
 	WellKnownPalette* mappedPalette = nullptr;
 	D3D12_GPU_VIRTUAL_ADDRESS paletteAddress = 0;
+
+	// GPU Skinning用
+	Microsoft::WRL::ComPtr<ID3D12Resource> skinningInfoResource;
+	SkinningInformation* mappedSkinningInfo = nullptr;
+
+	// 入力頂点SRV、出力頂点UAV
+	uint32_t srvIndexInputVertex;
+	uint32_t srvIndexPalette;
+	uint32_t uavIndexOutputVertex;
+
 	std::vector<int32_t> boneIndexToJointIndex; // モデルのボーンIndexからSkeletonのJointIndexへのマッピング
 	bool isValid = false;
+	bool isUpdated = false; // フレーム内更新フラグ
 };
 
 struct MaterialData {
 	std::string textureFilePath;
 	uint32_t textureIndex = 0;
-	float alphaReference = 0.5f;
+	float alphaReference = 0.0f;
 };
 
 #include "engine/Camera/Camera.h"
@@ -178,6 +194,11 @@ public:
 		}
 	}
 
+	// スキニング
+	bool Skinning(SkinCluster& skinCluster);
+
+	const ModelData& GetModelData()const { return modelData; }
+
 	ModelCommon* GetModelCommon() const { return modelCommon_; }
 
 private:
@@ -190,6 +211,8 @@ private:
 
 	//バッファリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
+	//スキニング用入力頂点リソース
+	Microsoft::WRL::ComPtr<ID3D12Resource> inputVertexResource;
 	//バッファリソース内のデータを指すポインタ
 	VertexData *vertexData = nullptr;
 	//バッファリソースの使い道を補足するバッファビュー
