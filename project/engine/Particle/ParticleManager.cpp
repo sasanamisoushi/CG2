@@ -397,33 +397,37 @@ void ParticleManager::Draw() {
 			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			if (!group.isGpuInitialized) {
-				D3D12_RESOURCE_BARRIER barriersToUav[2] = {
+				D3D12_RESOURCE_BARRIER barriersToUav[3] = {
 					CD3DX12_RESOURCE_BARRIER::Transition(group.particleResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-					CD3DX12_RESOURCE_BARRIER::Transition(group.freeCounterResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+					CD3DX12_RESOURCE_BARRIER::Transition(group.freeListIndexResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+					CD3DX12_RESOURCE_BARRIER::Transition(group.freeListResource.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 				};
-				commandList->ResourceBarrier(2, barriersToUav);
+				commandList->ResourceBarrier(3, barriersToUav);
 
 				// 初期化CSの実行
 				commandList->SetPipelineState(computePipelineStateInit_.Get());
 				SrvManager::GetInstance()->SetComputeRootDescriptorTable(0, group.uavIndex);
-				SrvManager::GetInstance()->SetComputeRootDescriptorTable(1, group.freeCounterUavIndex);
-				commandList->SetComputeRootConstantBufferView(2, emitterResource_->GetGPUVirtualAddress());
-				commandList->SetComputeRootConstantBufferView(3, perFrameResource_->GetGPUVirtualAddress());
+				SrvManager::GetInstance()->SetComputeRootDescriptorTable(1, group.freeListIndexUavIndex);
+				SrvManager::GetInstance()->SetComputeRootDescriptorTable(2, group.freeListUavIndex);
+				commandList->SetComputeRootConstantBufferView(3, emitterResource_->GetGPUVirtualAddress());
+				commandList->SetComputeRootConstantBufferView(4, perFrameResource_->GetGPUVirtualAddress());
 				commandList->Dispatch(1, 1, 1);
 			} else {
-				D3D12_RESOURCE_BARRIER barriersToUav[2] = {
+				D3D12_RESOURCE_BARRIER barriersToUav[3] = {
 					CD3DX12_RESOURCE_BARRIER::Transition(group.particleResource.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
-					CD3DX12_RESOURCE_BARRIER::Transition(group.freeCounterResource.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
+					CD3DX12_RESOURCE_BARRIER::Transition(group.freeListIndexResource.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS),
+					CD3DX12_RESOURCE_BARRIER::Transition(group.freeListResource.Get(), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS)
 				};
-				commandList->ResourceBarrier(2, barriersToUav);
+				commandList->ResourceBarrier(3, barriersToUav);
 			}
 
 			// 射出CSの実行
 			commandList->SetPipelineState(computePipelineStateEmit_.Get());
 			SrvManager::GetInstance()->SetComputeRootDescriptorTable(0, group.uavIndex);
-			SrvManager::GetInstance()->SetComputeRootDescriptorTable(1, group.freeCounterUavIndex);
-			commandList->SetComputeRootConstantBufferView(2, emitterResource_->GetGPUVirtualAddress());
-			commandList->SetComputeRootConstantBufferView(3, perFrameResource_->GetGPUVirtualAddress());
+			SrvManager::GetInstance()->SetComputeRootDescriptorTable(1, group.freeListIndexUavIndex);
+			SrvManager::GetInstance()->SetComputeRootDescriptorTable(2, group.freeListUavIndex);
+			commandList->SetComputeRootConstantBufferView(3, emitterResource_->GetGPUVirtualAddress());
+			commandList->SetComputeRootConstantBufferView(4, perFrameResource_->GetGPUVirtualAddress());
 			commandList->Dispatch(1, 1, 1);
 
 			// UAVバリア (Emit -> Update間の依存関係を解消)
@@ -439,11 +443,12 @@ void ParticleManager::Draw() {
 			commandList->Dispatch(1, 1, 1);
 
 			// バリアを張ってから描画へ (UAV -> SRV)
-			D3D12_RESOURCE_BARRIER barriersToSrv[2] = {
+			D3D12_RESOURCE_BARRIER barriersToSrv[3] = {
 				CD3DX12_RESOURCE_BARRIER::Transition(group.particleResource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
-				CD3DX12_RESOURCE_BARRIER::Transition(group.freeCounterResource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
+				CD3DX12_RESOURCE_BARRIER::Transition(group.freeListIndexResource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE),
+				CD3DX12_RESOURCE_BARRIER::Transition(group.freeListResource.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)
 			};
-			commandList->ResourceBarrier(2, barriersToSrv);
+			commandList->ResourceBarrier(3, barriersToSrv);
 			group.isGpuInitialized = true;
 
 			// 描画用のパイプラインに戻す
@@ -614,35 +619,66 @@ void ParticleManager::CreateParticleGroup(const std::string name, const std::str
 		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].srvIndex)
 	);
 
-	// freeCounterResourceの作成
-	D3D12_RESOURCE_DESC counterResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(int32_t));
-	counterResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+	// freeListIndexResourceの作成
+	D3D12_RESOURCE_DESC indexResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(int32_t));
+	indexResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
 	hr = dxCommon_->GetDevice()->CreateCommittedResource(
 		&defaultHeapProps,
 		D3D12_HEAP_FLAG_NONE,
-		&counterResDesc,
+		&indexResDesc,
 		D3D12_RESOURCE_STATE_COMMON,
 		nullptr,
-		IID_PPV_ARGS(&particleGroups_[name].freeCounterResource)
+		IID_PPV_ARGS(&particleGroups_[name].freeListIndexResource)
 	);
 	assert(SUCCEEDED(hr));
 
-	particleGroups_[name].freeCounterUavIndex = SrvManager::GetInstance()->Allocate();
+	particleGroups_[name].freeListIndexUavIndex = SrvManager::GetInstance()->Allocate();
 
-	D3D12_UNORDERED_ACCESS_VIEW_DESC counterUavDesc{};
-	counterUavDesc.Format = DXGI_FORMAT_UNKNOWN;
-	counterUavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
-	counterUavDesc.Buffer.FirstElement = 0;
-	counterUavDesc.Buffer.NumElements = 1;
-	counterUavDesc.Buffer.StructureByteStride = sizeof(int32_t);
-	counterUavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+	D3D12_UNORDERED_ACCESS_VIEW_DESC indexUavDesc{};
+	indexUavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	indexUavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	indexUavDesc.Buffer.FirstElement = 0;
+	indexUavDesc.Buffer.NumElements = 1;
+	indexUavDesc.Buffer.StructureByteStride = sizeof(int32_t);
+	indexUavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
 	dxCommon_->GetDevice()->CreateUnorderedAccessView(
-		particleGroups_[name].freeCounterResource.Get(),
+		particleGroups_[name].freeListIndexResource.Get(),
 		nullptr,
-		&counterUavDesc,
-		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].freeCounterUavIndex)
+		&indexUavDesc,
+		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].freeListIndexUavIndex)
+	);
+
+	// freeListResourceの作成
+	D3D12_RESOURCE_DESC listResDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(uint32_t) * 1024);
+	listResDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+	hr = dxCommon_->GetDevice()->CreateCommittedResource(
+		&defaultHeapProps,
+		D3D12_HEAP_FLAG_NONE,
+		&listResDesc,
+		D3D12_RESOURCE_STATE_COMMON,
+		nullptr,
+		IID_PPV_ARGS(&particleGroups_[name].freeListResource)
+	);
+	assert(SUCCEEDED(hr));
+
+	particleGroups_[name].freeListUavIndex = SrvManager::GetInstance()->Allocate();
+
+	D3D12_UNORDERED_ACCESS_VIEW_DESC listUavDesc{};
+	listUavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	listUavDesc.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+	listUavDesc.Buffer.FirstElement = 0;
+	listUavDesc.Buffer.NumElements = 1024;
+	listUavDesc.Buffer.StructureByteStride = sizeof(uint32_t);
+	listUavDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
+
+	dxCommon_->GetDevice()->CreateUnorderedAccessView(
+		particleGroups_[name].freeListResource.Get(),
+		nullptr,
+		&listUavDesc,
+		SrvManager::GetInstance()->GetCPUDescriptorHandle(particleGroups_[name].freeListUavIndex)
 	);
 }
 
@@ -910,7 +946,13 @@ void ParticleManager::CreateComputeRootSignature() {
 	descriptorRangeU1[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
 	descriptorRangeU1[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_PARAMETER rootParameters[4] = {};
+	D3D12_DESCRIPTOR_RANGE descriptorRangeU2[1] = {};
+	descriptorRangeU2[0].BaseShaderRegister = 2;
+	descriptorRangeU2[0].NumDescriptors = 1;
+	descriptorRangeU2[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+	descriptorRangeU2[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_PARAMETER rootParameters[5] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 	rootParameters[0].DescriptorTable.pDescriptorRanges = descriptorRangeU0;
@@ -921,13 +963,18 @@ void ParticleManager::CreateComputeRootSignature() {
 	rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeU1;
 	rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeU1);
 
-	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	rootParameters[2].Descriptor.ShaderRegister = 0;
+	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRangeU2;
+	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeU2);
 
 	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-	rootParameters[3].Descriptor.ShaderRegister = 1;
+	rootParameters[3].Descriptor.ShaderRegister = 0;
+
+	rootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+	rootParameters[4].Descriptor.ShaderRegister = 1;
 
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	descriptionRootSignature.pParameters = rootParameters;

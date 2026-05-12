@@ -86,8 +86,11 @@ public://構造体定義
 		uint32_t uavIndex;
 		uint32_t srvIndex;
 		
-		Microsoft::WRL::ComPtr<ID3D12Resource> freeCounterResource;
-		uint32_t freeCounterUavIndex;
+		Microsoft::WRL::ComPtr<ID3D12Resource> freeListIndexResource;
+		uint32_t freeListIndexUavIndex;
+
+		Microsoft::WRL::ComPtr<ID3D12Resource> freeListResource;
+		uint32_t freeListUavIndex;
 
 		bool isGpuInitialized = false;
 	};

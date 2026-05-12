@@ -26,7 +26,8 @@ struct PerFrame {
 ConstantBuffer<EmitterSphere> gEmitter : register(b0);
 ConstantBuffer<PerFrame> gPerFrame : register(b1);
 RWStructuredBuffer<Particle> gParticles : register(u0);
-RWStructuredBuffer<int32_t> gFreeCounter : register(u1);
+RWStructuredBuffer<int32_t> gFreeListIndex : register(u1);
+RWStructuredBuffer<uint32_t> gFreeList : register(u2);
 
 static const uint32_t kMaxParticles = 1024;
 
@@ -68,10 +69,12 @@ void main(uint32_t3 DTid : SV_DispatchThreadID) {
         generator.seed = (DTid + gPerFrame.time) * gPerFrame.time;
         
         for (uint32_t countIndex = 0; countIndex < gEmitter.count; ++countIndex) {
-            int32_t particleIndex;
-            InterlockedAdd(gFreeCounter[0], 1, particleIndex);
+            int32_t freeListIndex;
+            InterlockedAdd(gFreeListIndex[0], -1, freeListIndex);
             
-            if (particleIndex < kMaxParticles) {
+            if (0 <= freeListIndex && freeListIndex < kMaxParticles) {
+                uint32_t particleIndex = gFreeList[freeListIndex];
+                
                 // 乱数でParticleを初期化する
                 gParticles[particleIndex].scale = generator.Generate3d() * 0.3f; // 少し小さめにする
                 
@@ -90,6 +93,9 @@ void main(uint32_t3 DTid : SV_DispatchThreadID) {
                 float32_t3 velocity = (generator.Generate3d() - 0.5f) * 0.1f;
                 velocity.y = abs(velocity.y); // 上方向に限定
                 gParticles[particleIndex].velocity = velocity;
+            } else {
+                InterlockedAdd(gFreeListIndex[0], 1);
+                break;
             }
         }
     }

@@ -26,7 +26,8 @@ struct PerFrame {
 ConstantBuffer<EmitterSphere> gEmitter : register(b0);
 ConstantBuffer<PerFrame> gPerFrame : register(b1);
 RWStructuredBuffer<Particle> gParticles : register(u0);
-RWStructuredBuffer<int32_t> gFreeCounter : register(u1);
+RWStructuredBuffer<int32_t> gFreeListIndex : register(u1);
+RWStructuredBuffer<uint32_t> gFreeList : register(u2);
 
 static const uint32_t kMaxParticles = 1024;
 
@@ -35,19 +36,14 @@ void main(uint32_t3 DTid : SV_DispatchThreadID)
 {
     uint32_t particleIndex = DTid.x;
     
-    // カウンターの初期化（1スレッドだけ実行）
-    if (particleIndex == 0) {
-        gFreeCounter[0] = 0;
+    // パーティクルの初期化とFreeListの連番初期化
+    if (particleIndex < kMaxParticles) {
+        gParticles[particleIndex] = (Particle)0;
+        gFreeList[particleIndex] = particleIndex;
     }
     
-    // パーティクルの初期化
-    if (particleIndex < kMaxParticles) {
-        // GPUから見えなくするためにスケール0やLifeTime0にするなど
-        gParticles[particleIndex].translate = float32_t3(0.0f, 0.0f, 0.0f);
-        gParticles[particleIndex].scale = float32_t3(0.0f, 0.0f, 0.0f);
-        gParticles[particleIndex].velocity = float32_t3(0.0f, 0.0f, 0.0f);
-        gParticles[particleIndex].color = float32_t4(1.0f, 1.0f, 1.0f, 1.0f);
-        gParticles[particleIndex].lifeTime = 0.0f; // まだ生きていない
-        gParticles[particleIndex].currentTime = 0.0f;
+    // Indexが末尾を指すようにする（1スレッドだけ実行）
+    if (particleIndex == 0) {
+        gFreeListIndex[0] = kMaxParticles - 1;
     }
 }
