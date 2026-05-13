@@ -207,6 +207,40 @@ PixelShaderOutput main(VertexShaderOutput input)
         output.color.rgb = (1.0f - weight) * texColor.rgb;
         output.color.a = 1.0f;
     }
+    else if (effectType == 9)
+    {
+        // ブラーの収束点（とりあえず画面中央の 0.5, 0.5 に固定）
+        float2 center = float2(0.5f, 0.5f);
+        
+        // 現在のピクセル(UV)から、中心点に向かう方向ベクトルを計算
+        float2 direction = center - input.texcoord;
+
+        // ぼかしの強さ（C++から送られてくる blurIntensity を使う）
+        // そのままだと強すぎるので、0.01倍して調整しやすい値にする
+        float strength = blurIntensity * 0.01f;
+
+        // サンプリング回数（多いほど滑らかになるが重くなる。10〜16回程度が標準）
+        const int NUM_SAMPLES = 10;
+        
+        float4 colorSum = float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+        // 中心に向かって直線上を少しずつ進みながら色を拾う
+        for (int i = 0; i < NUM_SAMPLES; ++i)
+        {
+            // 0.0 〜 1.0 の割合を計算
+            float percent = (float) i / (float) NUM_SAMPLES;
+            
+            // ずらす距離を計算
+            float2 offset = direction * strength * percent;
+            
+            // 色を取得して足し合わせる
+            colorSum += gTexture.Sample(gSampler, input.texcoord + offset);
+        }
+
+        // 最後にサンプリングした回数で割って平均化する
+        output.color = colorSum / (float) NUM_SAMPLES;
+    }
+
     else
     {
         // 0: ノーマル（そのまま）
