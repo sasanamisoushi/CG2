@@ -10,6 +10,12 @@ Texture2D<float32_t4> gNoiseTexture : register(t2);
 
 SamplerState gSampler : register(s0);
 
+// 疑似乱数生成関数
+float rand(float2 co)
+{
+    return frac(sin(dot(co.xy, float2(12.9898, 78.233))) * 43758.5453);
+}
+
 // C++から送られてくる「定数」を受け取る箱
 cbuffer PostEffectParam : register(b0)
 {
@@ -24,7 +30,7 @@ cbuffer PostEffectParam : register(b0)
     float3 edgeColor;
     float pad3;
     float3 noneColor;
-    float pad4;
+    float time;
 };
 
 struct PixelShaderOutput
@@ -276,7 +282,23 @@ PixelShaderOutput main(VertexShaderOutput input)
             output.color.rgb += edge * edgeColor;
         }
     }
-
+    else if (effectType == 11)
+    {
+        
+        // 単純に UV 座標だけをシード（種）にすると、毎回同じ乱数になってしまい「止まった画像」になります。
+        // そこで、UV座標に「時間(time)」を足すことで、毎フレーム違う乱数が生まれるようにします！
+        
+        float2 seed = input.texcoord + float2(time, time);
+        
+        // 乱数を生成 (0.0 ～ 1.0)
+        float noiseValue = rand(seed);
+        
+        // 白黒のノイズとして出力
+        output.color = float4(noiseValue, noiseValue, noiseValue, 1.0f);
+        
+        // 💡 おまけ：もし「元の画像の上にうっすらノイズを乗せたい」場合はこう書きます
+        // output.color = texColor + float4(noiseValue, noiseValue, noiseValue, 0.0f) * 0.2f;
+    }
     else
     {
         // 0: ノーマル（そのまま）

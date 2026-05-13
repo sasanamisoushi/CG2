@@ -17,7 +17,8 @@ public:
         float edgeColor[3];
         float pad3;
         float noneColor[3]; 
-        float pad4;
+        float time;
+
     };
 
     void Initialize();

@@ -108,6 +108,9 @@ void PostEffect::Initialize() {
 }
 
 void PostEffect::Update() {
+
+    param_.time += 1.0f / 60.0f;
+
     if (isAutoPlay_) {
         // 1秒間に autoPlaySpeed_ の速度でしきい値を進める
         param_.dissolveThreshold += autoPlaySpeed_ * (1.0f / 60.0f);
@@ -152,7 +155,7 @@ void PostEffect::DrawImGui() {
 
     // エフェクト選択
     const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia",
-        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve" };
+        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve","Random Noise" };
     ImGui::Combo("Type", &param_.effectType, items, IM_ARRAYSIZE(items));
 
     ImGui::Separator();
