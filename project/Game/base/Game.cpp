@@ -15,6 +15,10 @@ void Game::Initialize() {
 	postEffect_ = std::make_unique<PostEffect>();
 	postEffect_->Initialize();
 
+	// 深度バッファのSRVを作成する！
+	depthSrvIndex_ = SrvManager::GetInstance()->Allocate();
+	DirectXCommon::GetInstance()->CreateDepthSrv(SrvManager::GetInstance()->GetCPUDescriptorHandle(depthSrvIndex_));
+
 	//シーンファクトリーを生成
 	sceneFactory_ = std::make_unique<SceneFactory>();
 
@@ -64,8 +68,14 @@ void Game::Draw() {
 	// 描画先を本来の画面に戻し、背景を黒などでクリアする
 	DirectXCommon::GetInstance()->PreDrawSwapchain();
 
+	// 深度バッファを「読み込みモード(SRV)」に切り替え
+	DirectXCommon::GetInstance()->SetDepthStateToSRV();
+
 	// 録画したRenderTextureを全画面に貼り付ける！
-	postEffect_->Draw(renderTexture_->GetSrvHandle());
+	postEffect_->Draw(renderTexture_->GetSrvHandle(), SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_));
+
+	// 深度バッファを元の「書き込みモード(DSV)」に戻す
+	DirectXCommon::GetInstance()->SetDepthStateToDSV();
 
 
 #ifdef  ENABLE_IMGUI

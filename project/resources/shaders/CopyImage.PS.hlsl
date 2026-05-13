@@ -2,6 +2,8 @@
 
 
 Texture2D<float32_t4> gTexture : register(t0);
+// 深度バッファを受けとる
+Texture2D<float32_t4> gDepthTexture : register(t1);
 SamplerState gSampler : register(s0);
 
 // C++から送られてくる「定数」を受け取る箱
@@ -148,6 +150,62 @@ PixelShaderOutput main(VertexShaderOutput input)
         
         // 重みの合計はすでに1.0になっているので、割り算は不要！
         output.color = colorSum;
+    }
+    else if (effectType==8)
+    {
+        // 8: エッジ検出 (Sobel Filter)
+        uint width, height;
+        gTexture.GetDimensions(width, height);
+        float2 uvStep = float2(1.0f / width, 1.0f / height);
+
+        // 横方向（X）の輝度の差を測るカーネル
+        float sobelX[3][3] =
+        {
+            { -1.0f, 0.0f, 1.0f },
+            { -2.0f, 0.0f, 2.0f },
+            { -1.0f, 0.0f, 1.0f }
+        };
+
+        // 縦方向（Y）の輝度の差を測るカーネル
+        float sobelY[3][3] =
+        {
+            { -1.0f, -2.0f, -1.0f },
+            { 0.0f, 0.0f, 0.0f },
+            { 1.0f, 2.0f, 1.0f }
+        };
+
+        float xValue = 0.0f;
+        float yValue = 0.0f;
+
+        // 周囲9ピクセルをサンプリング
+        for (int y = -1; y <= 1; ++y)
+        {
+            for (int x = -1; x <= 1; ++x)
+            {
+                float2 offset = float2(x, y) * uvStep;
+                
+                // 輝度ではなく、深度テクスチャの「.r」を直接取得する！
+                float depth = gDepthTexture.Sample(gSampler, input.texcoord + offset).r;
+
+                // XとYそれぞれのカーネルの重みを掛けて足し合わせる
+                // ※配列のインデックスがマイナスにならないよう [y + 1][x + 1] とする
+                xValue += depth * sobelX[y + 1][x + 1];
+                yValue += depth * sobelY[y + 1][x + 1];
+            }
+        }
+
+        // ピタゴラスの定理（三平方の定理）で、XとYのベクトルの長さを計算
+        // これが「エッジの強さ（0.0 ～ 1.0以上）」になります
+        float edge = sqrt(xValue * xValue + yValue * yValue);
+
+        // 数値を 0.0 ～ 1.0 の間に強制的に収める（はみ出させない）関数
+        float weight = saturate(edge * 500.0f);
+
+        // スライドの処理：weightが大きい（＝エッジが強い）ほど暗く表示する合成方法
+        // (1.0f - weight) なので、エッジがない場所(0.0)は元の色(1.0倍)になり、
+        // エッジが強い場所(1.0)は真っ黒(0.0倍)になります。
+        output.color.rgb = (1.0f - weight) * texColor.rgb;
+        output.color.a = 1.0f;
     }
     else
     {

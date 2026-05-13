@@ -30,5 +30,8 @@ private:
 
 	// ポストエフェクト
 	std::unique_ptr<PostEffect> postEffect_;
+
+	// 深度バッファのSRVの番号を覚えておく変数
+	uint32_t depthSrvIndex_ = 0;
 };
 

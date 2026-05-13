@@ -33,6 +33,12 @@ public:
 	//深度バッファの生成
 	void depthBufferGeneration(int32_t width, int32_t height);
 
+	// 深度バッファのSRVを作成する
+	void CreateDepthSrv(D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle);
+	// 深度バッファの読み書きステートを変更する
+	void SetDepthStateToSRV();
+	void SetDepthStateToDSV();
+
 	//各種デスクリプタヒープの生成
 	void CreateDescriptorHeaps();
 

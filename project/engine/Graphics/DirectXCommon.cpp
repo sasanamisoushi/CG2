@@ -232,7 +232,7 @@ void DirectXCommon::depthBufferGeneration(int32_t width, int32_t height) {
 	resourceDesc.Height = height;
 	resourceDesc.MipLevels = 1;
 	resourceDesc.DepthOrArraySize = 1;
-	resourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	resourceDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
 	resourceDesc.SampleDesc.Count = 1;
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
@@ -257,6 +257,34 @@ void DirectXCommon::depthBufferGeneration(int32_t width, int32_t height) {
 		IID_PPV_ARGS(&depthStencilResource));
 	assert(SUCCEEDED(hr));
 
+}
+
+void DirectXCommon::CreateDepthSrv(D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle) {
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	// SRVとして読むときはR24_UNORM_X8_TYPELESSにする
+	srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = 1;
+	device->CreateShaderResourceView(depthStencilResource.Get(), &srvDesc, cpuHandle);
+}
+
+void DirectXCommon::SetDepthStateToSRV() {
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = depthStencilResource.Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	commandList->ResourceBarrier(1, &barrier);
+}
+
+void DirectXCommon::SetDepthStateToDSV() {
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = depthStencilResource.Get();
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+	commandList->ResourceBarrier(1, &barrier);
 }
 
 void DirectXCommon::CreateDescriptorHeaps() {

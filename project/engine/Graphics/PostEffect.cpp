@@ -8,23 +8,40 @@ void PostEffect::Initialize() {
     auto device = dxCommon->GetDevice();
 
     // 1. ルートシグネチャの作成 (テクスチャを1枚受け取るだけ)
-    D3D12_DESCRIPTOR_RANGE range[1] = {};
-    range[0].BaseShaderRegister = 0;
-    range[0].NumDescriptors = 1;
-    range[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    range[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+    // [0] 色のテクスチャ (t0) 用のレンジ
+    D3D12_DESCRIPTOR_RANGE rangeColor[1] = {};
+    rangeColor[0].BaseShaderRegister = 0; // t0
+    rangeColor[0].NumDescriptors = 1;
+    rangeColor[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    rangeColor[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-    D3D12_ROOT_PARAMETER rootParams[2] = {};
+    // ★追加：[1] 深度のテクスチャ (t1) 用のレンジ
+    D3D12_DESCRIPTOR_RANGE rangeDepth[1] = {};
+    rangeDepth[0].BaseShaderRegister = 1; // t1レジスタを使う
+    rangeDepth[0].NumDescriptors = 1;
+    rangeDepth[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    rangeDepth[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    // ★修正：ルートパラメータの数を 2 から 3 に増やす
+    D3D12_ROOT_PARAMETER rootParams[3] = {};
+
+    // 0番目：色のテクスチャ (t0)
     rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[0].DescriptorTable.pDescriptorRanges = range;
+    rootParams[0].DescriptorTable.pDescriptorRanges = rangeColor;
     rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
 
-    // 32ビット定数（b0に int を1つ送る設定）
+    // 1番目：32ビット定数 (b0)
     rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
     rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    rootParams[1].Constants.ShaderRegister = 0; // b0レジスタ
-    rootParams[1].Constants.Num32BitValues = 4; // int 1つ分
+    rootParams[1].Constants.ShaderRegister = 0;
+    rootParams[1].Constants.Num32BitValues = 4;
+
+    // ★追加：2番目：深度のテクスチャ (t1)
+    rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    rootParams[2].DescriptorTable.pDescriptorRanges = rangeDepth;
+    rootParams[2].DescriptorTable.NumDescriptorRanges = 1;
 
     D3D12_STATIC_SAMPLER_DESC sampler = {};
     sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -39,7 +56,7 @@ void PostEffect::Initialize() {
     D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
     rootSignatureDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
     rootSignatureDesc.pParameters = rootParams;
-    rootSignatureDesc.NumParameters = 2;
+    rootSignatureDesc.NumParameters = 3;
     rootSignatureDesc.pStaticSamplers = &sampler;
     rootSignatureDesc.NumStaticSamplers = 1;
 
@@ -77,7 +94,7 @@ void PostEffect::Initialize() {
     assert(SUCCEEDED(hr));
 }
 
-void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
+void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle, D3D12_GPU_DESCRIPTOR_HANDLE depthSrvHandle) {
     auto commandList = DirectXCommon::GetInstance()->GetCommandList();
 
     commandList->SetGraphicsRootSignature(rootSignature_.Get());
@@ -90,6 +107,9 @@ void PostEffect::Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle) {
     // 1番目：定数（effectType_）をGPUに直接セット！
     commandList->SetGraphicsRoot32BitConstants(1, 4, &param_, 0);
 
+    // 2番目（インデックス2）に深度テクスチャをセット
+    commandList->SetGraphicsRootDescriptorTable(2, depthSrvHandle);
+
     // 魔法の三角形を描画（頂点バッファなしで、頂点3つを描画と指示するだけ）
     commandList->DrawInstanced(3, 1, 0, 0);
 }
@@ -99,7 +119,8 @@ void PostEffect::DrawImGui() {
     ImGui::Begin("Post Effect Settings");
 
     // エフェクト選択
-    const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia", "Vignette", "3x3 Box Filter", "5x5 Box Filter","Gaussian Blur" };
+    const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia",
+        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection" };
     ImGui::Combo("Type", &param_.effectType, items, IM_ARRAYSIZE(items));
 
     ImGui::Separator();

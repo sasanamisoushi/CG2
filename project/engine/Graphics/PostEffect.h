@@ -14,7 +14,7 @@ public:
 
     void Initialize();
     // 描画には、RenderTextureの画像(SRV)のGPUハンドルを渡す
-    void Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle);
+    void Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle, D3D12_GPU_DESCRIPTOR_HANDLE depthSrvHandle);
 
     // ImGuiを描画する関数を追加
     void DrawImGui();
