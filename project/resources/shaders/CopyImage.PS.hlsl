@@ -4,6 +4,10 @@
 Texture2D<float32_t4> gTexture : register(t0);
 // 深度バッファを受けとる
 Texture2D<float32_t4> gDepthTexture : register(t1);
+
+// ノイズテクスチャを受け取る
+Texture2D<float32_t4> gNoiseTexture : register(t2);
+
 SamplerState gSampler : register(s0);
 
 // C++から送られてくる「定数」を受け取る箱
@@ -13,6 +17,14 @@ cbuffer PostEffectParam : register(b0)
     float vignetteRadius; // ヴィネットの半径
     float vignetteSoftness; // ヴィネットのぼかし具合
     float blurIntensity; // ぼかしの強さ
+    float dissolveThreshold; // ディゾルブのしきい値
+    float dissolveEdgeWidth; // ディゾルブのエッジの幅 (※ここの全角スペースを修正！)
+    float pad1; // サイズ合わせ用
+    float pad2; // サイズ合わせ用
+    float3 edgeColor;
+    float pad3;
+    float3 noneColor;
+    float pad4;
 };
 
 struct PixelShaderOutput
@@ -239,6 +251,30 @@ PixelShaderOutput main(VertexShaderOutput input)
 
         // 最後にサンプリングした回数で割って平均化する
         output.color = colorSum / (float) NUM_SAMPLES;
+    }
+    else if (effectType == 10)
+    {
+        // ノイズテクスチャから値を取得（モノクロ画像なので .r の明るさを使う）
+        float noise = gNoiseTexture.Sample(gSampler, input.texcoord).r;
+        
+        // ① ノイズの値が、しきい値より小さければ「消える（黒にする）」
+        if (noise < dissolveThreshold)
+        {
+            output.color = float4(noneColor, 1.0f);
+            
+        }
+        else
+        {
+            // まずは元のテクスチャの色をそのまま出力にセットする
+            output.color = texColor;
+
+            // Edgeっぽさを算出 (smoothstepで滑らかな境界を作る)
+            // mask の値が threshold に近いほど 1.0(エッジ強い)、離れるほど 0.0 になる
+            float edge = 1.0f - smoothstep(dissolveThreshold, dissolveThreshold + dissolveEdgeWidth, noise);
+
+            // Edgeっぽいほど指定した色(edgeColor)を加算（+=）して光らせる！
+            output.color.rgb += edge * edgeColor;
+        }
     }
 
     else

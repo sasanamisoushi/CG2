@@ -3,6 +3,7 @@
 #include "engine/Audio/AudioManager.h"
 #include "engine/Graphics/SrvManager.h"
 #include "SceneManager.h"
+#include <engine/Resource/TextureManager.h>
 
 void Game::Initialize() {
 
@@ -27,6 +28,10 @@ void Game::Initialize() {
 
 	//最初のシーンをセット
 	SceneManager::GetInstance()->ChangeScene("TITLE");
+
+	// ノイズ画像を2種類とも読み込んでおく
+	TextureManager::GetInstance()->LoadTexture("resources/noise0.png");
+	TextureManager::GetInstance()->LoadTexture("resources/noise1.png");
 }
 
 void Game::Finalize() {
@@ -47,12 +52,16 @@ void Game::Finalize() {
 void Game::Update() {
 
 	Framework::Update();
+
 #ifdef ENABLE_IMGUI
 	//-----ImGuiのフレーム開始処理-----
 	imGuiManager->BeginFrame();
 
 	postEffect_->DrawImGui();
 #endif
+
+	// ポストエフェクトの更新（自動再生などを計算）
+	postEffect_->Update();
 
 	SceneManager::GetInstance()->Update();
 }
@@ -71,8 +80,15 @@ void Game::Draw() {
 	// 深度バッファを「読み込みモード(SRV)」に切り替え
 	DirectXCommon::GetInstance()->SetDepthStateToSRV();
 
+	// TextureManager等を使って、ノイズ画像（今回はuvChecker）のGPUハンドルを第3引数に渡す！
+	auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
+	auto noise1Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise1.png");
+
 	// 録画したRenderTextureを全画面に貼り付ける！
-	postEffect_->Draw(renderTexture_->GetSrvHandle(), SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_));
+	postEffect_->Draw(renderTexture_->GetSrvHandle(),
+		SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_),
+		noise0Handle,
+		noise1Handle);
 
 	// 深度バッファを元の「書き込みモード(DSV)」に戻す
 	DirectXCommon::GetInstance()->SetDepthStateToDSV();

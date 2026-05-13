@@ -10,11 +10,22 @@ public:
         float vignetteRadius;
         float vignetteSoftness;
         float blurIntensity;
+        float dissolveThreshold;
+        float dissolveEdgeWidth;
+        float pad1;
+        float pad2;
+        float edgeColor[3];
+        float pad3;
+        float noneColor[3]; 
+        float pad4;
     };
 
     void Initialize();
+
+    void Update();
+
     // 描画には、RenderTextureの画像(SRV)のGPUハンドルを渡す
-    void Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle, D3D12_GPU_DESCRIPTOR_HANDLE depthSrvHandle);
+    void Draw(D3D12_GPU_DESCRIPTOR_HANDLE srvHandle, D3D12_GPU_DESCRIPTOR_HANDLE depthSrvHandle, D3D12_GPU_DESCRIPTOR_HANDLE noise0Handle, D3D12_GPU_DESCRIPTOR_HANDLE noise1Handle);
 
     // ImGuiを描画する関数を追加
     void DrawImGui();
@@ -26,6 +37,19 @@ private:
     // 現在のエフェクトの種類を保持する変数 (0:通常, 1:モノクロ, 2:反転)
     int effectType_ = 0;
 
-    // パラメータの実体と初期値
-    PostEffectParam param_ = { 0, 0.3f, 0.5f, 1.5f };
+    // ImGuiでどちらのノイズを選ぶか保持する変数 (0: noise0, 1: noise1)
+    int noiseIndex_ = 0;
+
+    // 自動再生用の変数
+    bool isAutoPlay_ = false;
+    float autoPlaySpeed_ = 0.5f;
+
+    // 初期値に色（オレンジ 1.0, 0.4, 0.3）を追加
+    PostEffectParam param_ = {
+        0, 0.3f, 0.5f, 1.5f,
+        0.0f, 0.05f, 0.0f, 0.0f,
+        1.0f, 0.4f, 0.3f, 0.0f,
+        0.0f, 0.0f, 0.0f, 0.0f
+    };
+
 };
