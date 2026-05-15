@@ -13,6 +13,11 @@ void Game::Initialize() {
 	renderTexture_ = std::make_unique<RenderTexture>();
 	renderTexture_->Initialize(WinApp::kClientWidth, WinApp::kClientHeight);
 
+	// ポストエフェクト用テクスチャも初期化
+	postEffectTexture_ = std::make_unique<RenderTexture>();
+	postEffectTexture_->Initialize(WinApp::kClientWidth, WinApp::kClientHeight);
+
+
 	postEffect_ = std::make_unique<PostEffect>();
 	postEffect_->Initialize();
 
@@ -57,6 +62,9 @@ void Game::Update() {
 	//-----ImGuiのフレーム開始処理-----
 	imGuiManager->BeginFrame();
 
+	// 画面全体をImGuiの「ドッキングエリア」にする
+	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
 	postEffect_->DrawImGui();
 #endif
 
@@ -68,36 +76,54 @@ void Game::Update() {
 
 void Game::Draw() {
 
-	//描画前処理
+	// ==========================================
+	// 1. オフスクリーン描画（3Dシーンを 1枚目「renderTexture_」に録画）
+	// ==========================================
 	DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), renderTexture_->GetRtvHandle());
-
-	// シーンの描画
 	SceneManager::GetInstance()->Draw();
 
-	// 描画先を本来の画面に戻し、背景を黒などでクリアする
-	DirectXCommon::GetInstance()->PreDrawSwapchain();
+	// ==========================================
+	// 2. ポストエフェクトを 2枚目「postEffectTexture_」に描画する
+	// ==========================================
+	// 描画先を2枚目に切り替え
+	DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), postEffectTexture_->GetRtvHandle());
 
-	// 深度バッファを「読み込みモード(SRV)」に切り替え
+	// 深度バッファをSRV（読み込み）に切り替え
 	DirectXCommon::GetInstance()->SetDepthStateToSRV();
 
-	// TextureManager等を使って、ノイズ画像（今回はuvChecker）のGPUハンドルを第3引数に渡す！
 	auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
 	auto noise1Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise1.png");
 
-	// 録画したRenderTextureを全画面に貼り付ける！
-	postEffect_->Draw(renderTexture_->GetSrvHandle(),
+	// 1枚目(renderTexture_)を入力にして、2枚目にポストエフェクトをかける！
+	postEffect_->Draw(
+		renderTexture_->GetSrvHandle(),
 		SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_),
 		noise0Handle,
-		noise1Handle);
+		noise1Handle
+	);
 
-	// 深度バッファを元の「書き込みモード(DSV)」に戻す
+	// 深度バッファをDSV（書き込み）に戻す
 	DirectXCommon::GetInstance()->SetDepthStateToDSV();
 
+	// ==========================================
+	// 3. 実際の画面（スワップチェーン）への描画
+	// ==========================================
+	DirectXCommon::GetInstance()->PreDrawSwapchain();
 
-#ifdef  ENABLE_IMGUI
-	//-------ImGuiの描画-------
+#ifdef ENABLE_IMGUI
+	// ゲーム画面をImGuiの「一つのウィンドウ」として表示する！
+	ImGui::Begin("Game View");
+
+	// ウィンドウのサイズを取得し、そのサイズに合わせて2枚目のテクスチャを画像として貼り付ける
+	ImVec2 windowSize = ImGui::GetContentRegionAvail();
+	ImGui::Image((ImTextureID)postEffectTexture_->GetSrvHandle().ptr, windowSize);
+
+	ImGui::End();
+
+	// ImGuiの描画コマンドを確定して、コマンドリストに積む
 	imGuiManager->EndFrame(DirectXCommon::GetInstance()->GetCommandList());
 #endif
+
 	//描画後処理
 	DirectXCommon::GetInstance()->PostDraw();
 

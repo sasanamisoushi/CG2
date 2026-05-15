@@ -28,6 +28,9 @@ private:
 	// オフスクリーンレンダリング用のテクスチャ
 	std::unique_ptr<RenderTexture> renderTexture_;
 
+	// ポストエフェクト描画用のテクスチャ (ImGuiのGame Viewに貼る用)
+	std::unique_ptr<RenderTexture> postEffectTexture_;
+
 	// ポストエフェクト
 	std::unique_ptr<PostEffect> postEffect_;
 

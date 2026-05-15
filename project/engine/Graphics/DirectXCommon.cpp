@@ -70,8 +70,8 @@ void DirectXCommon::Initialize(WinApp *winApp) {
 	//DXCコンパイラの生成
 	CreateDXCCompiler();
 
-	//ImGuiの初期化
-	InitializeImGui();
+	//ImGuiの初期化 (ImGuiManagerで行うため、ここでは行わない)
+	//InitializeImGui();
 }
 
 void DirectXCommon::CreateDevice() {

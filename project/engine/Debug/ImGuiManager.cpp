@@ -12,7 +12,16 @@ void ImGuiManager::Initialize(HWND hwnd, ID3D12Device *device, int numFramesInFl
 
 	// 日本語フォントのロード
 	ImGuiIO &io = ImGui::GetIO();
-	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msgothic.ttc", 13.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
+	if (io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msgothic.ttc", 13.0f, NULL, io.Fonts->GetGlyphRangesJapanese()) == nullptr) {
+		io.Fonts->AddFontDefault();
+	}
+
+	// ドッキング機能を有効にする
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
+	// フォントアトラスを明示的にビルドする
+	// これにより、最初のフレームの計算時にフォントデータが不足してクラッシュするのを防ぎます
+	io.Fonts->Build();
 
 	// WIn32とDX12のバックエンドを初期化
 	ImGui_ImplWin32_Init(hwnd);
