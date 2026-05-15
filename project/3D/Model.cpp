@@ -70,6 +70,9 @@ void Model::Draw() {
 	//形状を設定。PSOに設定しているものとはまた別。同じものを設定すると考えておけばよい
 	if (modelData.isLine) {
 		modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+	} else if (modelData.isStrip) {
+		// トレイル描画用の連続三角形モード
+		modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	} else {
 		modelCommon_->GetDxCommon()->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
@@ -1007,4 +1010,47 @@ bool Model::Skinning(SkinCluster& skinCluster) {
 	// 実行済みフラグを立てる
 	skinCluster.isUpdated = true;
 	return true;
+}
+
+void Model::InitializeTrail(ModelCommon *modelCommon) {
+	this->modelCommon_ = modelCommon;
+	modelData.vertices.clear();
+
+	// 初期状態は空（またはダミー頂点）にしておく
+	VertexData v{};
+	modelData.vertices.push_back(v);
+	modelData.vertices.push_back(v);
+
+	modelData.isStrip = true; // ストリップ描画を有効化
+
+	CreateVertexData();
+	CreateMaterialData();
+
+	if (materialData) {
+		materialData->enableLighting = 0; // 煙なのでライティング不要
+	}
+
+	// とりあえず既存の画像を割り当てておく（後で煙の画像に変えられます）
+	textureFilePath_ = "resources/uvChecker.png";
+	modelData.material.textureFilePath = textureFilePath_;
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
+	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+}
+
+void Model::UpdateTrailVertices(const std::vector<VertexData> &vertices) {
+	if (vertices.empty()) return;
+
+	// 頂点数が変わったらバッファを作り直す必要があるかチェック
+	bool needRecreate = (modelData.vertices.size() != vertices.size());
+	modelData.vertices = vertices;
+
+	if (needRecreate || !vertexResource) {
+		CreateVertexData();
+	} else {
+		// 既存のvertexResource(UPLOADヒープ)をマップして更新する
+		VertexData *mappedData = nullptr;
+		vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&mappedData));
+		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
+		vertexResource->Unmap(0, nullptr);
+	}
 }

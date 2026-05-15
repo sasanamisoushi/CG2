@@ -10,6 +10,7 @@
 #include "3D/primitive.h"
 #include "3D/Animation.h"
 #include "3D/Model.h"
+#include "3D/Trail.h"
 #include <memory>
 #include <vector>
 
@@ -118,5 +119,16 @@ private:
 	bool enableSkinning = false; // スキニング（ガワを動かす）の切り替え
 	float modelScale = 0.01f;
 	int currentAnimationIndex = 0;
+
+
+	std::unique_ptr<Trail> missileTrail;        // 軌跡の計算を行うクラス
+	std::unique_ptr<Object3d> trailObject;      // 軌跡を描画する実体
+
+	float missileSpeed = 0.05f;   // 飛ぶスピード
+	float missileAmpX = 15.0f;   // X軸の旋回半径（振り幅）
+	float missileAmpZ = 15.0f;   // Z軸の旋回半径
+	float missileAmpY = 3.0f;    // 上下に波打つ高さ
+	float missileFreqY = 4.0f;    // 上下に波打つ細かさ（周波数）
+	float missileBaseY = 5.0f;    // 基準となる飛行高度
 };
 

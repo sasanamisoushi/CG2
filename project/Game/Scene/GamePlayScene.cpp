@@ -127,6 +127,18 @@ void GamePlayScene::Initialize() {
 	pVoice1=AudioManager::GetInstance()->PlayWave(soundData1, true);
 	pVoice2=AudioManager::GetInstance()->PlayWave(soundData2, true);
 
+	// 1. マネージャー経由でトレイル専用モデルを作る
+	ModelManager::GetInstance()->CreateTrailModel("SmokeTrail");
+
+	// 2. トレイル計算機の初期化（今回は60フレーム=約1秒分の長さを残す）
+	missileTrail = std::make_unique<Trail>();
+	missileTrail->Initialize(60);
+
+	// 3. 描画用オブジェクトの初期化
+	trailObject = std::make_unique<Object3d>();
+	trailObject->Initialize(Object3dCommon::GetInstance());
+	trailObject->SetModel("SmokeTrail");
+
 }
 
 void GamePlayScene::Finalize() {
@@ -324,6 +336,40 @@ void GamePlayScene::Update() {
 		particleManager->Update(camera.get());
 	}
 
+
+	// ==========================================
+	// ミサイル（赤い球）をぐねぐね飛ばす！
+	// ==========================================
+	static float missileTime = 0.0f;
+	missileTime += missileSpeed;
+
+	// 大きく旋回しながら上下に波打つ、変態軌道（板野サーカス風）
+	Vector3 missilePos = {
+		std::cos(missileTime) *missileAmpX,
+		std::sin(missileTime *missileFreqY) *missileAmpY + missileBaseY,
+		std::sin(missileTime) *missileAmpZ
+	};
+
+	if (myShere) {
+		myShere->SetTranslate(missilePos);
+		myShere->Update();
+	}
+
+	// ==========================================
+	// トレイルの更新と頂点生成
+	// ==========================================
+	// 1. ミサイルの現在位置を記録させる
+	missileTrail->Update(missilePos);
+
+	// 2. カメラの方向を向いた「太さ1.0f」の板ポリゴンの頂点リストを生成する
+	std::vector<VertexData> trailVertices = missileTrail->GenerateVertices(camera.get(), 1.0f);
+
+	// 3. 生成した頂点をモデルに転送して更新！
+	if (trailObject && trailObject->GetModel()) {
+		trailObject->GetModel()->UpdateTrailVertices(trailVertices);
+	}
+	trailObject->Update();
+
 #ifdef ENABLE_IMGUI
 	UpdateUI();
 #endif
@@ -361,6 +407,22 @@ void GamePlayScene::Draw() {
 	if (myRing && showNormalRing) myRing->Draw();
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
+
+	// ミサイルの頭（赤い球）を描画
+	if (myShere) {
+		myShere->Draw();
+	}
+
+	// エフェクト系の描画 (深度書き込み無効)
+	Object3dCommon::GetInstance()->SetEffectDrawSettings();
+	if (myRing && showNormalRing) myRing->Draw();
+	if (myPartialRing && showPartialRing) myPartialRing->Draw();
+	if (myCylinder && showCylinder) myCylinder->Draw();
+
+	// ▼ 追加：トレイルの描画！
+	if (trailObject) {
+		trailObject->Draw();
+	}
 
 	//Spriteの描画基準
 	SpriteCommon::GetInstance()->SetCommonPipelineState();
@@ -445,6 +507,17 @@ void GamePlayScene::UpdateUI() {
 		ImGui::DragFloat3("シリンダースケール", cylinderScale, 0.01f);
 		ImGui::DragFloat2("UVスクロール速度", cylinderUVScrollSpeed, 0.001f);
 		ImGui::SliderFloat("アルファリファレンス", &cylinderAlphaReference, 0.0f, 1.0f);
+
+		ImGui::Separator();
+		ImGui::Text("ミサイル軌跡設定"); // ミサイル軌道設定
+
+		// スライダーで各パラメータを調整できるようにする
+		ImGui::SliderFloat("スピード", &missileSpeed, 0.01f, 0.2f);
+		ImGui::SliderFloat("X軸の旋回半径", &missileAmpX, 0.0f, 50.0f);
+		ImGui::SliderFloat("Z軸の旋回半径", &missileAmpZ, 0.0f, 50.0f);
+		ImGui::SliderFloat("上下の波打ち幅", &missileAmpY, 0.0f, 20.0f);
+		ImGui::SliderFloat("波打ちの細かさ", &missileFreqY, 0.1f, 20.0f);
+		ImGui::SliderFloat("基準高度", &missileBaseY, 0.0f, 20.0f);
 
 		bool cChanged = false;
 		if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;

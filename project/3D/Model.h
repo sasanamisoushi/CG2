@@ -102,6 +102,7 @@ struct ModelData {
 	std::vector<std::string> boneNames; // ボーンIndex順のジョイント名
 	bool isSkinned = false; // スキニングモデルかどうか
 	bool isLine = false; // ラインプリミティブかどうか
+	bool isStrip = false; // ストリップ（帯）描画フラグ
 };
 
 struct Material {
@@ -205,6 +206,10 @@ public:
 	const ModelData& GetModelData()const { return modelData; }
 
 	ModelCommon* GetModelCommon() const { return modelCommon_; }
+
+	// トレイル（帯）の初期化と頂点更新関数
+	void InitializeTrail(ModelCommon *modelCommon);
+	void UpdateTrailVertices(const std::vector<VertexData> &vertices);
 
 private:
 	ModelCommon *modelCommon_;

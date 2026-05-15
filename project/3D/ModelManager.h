@@ -39,6 +39,9 @@ public:
 	// ラインモデルの作成
 	void CreateLineModel(const std::string &modelName);
 
+	// トレイルモデルの作成
+	void CreateTrailModel(const std::string &modelName);
+
 	ModelCommon *GetModelCommon() const { return modelCommon.get(); }
 
 private:

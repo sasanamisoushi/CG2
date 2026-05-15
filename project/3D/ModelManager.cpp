@@ -116,3 +116,10 @@ void ModelManager::CreateLineModel(const std::string &modelName) {
 	models.insert(std::make_pair(modelName, std::move(newModel)));
 }
 
+void ModelManager::CreateTrailModel(const std::string &modelName) {
+	if (models.contains(modelName)) return;
+
+	std::unique_ptr<Model> newModel = std::make_unique<Model>();
+	newModel->InitializeTrail(modelCommon.get());
+	models.insert(std::make_pair(modelName, std::move(newModel)));
+}
