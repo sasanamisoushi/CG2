@@ -127,6 +127,9 @@ public:
 
 	static Vector3 Normalize(const Vector3 &v);
 
+	// クォータニオン用の正規化関数
+	static Quaternion Normalize(const Quaternion &q);
+
 	// クォータニオンの積（回転の合成）
 	static Quaternion Multiply(const Quaternion &lhs, const Quaternion &rhs);
 

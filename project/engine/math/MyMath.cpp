@@ -286,6 +286,14 @@ Vector3 MyMath::Normalize(const Vector3 &v) {
 	};
 }
 
+Quaternion MyMath::Normalize(const Quaternion &q) {
+	float len = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+	if (len != 0.0f) {
+		return { q.x / len, q.y / len, q.z / len, q.w / len };
+	}
+	return q;
+}
+
 Quaternion MyMath::Multiply(const Quaternion &lhs, const Quaternion &rhs) {
 	Quaternion result;
 	result.w = lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z;
