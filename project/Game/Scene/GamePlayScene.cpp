@@ -380,8 +380,10 @@ void GamePlayScene::Draw() {
 	//3Dオブジェトの描画準備
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 	//3Dオブジェクトの描画
-	for (Object3d *object3d : objects) {
-		object3d->Draw();
+	if (showPlane) {
+		for (Object3d* object3d : objects) {
+			object3d->Draw();
+		}
 	}
 
 	// アニメーションモデルの個別描画制御
@@ -400,7 +402,9 @@ void GamePlayScene::Draw() {
 	}
 	
 	// スカイボックスの描画
-	skybox->Draw();
+	if (showSkybox) {
+		skybox->Draw();
+	}
 	
 	// エフェクト系の描画 (深度書き込み無効)
 	Object3dCommon::GetInstance()->SetEffectDrawSettings();
@@ -409,7 +413,7 @@ void GamePlayScene::Draw() {
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
 	// ミサイルの頭（赤い球）を描画
-	if (myShere) {
+	if (showSphere && myShere) {
 		myShere->Draw();
 	}
 
@@ -420,14 +424,16 @@ void GamePlayScene::Draw() {
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
 	// ▼ 追加：トレイルの描画！
-	if (trailObject) {
+	if (showTrail && trailObject) {
 		trailObject->Draw();
 	}
 
 	//Spriteの描画基準
 	SpriteCommon::GetInstance()->SetCommonPipelineState();
 	//スプライト描画
-	sprite->Draw();
+	if (showSprite) {
+		sprite->Draw();
+	}
 
 	if (showParticles) {
 		particleManager->Draw();
@@ -446,10 +452,18 @@ void GamePlayScene::UpdateUI() {
 		//ウィンドウの作成
 		ImGui::Begin("演習");
 
-		ImGui::Text("リングの設定");
+		ImGui::Text("表示設定");
+		ImGui::Checkbox("スカイボックスを表示", &showSkybox);
+		ImGui::Checkbox("平面を表示", &showPlane);
+		ImGui::Checkbox("球体（ミサイル頭）を表示", &showSphere);
 		ImGui::Checkbox("通常リングを表示", &showNormalRing);
 		ImGui::Checkbox("部分リングを表示", &showPartialRing);
 		ImGui::Checkbox("シリンダーを表示", &showCylinder);
+		ImGui::Checkbox("トレイルを表示", &showTrail);
+		ImGui::Checkbox("モデルを表示", &showModel);
+		ImGui::Checkbox("パーティクルを表示", &showParticles);
+		ImGui::Checkbox("ボーンを表示", &showBones);
+		ImGui::Checkbox("スプライトを表示", &showSprite);
 
 		ImGui::Separator();
 		ImGui::Text("GPUパーティクルの操作");
@@ -493,12 +507,9 @@ void GamePlayScene::UpdateUI() {
 				modelScale = 1.0f;  // simpleSkinなどは等倍で人間サイズ
 			}
 		}
-		ImGui::Checkbox("モデルを表示", &showModel);
 		ImGui::Checkbox("スキニング (ガワを動かす)", &enableSkinning);
 		ImGui::SliderFloat("モデルスケール", &modelScale, 0.001f, 1.0f);
 		if (ImGui::Checkbox("アニメーション再生", &playAnimation)) {}
-		ImGui::Checkbox("ボーンを表示", &showBones);
-		ImGui::Checkbox("パーティクルを表示", &showParticles);
 		ImGui::SliderFloat("再生時間", &animationTime, 0.0f, animationData.duration);
 
 		ImGui::Separator();

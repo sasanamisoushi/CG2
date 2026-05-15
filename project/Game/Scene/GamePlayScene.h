@@ -110,11 +110,17 @@ private:
 	// スケルトン
 	Skeleton skeleton;
 	bool showBones = false;
+	bool showPlane = false;
+	bool showSphere = false;
+	bool showBox = false;
+	bool showTrail = false;
+	bool showSkybox = false;
+	bool showSprite = false;
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
 
 	// UIと状態管理
-	bool showParticles = true;
+	bool showParticles = false;
 	bool showModel = false;
 	bool enableSkinning = false; // スキニング（ガワを動かす）の切り替え
 	float modelScale = 0.01f;
