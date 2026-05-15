@@ -325,8 +325,9 @@ void GamePlayScene::Update() {
 	}
 
 #ifdef ENABLE_IMGUI
-	//開発用UIの処理
-	ImGui::ShowDemoWindow();
+	if (ImGuiManager::IsVisible()) {
+		//開発用UIの処理
+		ImGui::ShowDemoWindow();
 
 	//ウィンドウのサイズを設定
 	ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
@@ -548,6 +549,7 @@ void GamePlayScene::Update() {
 	}
 
 	ImGui::End();
+	}
 #endif
 	sprite->Update();
 }

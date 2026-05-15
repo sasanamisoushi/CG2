@@ -59,13 +59,21 @@ void Game::Update() {
 	Framework::Update();
 
 #ifdef ENABLE_IMGUI
+	// F1キーでImGuiの表示・非表示を切り替え
+	if (Input::GetInstance()->TriggerKey(DIK_F1)) {
+		showImGui_ = !showImGui_;
+		ImGuiManager::SetVisible(showImGui_);
+	}
+
 	//-----ImGuiのフレーム開始処理-----
-	imGuiManager->BeginFrame();
+	if (showImGui_) {
+		imGuiManager->BeginFrame();
 
-	// 画面全体をImGuiの「ドッキングエリア」にする
-	ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+		// 画面全体をImGuiの「ドッキングエリア」にする
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
-	postEffect_->DrawImGui();
+		postEffect_->DrawImGui();
+	}
 #endif
 
 	// ポストエフェクトの更新（自動再生などを計算）
@@ -83,46 +91,69 @@ void Game::Draw() {
 	SceneManager::GetInstance()->Draw();
 
 	// ==========================================
-	// 2. ポストエフェクトを 2枚目「postEffectTexture_」に描画する
+	// 2. ポストエフェクト描画
 	// ==========================================
-	// 描画先を2枚目に切り替え
-	DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), postEffectTexture_->GetRtvHandle());
-
-	// 深度バッファをSRV（読み込み）に切り替え
-	DirectXCommon::GetInstance()->SetDepthStateToSRV();
-
-	auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
-	auto noise1Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise1.png");
-
-	// 1枚目(renderTexture_)を入力にして、2枚目にポストエフェクトをかける！
-	postEffect_->Draw(
-		renderTexture_->GetSrvHandle(),
-		SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_),
-		noise0Handle,
-		noise1Handle
-	);
-
-	// 深度バッファをDSV（書き込み）に戻す
-	DirectXCommon::GetInstance()->SetDepthStateToDSV();
-
-	// ==========================================
-	// 3. 実際の画面（スワップチェーン）への描画
-	// ==========================================
-	DirectXCommon::GetInstance()->PreDrawSwapchain();
-
 #ifdef ENABLE_IMGUI
-	// ゲーム画面をImGuiの「一つのウィンドウ」として表示する！
-	ImGui::Begin("Game View");
+	if (showImGui_) {
+		// ImGuiあり：ポストエフェクトを 2枚目「postEffectTexture_」に描画する
+		DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), postEffectTexture_->GetRtvHandle());
 
-	// ウィンドウのサイズを取得し、そのサイズに合わせて2枚目のテクスチャを画像として貼り付ける
-	ImVec2 windowSize = ImGui::GetContentRegionAvail();
-	ImGui::Image((ImTextureID)postEffectTexture_->GetSrvHandle().ptr, windowSize);
+		// 深度バッファをSRV（読み込み）に切り替え
+		DirectXCommon::GetInstance()->SetDepthStateToSRV();
 
-	ImGui::End();
+		auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
+		auto noise1Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise1.png");
 
-	// ImGuiの描画コマンドを確定して、コマンドリストに積む
-	imGuiManager->EndFrame(DirectXCommon::GetInstance()->GetCommandList());
+		// 1枚目(renderTexture_)を入力にして、2枚目にポストエフェクトをかける！
+		postEffect_->Draw(
+			renderTexture_->GetSrvHandle(),
+			SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_),
+			noise0Handle,
+			noise1Handle
+		);
+
+		// 深度バッファをDSV（書き込み）に戻す
+		DirectXCommon::GetInstance()->SetDepthStateToDSV();
+
+		// ==========================================
+		// 3. 実際の画面（スワップチェーン）への描画 (ImGui経由)
+		// ==========================================
+		DirectXCommon::GetInstance()->PreDrawSwapchain();
+
+		// ゲーム画面をImGuiの「一つのウィンドウ」として表示する！
+		ImGui::Begin("Game View");
+
+		// ウィンドウのサイズを取得し、そのサイズに合わせて2枚目のテクスチャを画像として貼り付ける
+		ImVec2 windowSize = ImGui::GetContentRegionAvail();
+		ImGui::Image((ImTextureID)postEffectTexture_->GetSrvHandle().ptr, windowSize);
+
+		ImGui::End();
+
+		// ImGuiの描画コマンドを確定して、コマンドリストに積む
+		imGuiManager->EndFrame(DirectXCommon::GetInstance()->GetCommandList());
+	} else 
 #endif
+	{
+		// ImGuiなし（または非表示）：ポストエフェクトを直接スワップチェーンに描画する
+		DirectXCommon::GetInstance()->PreDrawSwapchain();
+
+		// 深度バッファをSRV（読み込み）に切り替え
+		DirectXCommon::GetInstance()->SetDepthStateToSRV();
+
+		auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
+		auto noise1Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise1.png");
+
+		// 1枚目(renderTexture_)を入力にして、スワップチェーンに直接描画！
+		postEffect_->Draw(
+			renderTexture_->GetSrvHandle(),
+			SrvManager::GetInstance()->GetGPUDescriptorHandle(depthSrvIndex_),
+			noise0Handle,
+			noise1Handle
+		);
+
+		// 深度バッファをDSV（書き込み）に戻す
+		DirectXCommon::GetInstance()->SetDepthStateToDSV();
+	}
 
 	//描画後処理
 	DirectXCommon::GetInstance()->PostDraw();

@@ -23,5 +23,12 @@ public:
 
 	// CommandList: ImGuiの描画コマンドを起動するコマンドリスト
 	void EndFrame(ID3D12GraphicsCommandList *commandList);
+
+	// 表示フラグの取得・設定 (静的)
+	static bool IsVisible() { return sIsVisible_; }
+	static void SetVisible(bool visible) { sIsVisible_ = visible; }
+
+private:
+	static bool sIsVisible_;
 };
 

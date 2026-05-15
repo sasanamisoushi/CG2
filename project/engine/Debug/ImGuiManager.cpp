@@ -2,6 +2,8 @@
 #include <cstdint>
 #include "engine/Graphics/SrvManager.h"
 
+bool ImGuiManager::sIsVisible_ = true;
+
 void ImGuiManager::Initialize(HWND hwnd, ID3D12Device *device, int numFramesInFlight, DXGI_FORMAT rtvFormat, ID3D12DescriptorHeap *srvHeap) {
 #ifdef ENABLE_IMGUI
 	// ImGuiのコンテキストを作成
@@ -46,6 +48,9 @@ void ImGuiManager::Shutdown() {
 }
 
 void ImGuiManager::BeginFrame() {
+	if (!sIsVisible_) {
+		return;
+	}
 #ifdef ENABLE_IMGUI
 	// ImGuiの新しいフレームを開始
 	ImGui_ImplDX12_NewFrame();
@@ -55,6 +60,9 @@ void ImGuiManager::BeginFrame() {
 }
 
 void ImGuiManager::EndFrame(ID3D12GraphicsCommandList *commandList) {
+	if (!sIsVisible_) {
+		return;
+	}
 #ifdef ENABLE_IMGUI
 	//描画データを生成
 	ImGui::Render();

@@ -36,5 +36,8 @@ private:
 
 	// 深度バッファのSRVの番号を覚えておく変数
 	uint32_t depthSrvIndex_ = 0;
+
+	// ImGuiを表示するかどうか
+	bool showImGui_ = true;
 };
 
