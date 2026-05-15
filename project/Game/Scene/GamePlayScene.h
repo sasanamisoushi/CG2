@@ -6,6 +6,7 @@
 #include "engine/Particle/ParticleEmitter.h"
 #include "engine/Audio/AudioManager.h"
 #include "Game/base/BaseScene.h"
+#include "Game/Player/Player.h"
 #include "3D/Skybox.h"
 #include "3D/primitive.h"
 #include "3D/Animation.h"
@@ -136,5 +137,7 @@ private:
 	float missileAmpY = 3.0f;    // 上下に波打つ高さ
 	float missileFreqY = 4.0f;    // 上下に波打つ細かさ（周波数）
 	float missileBaseY = 5.0f;    // 基準となる飛行高度
+
+	std::unique_ptr<Player> player_;
 };
 

@@ -195,6 +195,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Game\Scene\TitleScene.cpp" />
     <ClCompile Include="engine\base\WinApp.cpp" />
     <ClCompile Include="3D\Trail.cpp" />
+    <ClCompile Include="Game\Player\Player.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\shaders\CopyImage.PS.hlsl">
@@ -310,6 +311,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Game\Scene\TitleScene.h" />
     <ClInclude Include="engine\base\WinApp.h" />
     <ClInclude Include="3D\Trail.h" />
+    <ClInclude Include="Game\Player\Player.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">

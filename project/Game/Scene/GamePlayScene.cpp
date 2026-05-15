@@ -139,6 +139,14 @@ void GamePlayScene::Initialize() {
 	trailObject->Initialize(Object3dCommon::GetInstance());
 	trailObject->SetModel("SmokeTrail");
 
+
+	ModelManager::GetInstance()->CreateBoxModel("PlayerBox");
+
+	player_ = std::make_unique<Player>();
+	player_->Initialize("PlayerBox");
+
+	
+
 }
 
 void GamePlayScene::Finalize() {
@@ -246,6 +254,14 @@ void GamePlayScene::Update() {
 	// モデルの更新
 	if (showModel && myModelObject) {
 		myModelObject->Update();
+	}
+
+	// プレイヤーの更新と、カメラの追従
+	if (player_) {
+		player_->Update();
+
+		// ※デバッグカメラ(FlyCamera)をオフにして、自機追従カメラにする
+		player_->UpdateCamera(camera.get());
 	}
 
 	//カメラの更新
@@ -412,6 +428,11 @@ void GamePlayScene::Draw() {
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
+	// ★ プレイヤーの描画
+	if (player_) {
+		player_->Draw();
+	}
+
 	// ミサイルの頭（赤い球）を描画
 	if (showSphere && myShere) {
 		myShere->Draw();
@@ -423,7 +444,7 @@ void GamePlayScene::Draw() {
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
-	// ▼ 追加：トレイルの描画！
+	// トレイルの描画！
 	if (showTrail && trailObject) {
 		trailObject->Draw();
 	}
