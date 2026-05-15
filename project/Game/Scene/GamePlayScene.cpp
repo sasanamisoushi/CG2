@@ -7,13 +7,13 @@
 #include "engine/Input/Input.h"
 #include "engine/Debug/ImGuiManager.h"
 #include <externals/imgui/imgui.h>
-
+#include "engine/Camera/FlyCamera.h"
 
 
 void GamePlayScene::Initialize() {
 
 	//カメラ・シーンリソース
-	camera = std::make_unique<Camera>();
+	camera = std::make_unique<FlyCamera>();
 	camera->SetRotate({ 0.0f,0.0f,0.0f });
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
@@ -276,7 +276,7 @@ void GamePlayScene::Update() {
 
 		Model* pRingModel = myPartialRing->GetModel();
 		if (pRingModel) {
-			Vector3 uvScale = { 1.0f, 10.0f, 1.0f }; // V方向にScale
+			Vector3 uvScale = { 1.0f, 10.0f, 1.0f };
 			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
 			Vector3 uvTranslate = { 0.0f, pRingTime * 0.1f, 0.0f }; // V方向へスクロール
 			
@@ -325,231 +325,7 @@ void GamePlayScene::Update() {
 	}
 
 #ifdef ENABLE_IMGUI
-	if (ImGuiManager::IsVisible()) {
-		//開発用UIの処理
-		ImGui::ShowDemoWindow();
-
-	//ウィンドウのサイズを設定
-	ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
-
-	//ウィンドウの作成
-	ImGui::Begin("演習");
-
-	ImGui::Text("リングの設定");
-	ImGui::Checkbox("通常リングを表示", &showNormalRing);
-	ImGui::Checkbox("部分リングを表示", &showPartialRing);
-	ImGui::Checkbox("シリンダーを表示", &showCylinder);
-
-	ImGui::Separator();
-	ImGui::Text("GPUパーティクルの操作");
-	bool gpuChanged = false;
-	if (auto* emitter = particleManager->GetEmitterSphere()) {
-		if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
-		if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
-		if (ImGui::DragInt("射出数", (int*)&emitter->count, 1, 0, 1000)) gpuChanged = true;
-		if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
-	}
-
-	if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
-		particleManager->RequestGpuInitialize();
-	}
-
-	ImGui::Separator();
-	ImGui::Text("アニメーション制御");
-	const char* animationNames[] = { "AnimatedCube", "simpleSkin", "sneakWalk", "walk" };
-	if (ImGui::Combo("アニメーション", &currentAnimationIndex, animationNames, IM_ARRAYSIZE(animationNames))) {
-		std::string dir, file, loadFile;
-		if (currentAnimationIndex == 0) { dir = "resources/AnimatedCube"; file = "AnimatedCube.gltf"; loadFile = "AnimatedCube/AnimatedCube.gltf"; }
-		else if (currentAnimationIndex == 1) { dir = "resources/simpleSkin"; file = "simpleSkin.gltf"; loadFile = "simpleSkin/simpleSkin.gltf"; }
-		else if (currentAnimationIndex == 2) { dir = "resources/human"; file = "sneakWalk.gltf"; loadFile = "human/sneakWalk.gltf"; }
-		else if (currentAnimationIndex == 3) { dir = "resources/human"; file = "walk.gltf"; loadFile = "human/walk.gltf"; }
-		
-		animationData = LoadAnimationFile(dir, file);
-		Node rootNode = Model::LoadNodeHierarchy(dir, file);
-		skeleton = CreateSkeleton(rootNode);
-		if (!skeleton.joints.empty()) {
-			skeleton.joints[skeleton.root].transform.translate = { 0.0f, 0.0f, 0.0f };
-		}
-		animationTime = 0.0f;
-
-		ModelManager::GetInstance()->LoadModel(loadFile);
-		myModelObject->SetModel(loadFile);
-		if (myModelObject->GetModel()) {
-			myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
-		}
-		
-		// モデルに応じた適切なスケールを自動設定する
-		if (currentAnimationIndex == 0) {
-			modelScale = 0.01f; // AnimatedCubeは巨大なので縮小
-		} else {
-			modelScale = 1.0f;  // simpleSkinなどは等倍で人間サイズ
-		}
-	}
-	ImGui::Checkbox("モデルを表示", &showModel);
-	ImGui::Checkbox("スキニング (ガワを動かす)", &enableSkinning);
-	ImGui::SliderFloat("モデルスケール", &modelScale, 0.001f, 1.0f);
-	if (ImGui::Checkbox("アニメーション再生", &playAnimation)) {}
-	ImGui::Checkbox("ボーンを表示", &showBones);
-	ImGui::Checkbox("パーティクルを表示", &showParticles);
-	ImGui::SliderFloat("再生時間", &animationTime, 0.0f, animationData.duration);
-
-	ImGui::Separator();
-	ImGui::Text("シリンダー設定");
-	ImGui::DragFloat3("シリンダー座標", cylinderPos, 0.01f);
-	ImGui::DragFloat3("シリンダースケール", cylinderScale, 0.01f);
-	ImGui::DragFloat2("UVスクロール速度", cylinderUVScrollSpeed, 0.001f);
-	ImGui::SliderFloat("アルファリファレンス", &cylinderAlphaReference, 0.0f, 1.0f);
-
-	bool cChanged = false;
-	if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;
-	if (ImGui::SliderInt("Vertical Subdivision", &cylinderVerticalSubdivision, 1, 32)) cChanged = true;
-	if (ImGui::DragFloat("Top Radius X", &cylinderTopRadiusX, 0.01f)) cChanged = true;
-	if (ImGui::DragFloat("Top Radius Z", &cylinderTopRadiusZ, 0.01f)) cChanged = true;
-	if (ImGui::DragFloat("Bottom Radius X", &cylinderBottomRadiusX, 0.01f)) cChanged = true;
-	if (ImGui::DragFloat("Bottom Radius Z", &cylinderBottomRadiusZ, 0.01f)) cChanged = true;
-	if (ImGui::DragFloat("Height", &cylinderHeight, 0.01f)) cChanged = true;
-	if (ImGui::ColorEdit4("Top Color", cylinderTopColor)) cChanged = true;
-	if (ImGui::ColorEdit4("Bottom Color", cylinderBottomColor)) cChanged = true;
-	if (ImGui::SliderFloat("Start Angle##Cyl", &cylinderStartAngle, 0.0f, 360.0f)) cChanged = true;
-	if (ImGui::SliderFloat("End Angle##Cyl", &cylinderEndAngle, 0.0f, 360.0f)) cChanged = true;
-	if (ImGui::Checkbox("Flip UV", &cylinderIsUvFlipped)) cChanged = true;
-
-	if (myCylinder && cChanged) {
-		Model* model = myCylinder->GetModel();
-		if (model) {
-			model->InitializeCylinder(model->GetModelCommon(), 
-				cylinderSubdivision, cylinderVerticalSubdivision,
-				cylinderTopRadiusX, cylinderTopRadiusZ,
-				cylinderBottomRadiusX, cylinderBottomRadiusZ,
-				cylinderHeight,
-				{ cylinderTopColor[0], cylinderTopColor[1], cylinderTopColor[2], cylinderTopColor[3] },
-				{ cylinderBottomColor[0], cylinderBottomColor[1], cylinderBottomColor[2], cylinderBottomColor[3] },
-				cylinderStartAngle, cylinderEndAngle,
-				cylinderIsUvFlipped);
-		}
-	}
-
-	ImGui::Separator();
-	ImGui::Text("Partial Ring Settings");
-
-	bool pRingChanged = false;
-	if (ImGui::SliderInt("Subdivision", &prSubdivision, 3, 128)) pRingChanged = true;
-	if (ImGui::SliderFloat("Outer Radius", &prOuterRadius, 0.1f, 5.0f)) pRingChanged = true;
-	if (ImGui::SliderFloat("Inner Radius", &prInnerRadius, 0.1f, 5.0f)) pRingChanged = true;
-	if (ImGui::Checkbox("UV Horizontal", &prIsUvHorizontal)) pRingChanged = true;
-	if (ImGui::ColorEdit4("Inner Color", prInnerColor)) pRingChanged = true;
-	if (ImGui::ColorEdit4("Outer Color", prOuterColor)) pRingChanged = true;
-	if (ImGui::SliderFloat("Start Angle", &prStartAngle, 0.0f, 360.0f)) pRingChanged = true;
-	if (ImGui::SliderFloat("End Angle", &prEndAngle, 0.0f, 360.0f)) pRingChanged = true;
-	if (ImGui::SliderFloat("Fade Angle", &prFadeAngle, 0.0f, 180.0f)) pRingChanged = true;
-
-	if (pRingChanged && myPartialRing) {
-		Model* model = myPartialRing->GetModel();
-		if (model) {
-			model->InitializeRing(
-				model->GetModelCommon(), prSubdivision, prOuterRadius, prInnerRadius,
-				prIsUvHorizontal, { prInnerColor[0], prInnerColor[1], prInnerColor[2], prInnerColor[3] },
-				{ prOuterColor[0], prOuterColor[1], prOuterColor[2], prOuterColor[3] },
-				prStartAngle, prEndAngle, prFadeAngle
-			);
-		}
-	}
-
-	//スプライトの座標を配列に格納
-	Vector2 currentPos = sprite->GetPosition();
-	float pos[2] = { currentPos.x,currentPos.y };
-
-	//スライダーでスプライトの座標を変更できるようにする
-	ImGui::SliderFloat2("Sprite Position", pos, 0.0f, 1280.0f, "%.1f");
-
-	//スライダーで変更された座標をスプライトに反映
-	sprite->SetPosition({ pos[0],pos[1] });
-
-	ImGui::End();
-
-	//ImGui::Begin("Settings");
-
-	
-	//if (objB!= nullptr) {
-	//	// ライトのデータ（ポインタ）を取得
-	//	DirectionalLight *lightData = objB->GetDirectionalLightData();
-
-	//	if (lightData != nullptr) {
-	//		// ① ライトの色（RGBA）
-	//		ImGui::ColorEdit4("Light Color", &lightData->color.x);
-
-	//		// ② ライトの向き（X, Y, Z）
-	//		ImGui::DragFloat3("Light Direction", &lightData->direction.x, 0.01f, -1.0f, 1.0f);
-
-	//		// ③ ライトの明るさ
-	//		ImGui::DragFloat("Light Intensity", &lightData->intensity, 0.01f, 0.0f, 10.0f);
-	//	}
-
-	//	// ① 現在のスケールを取得する（関数名はご自身の環境に合わせてください）
-	//	Vector3 currentScale = objB->GetScale();
-
-	//	// ImGuiで使いやすいように配列に入れる
-	//	float scale[3] = { currentScale.x, currentScale.y, currentScale.z };
-
-	//	// ② スケールを変更できるスライダー（X, Y, Z を個別にイジれる）
-	//	ImGui::DragFloat3("Scale", scale, 0.01f, 0.1f, 10.0f);
-
-	//	// ③ 変更されたスケールをオブジェクトに反映する
-	//	objB->SetScale({ scale[0], scale[1], scale[2] });
-	//}
-
-	//ImGui::End();
-
-	ImGui::Begin("Camera Settings");
-
-	// ① 現在のカメラの回転角と座標を取得
-	Vector3 camRot = camera->GetRotate();
-	Vector3 camPos = camera->GetTranslate();
-
-	// ImGuiウィンドウ上にマウスがない場合、画面のドラッグでカメラを動かす
-	if (!ImGui::GetIO().WantCaptureMouse) {
-		// 左ドラッグでカメラ回転
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-			ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
-			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-			camRot.y += delta.x * 0.01f; // 左右ドラッグでY軸回転 (Yaw)
-			camRot.x += delta.y * 0.01f; // 上下ドラッグでX軸回転 (Pitch)
-			camera->SetRotate(camRot);
-		}
-		// 右ドラッグでカメラの平行移動
-		if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-			ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
-			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
-			camPos.x -= delta.x * 0.05f;
-			camPos.y += delta.y * 0.05f;
-			camera->SetTranslate(camPos);
-		}
-		// マウスホイールで前進・後退
-		float wheel = ImGui::GetIO().MouseWheel;
-		if (wheel != 0.0f) {
-			camPos.z += wheel * 1.0f;
-			camera->SetTranslate(camPos);
-		}
-	}
-
-	// ② ImGuiで扱いやすいように配列に格納
-	float camRotArr[3] = { camRot.x, camRot.y, camRot.z };
-	float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
-
-	// ③ スライダー（ドラッグ操作）で値を変更できるようにする
-	// ※ 0.01f はマウスでドラッグしたときの変化スピードです
-	if (ImGui::DragFloat3("Rotation (Pitch, Yaw, Roll)", camRotArr, 0.01f)) {
-		// 値が変更されたらカメラに反映
-		camera->SetRotate({ camRotArr[0], camRotArr[1], camRotArr[2] });
-	}
-
-	// （おまけ）位置も変えたい場合
-	if (ImGui::DragFloat3("Position (X, Y, Z)", camPosArr, 0.1f)) {
-		camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
-	}
-
-	ImGui::End();
-	}
+	UpdateUI();
 #endif
 	sprite->Update();
 }
@@ -594,4 +370,198 @@ void GamePlayScene::Draw() {
 	if (showParticles) {
 		particleManager->Draw();
 	}
+}
+
+void GamePlayScene::UpdateUI() {
+#ifdef ENABLE_IMGUI
+	if (ImGuiManager::IsVisible()) {
+		//開発用UIの処理
+		ImGui::ShowDemoWindow();
+
+		//ウィンドウのサイズを設定
+		ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
+
+		//ウィンドウの作成
+		ImGui::Begin("演習");
+
+		ImGui::Text("リングの設定");
+		ImGui::Checkbox("通常リングを表示", &showNormalRing);
+		ImGui::Checkbox("部分リングを表示", &showPartialRing);
+		ImGui::Checkbox("シリンダーを表示", &showCylinder);
+
+		ImGui::Separator();
+		ImGui::Text("GPUパーティクルの操作");
+		bool gpuChanged = false;
+		if (auto *emitter = particleManager->GetEmitterSphere()) {
+			if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
+			if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
+			if (ImGui::DragInt("射出数", (int *) &emitter->count, 1, 0, 1000)) gpuChanged = true;
+			if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
+		}
+
+		if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
+			particleManager->RequestGpuInitialize();
+		}
+
+		ImGui::Separator();
+		ImGui::Text("アニメーション制御");
+		const char *animationNames[] = { "AnimatedCube", "simpleSkin", "sneakWalk", "walk" };
+		if (ImGui::Combo("アニメーション", &currentAnimationIndex, animationNames, IM_ARRAYSIZE(animationNames))) {
+			std::string dir, file, loadFile;
+			if (currentAnimationIndex == 0) { dir = "resources/AnimatedCube"; file = "AnimatedCube.gltf"; loadFile = "AnimatedCube/AnimatedCube.gltf"; } else if (currentAnimationIndex == 1) { dir = "resources/simpleSkin"; file = "simpleSkin.gltf"; loadFile = "simpleSkin/simpleSkin.gltf"; } else if (currentAnimationIndex == 2) { dir = "resources/human"; file = "sneakWalk.gltf"; loadFile = "human/sneakWalk.gltf"; } else if (currentAnimationIndex == 3) { dir = "resources/human"; file = "walk.gltf"; loadFile = "human/walk.gltf"; }
+
+			animationData = LoadAnimationFile(dir, file);
+			Node rootNode = Model::LoadNodeHierarchy(dir, file);
+			skeleton = CreateSkeleton(rootNode);
+			if (!skeleton.joints.empty()) {
+				skeleton.joints[skeleton.root].transform.translate = { 0.0f, 0.0f, 0.0f };
+			}
+			animationTime = 0.0f;
+
+			ModelManager::GetInstance()->LoadModel(loadFile);
+			myModelObject->SetModel(loadFile);
+			if (myModelObject->GetModel()) {
+				myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
+			}
+
+			// モデルに応じた適切なスケールを自動設定する
+			if (currentAnimationIndex == 0) {
+				modelScale = 0.01f; // AnimatedCubeは巨大なので縮小
+			} else {
+				modelScale = 1.0f;  // simpleSkinなどは等倍で人間サイズ
+			}
+		}
+		ImGui::Checkbox("モデルを表示", &showModel);
+		ImGui::Checkbox("スキニング (ガワを動かす)", &enableSkinning);
+		ImGui::SliderFloat("モデルスケール", &modelScale, 0.001f, 1.0f);
+		if (ImGui::Checkbox("アニメーション再生", &playAnimation)) {}
+		ImGui::Checkbox("ボーンを表示", &showBones);
+		ImGui::Checkbox("パーティクルを表示", &showParticles);
+		ImGui::SliderFloat("再生時間", &animationTime, 0.0f, animationData.duration);
+
+		ImGui::Separator();
+		ImGui::Text("シリンダー設定");
+		ImGui::DragFloat3("シリンダー座標", cylinderPos, 0.01f);
+		ImGui::DragFloat3("シリンダースケール", cylinderScale, 0.01f);
+		ImGui::DragFloat2("UVスクロール速度", cylinderUVScrollSpeed, 0.001f);
+		ImGui::SliderFloat("アルファリファレンス", &cylinderAlphaReference, 0.0f, 1.0f);
+
+		bool cChanged = false;
+		if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;
+		if (ImGui::SliderInt("Vertical Subdivision", &cylinderVerticalSubdivision, 1, 32)) cChanged = true;
+		if (ImGui::DragFloat("Top Radius X", &cylinderTopRadiusX, 0.01f)) cChanged = true;
+		if (ImGui::DragFloat("Top Radius Z", &cylinderTopRadiusZ, 0.01f)) cChanged = true;
+		if (ImGui::DragFloat("Bottom Radius X", &cylinderBottomRadiusX, 0.01f)) cChanged = true;
+		if (ImGui::DragFloat("Bottom Radius Z", &cylinderBottomRadiusZ, 0.01f)) cChanged = true;
+		if (ImGui::DragFloat("Height", &cylinderHeight, 0.01f)) cChanged = true;
+		if (ImGui::ColorEdit4("Top Color", cylinderTopColor)) cChanged = true;
+		if (ImGui::ColorEdit4("Bottom Color", cylinderBottomColor)) cChanged = true;
+		if (ImGui::SliderFloat("Start Angle##Cyl", &cylinderStartAngle, 0.0f, 360.0f)) cChanged = true;
+		if (ImGui::SliderFloat("End Angle##Cyl", &cylinderEndAngle, 0.0f, 360.0f)) cChanged = true;
+		if (ImGui::Checkbox("Flip UV", &cylinderIsUvFlipped)) cChanged = true;
+
+		if (myCylinder && cChanged) {
+			Model *model = myCylinder->GetModel();
+			if (model) {
+				model->InitializeCylinder(model->GetModelCommon(),
+					cylinderSubdivision, cylinderVerticalSubdivision,
+					cylinderTopRadiusX, cylinderTopRadiusZ,
+					cylinderBottomRadiusX, cylinderBottomRadiusZ,
+					cylinderHeight,
+					{ cylinderTopColor[0], cylinderTopColor[1], cylinderTopColor[2], cylinderTopColor[3] },
+					{ cylinderBottomColor[0], cylinderBottomColor[1], cylinderBottomColor[2], cylinderBottomColor[3] },
+					cylinderStartAngle, cylinderEndAngle,
+					cylinderIsUvFlipped);
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Partial Ring Settings");
+
+		bool pRingChanged = false;
+		if (ImGui::SliderInt("Subdivision", &prSubdivision, 3, 128)) pRingChanged = true;
+		if (ImGui::SliderFloat("Outer Radius", &prOuterRadius, 0.1f, 5.0f)) pRingChanged = true;
+		if (ImGui::SliderFloat("Inner Radius", &prInnerRadius, 0.1f, 5.0f)) pRingChanged = true;
+		if (ImGui::Checkbox("UV Horizontal", &prIsUvHorizontal)) pRingChanged = true;
+		if (ImGui::ColorEdit4("Inner Color", prInnerColor)) pRingChanged = true;
+		if (ImGui::ColorEdit4("Outer Color", prOuterColor)) pRingChanged = true;
+		if (ImGui::SliderFloat("Start Angle", &prStartAngle, 0.0f, 360.0f)) pRingChanged = true;
+		if (ImGui::SliderFloat("End Angle", &prEndAngle, 0.0f, 360.0f)) pRingChanged = true;
+		if (ImGui::SliderFloat("Fade Angle", &prFadeAngle, 0.0f, 180.0f)) pRingChanged = true;
+
+		if (pRingChanged && myPartialRing) {
+			Model *model = myPartialRing->GetModel();
+			if (model) {
+				model->InitializeRing(
+					model->GetModelCommon(), prSubdivision, prOuterRadius, prInnerRadius,
+					prIsUvHorizontal, { prInnerColor[0], prInnerColor[1], prInnerColor[2], prInnerColor[3] },
+					{ prOuterColor[0], prOuterColor[1], prOuterColor[2], prOuterColor[3] },
+					prStartAngle, prEndAngle, prFadeAngle
+				);
+			}
+		}
+
+		//スプライトの座標を配列に格納
+		Vector2 currentPos = sprite->GetPosition();
+		float pos[2] = { currentPos.x,currentPos.y };
+
+		//スライダーでスプライトの座標を変更できるようにする
+		ImGui::SliderFloat2("Sprite Position", pos, 0.0f, 1280.0f, "%.1f");
+
+		//スライダーで変更された座標をスプライトに反映
+		sprite->SetPosition({ pos[0],pos[1] });
+
+		ImGui::End();
+
+		ImGui::Begin("Camera Settings");
+
+		// ① 現在のカメラの回転角と座標を取得
+		Vector3 camRot = camera->GetRotate();
+		Vector3 camPos = camera->GetTranslate();
+
+		//// ImGuiウィンドウ上にマウスがない場合、画面のドラッグでカメラを動かす
+		//if (!ImGui::GetIO().WantCaptureMouse) {
+		//	// 左ドラッグでカメラ回転
+		//	if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+		//		ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
+		//		ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
+		//		camRot.y += delta.x * 0.01f; // 左右ドラッグでY軸回転 (Yaw)
+		//		camRot.x += delta.y * 0.01f; // 上下ドラッグでX軸回転 (Pitch)
+		//		camera->SetRotate(camRot);
+		//	}
+		//	// 右ドラッグでカメラの平行移動
+		//	if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+		//		ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
+		//		ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+		//		camPos.x -= delta.x * 0.05f;
+		//		camPos.y += delta.y * 0.05f;
+		//		camera->SetTranslate(camPos);
+		//	}
+		//	// マウスホイールで前進・後退
+		//	float wheel = ImGui::GetIO().MouseWheel;
+		//	if (wheel != 0.0f) {
+		//		camPos.z += wheel * 1.0f;
+		//		camera->SetTranslate(camPos);
+		//	}
+		//}
+
+		// ② ImGuiで扱いやすいように配列に格納
+		float camRotArr[3] = { camRot.x, camRot.y, camRot.z };
+		float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
+
+		//// ③ スライダー（ドラッグ操作）で値を変更できるようにする
+		//// ※ 0.01f はマウスでドラッグしたときの変化スピードです
+		//if (ImGui::DragFloat3("Rotation (Pitch, Yaw, Roll)", camRotArr, 0.01f)) {
+		//	// 値が変更されたらカメラに反映
+		//	camera->SetRotate({ camRotArr[0], camRotArr[1], camRotArr[2] });
+		//}
+
+		// （おまけ）位置も変えたい場合
+		if (ImGui::DragFloat3("Position (X, Y, Z)", camPosArr, 0.1f)) {
+			camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
+		}
+
+		ImGui::End();
+	}
+#endif
 }

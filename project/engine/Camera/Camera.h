@@ -19,10 +19,13 @@ class Camera {
 public:
 
 	//更新
-	void Update();
+	virtual void Update();
 
 	//コンストラクタ
 	Camera();
+
+	// 仮想デストラクタを追加する（継承の安全のため）
+	virtual ~Camera() = default;
 
 
 	//setter
@@ -32,7 +35,10 @@ public:
 	void SetAspectRatio(const float &aspectRatio) { this->aspectRatio_ = aspectRatio; }
 	void SetNearClip(const float &nearClip) { this->nearClipRange_ = nearClip; }
 	void SetFarClip(const float &farClip) { this->furClipRange_ = farClip; }
-
+	void SetQuaternion(const Quaternion &q) {
+		this->quaternion_ = q;
+		this->useQuaternion_ = true; // フラグをONにする
+	}
 	//getter
 	const Matrix4x4 &GetWorldMatrix() const { return worldMatrix; }
 	const Matrix4x4 &GetViewMatrix()const { return viewMatrix; }
@@ -44,6 +50,11 @@ public:
 private:
 	
 	EulerTransform transform;
+
+	// クォータニオン用の変数と、切り替えフラグ
+	Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; 
+	bool useQuaternion_ = false;
+
 	Matrix4x4 worldMatrix;
 	Matrix4x4 viewMatrix;
 

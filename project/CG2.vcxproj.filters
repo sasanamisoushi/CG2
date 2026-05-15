@@ -57,8 +57,8 @@
     <ClCompile Include="2D\Sprite.cpp">
       <Filter>ソース ファイル\2d</Filter>
     </ClCompile>
-    <ClCompile Include="StringUtility.cpp">
-      <Filter>ソース ファイル\2d</Filter>
+    <ClCompile Include="engine\base\StringUtility.cpp">
+      <Filter>ソース ファイル\base</Filter>
     </ClCompile>
     <ClCompile Include="3D\Object3d.cpp">
       <Filter>ソース ファイル\3d</Filter>
@@ -108,11 +108,11 @@
     <ClCompile Include="Game\Scene\TitleScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="SceneManager.cpp">
-      <Filter>ソース ファイル</Filter>
+    <ClCompile Include="engine\Scene\SceneManager.cpp">
+      <Filter>ソース ファイル\scene</Filter>
     </ClCompile>
-    <ClCompile Include="SceneFactory.cpp">
-      <Filter>ソース ファイル</Filter>
+    <ClCompile Include="engine\Scene\SceneFactory.cpp">
+      <Filter>ソース ファイル\scene</Filter>
     </ClCompile>
     <ClCompile Include="engine\base\Framework.cpp">
       <Filter>ソース ファイル\base</Filter>
@@ -144,6 +144,18 @@
     <ClCompile Include="engine\Graphics\PostEffect.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="engine\Camera\FlyCamera.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Collision\CollisionConfig.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Collision\Collider.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Collision\CollisionManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\shaders\Object3d.VS.hlsl" />
@@ -161,7 +173,7 @@
     <ClInclude Include="engine\Graphics\DirectXCommon.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="StringUtility.h">
+    <ClInclude Include="engine\base\StringUtility.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\Graphics\D3DResourceLeakChecker.h">
@@ -227,13 +239,13 @@
     <ClInclude Include="Game\base\BaseScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="SceneManager.h">
+    <ClInclude Include="engine\Scene\SceneManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Game\base\AbstractSceneFactory.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="SceneFactory.h">
+    <ClInclude Include="engine\Scene\SceneFactory.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\base\Framework.h">
@@ -258,6 +270,18 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\Graphics\PostEffect.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Camera\FlyCamera.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Collision\CollisionConfig.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Collision\Collider.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Collision\CollisionManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

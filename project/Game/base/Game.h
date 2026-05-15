@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
 #include "Framework.h"
-#include "SceneFactory.h"
+#include "engine/Scene/SceneFactory.h"
 #include "engine/Graphics/RenderTexture.h"
 #include "engine/Graphics/PostEffect.h"
 

@@ -155,6 +155,9 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="engine\Collision\Collider.cpp" />
+    <ClCompile Include="engine\Collision\CollisionConfig.cpp" />
+    <ClCompile Include="engine\Collision\CollisionManager.cpp" />
     <ClCompile Include="engine\Audio\AudioManager.cpp" />
     <ClCompile Include="engine\Camera\Camera.cpp" />
     <ClCompile Include="engine\Camera\CameraManager.cpp" />
@@ -163,6 +166,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="engine\base\main.cpp" />
     <ClCompile Include="engine\math\MyMath.cpp" />
     <ClCompile Include="engine\base\Framework.cpp" />
+    <ClCompile Include="engine\Camera\FlyCamera.cpp" />
     <ClCompile Include="Game\base\Game.cpp" />
     <ClCompile Include="Game\Scene\GamePlayScene.cpp" />
     <ClCompile Include="engine\Debug\ImGuiManager.cpp" />
@@ -179,14 +183,14 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="3D\Primitive.cpp" />
     <ClCompile Include="engine\Graphics\RenderTexture.cpp" />
     <ClCompile Include="engine\Graphics\PostEffect.cpp" />
-    <ClCompile Include="SceneFactory.cpp" />
-    <ClCompile Include="SceneManager.cpp" />
+    <ClCompile Include="engine\Scene\SceneFactory.cpp" />
+    <ClCompile Include="engine\Scene\SceneManager.cpp" />
     <ClCompile Include="2D\Sprite.cpp" />
     <ClCompile Include="2D\SpriteCommon.cpp" />
     <ClCompile Include="engine\Graphics\SrvManager.cpp" />
     <ClCompile Include="3D\SkyboxCommon.cpp" />
     <ClCompile Include="3D\Skybox.cpp" />
-    <ClCompile Include="StringUtility.cpp" />
+    <ClCompile Include="engine\base\StringUtility.cpp" />
     <ClCompile Include="engine\Resource\TextureManager.cpp" />
     <ClCompile Include="Game\Scene\TitleScene.cpp" />
     <ClCompile Include="engine\base\WinApp.cpp" />
@@ -264,6 +268,10 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="engine\Collision\Collider.h" />
+    <ClInclude Include="engine\Collision\CollisionConfig.h" />
+    <ClInclude Include="engine\Collision\CollisionManager.h" />
+    <ClInclude Include="engine\Camera\FlyCamera.h" />
     <ClInclude Include="Game\base\AbstractSceneFactory.h" />
     <ClInclude Include="engine\Audio\AudioManager.h" />
     <ClInclude Include="Game\base\BaseScene.h" />
@@ -289,14 +297,14 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="3D\Primitive.h" />
     <ClInclude Include="engine\Graphics\RenderTexture.h" />
     <ClInclude Include="engine\Graphics\PostEffect.h" />
-    <ClInclude Include="SceneFactory.h" />
-    <ClInclude Include="SceneManager.h" />
+    <ClInclude Include="engine\Scene\SceneFactory.h" />
+    <ClInclude Include="engine\Scene\SceneManager.h" />
     <ClInclude Include="2D\Sprite.h" />
     <ClInclude Include="2D\SpriteCommon.h" />
     <ClInclude Include="engine\Graphics\SrvManager.h" />
     <ClInclude Include="3D\SkyboxCommon.h" />
     <ClInclude Include="3D\Skybox.h" />
-    <ClInclude Include="StringUtility.h" />
+    <ClInclude Include="engine\base\StringUtility.h" />
     <ClInclude Include="engine\Resource\TextureManager.h" />
     <ClInclude Include="Game\Scene\TitleScene.h" />
     <ClInclude Include="engine\base\WinApp.h" />

@@ -1,7 +1,7 @@
 #include "TitleScene.h"
 #include "3D/Object3dCommon.h"
 #include "engine/Input/Input.h"
-#include "SceneManager.h"
+#include "engine/Scene/SceneManager.h"
 
 void TitleScene::Initialize() {
 	//カメラ・シーンリソース

@@ -61,7 +61,18 @@ struct Matrix3x3 {
 	float m[3][3];
 };
 
+// 当たり判定用の球体
+struct Sphere {
+	Vector3 center; // 中心座標
+	float radius;   // 半径
+};
 
+// 当たり判定用のOBB（有向境界ボックス）
+struct OBB {
+	Vector3 center;          // 中心座標
+	Vector3 orientations[3]; // ローカルのX, Y, Z軸（機体の右・上・前など。正規化済み必須）
+	Vector3 size;            // 中心から各面の距離（幅の半分, 高さの半分, 奥行きの半分）
+};
 
 class MyMath {
 public:
@@ -115,5 +126,31 @@ public:
 	static Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip);
 
 	static Vector3 Normalize(const Vector3 &v);
+
+	// クォータニオンの積（回転の合成）
+	static Quaternion Multiply(const Quaternion &lhs, const Quaternion &rhs);
+
+	// 任意の軸（Axis）と角度（Angle）からクォータニオンを作る
+	static Quaternion MakeAxisAngle(const Vector3 &axis, float angle);
+
+	// クォータニオンを使ってベクトル（座標）を回転させる
+	static Vector3 RotateVector(const Vector3 &v, const Quaternion &q);
+
+	// クォータニオンの球面線形補間（滑らかな回転）
+	static Quaternion Slerp(const Quaternion &q0, const Quaternion &q1, float t);
+
+	// 3Dワールド座標から2Dスクリーン座標への変換（ロックオンUI等に使用）
+	static Vector3 WorldToScreen(const Vector3 &worldPos, const Matrix4x4 &viewProjectionMatrix, float screenWidth, float screenHeight);
+
+	// ベクトルの内積（Dot）と外積（Cross）
+	static float Dot(const Vector3 &a, const Vector3 &b);
+	static Vector3 Cross(const Vector3 &a, const Vector3 &b);
+
+	// 当たり判定関数
+	// 1. OBB同士の判定（分離軸定理）
+	static bool IsCollision(const OBB &obb1, const OBB &obb2);
+
+	// 2. 球とOBBの判定（ミサイル vs 機体 などで大活躍します！）
+	static bool IsCollision(const Sphere &sphere, const OBB &obb);
 };
 

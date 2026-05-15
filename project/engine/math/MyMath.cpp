@@ -1,6 +1,7 @@
 #include "MyMath.h"
 #include <corecrt_math.h>
 #include <cmath>
+#include <algorithm>
 
 //平行移動
 Matrix4x4 MyMath::MakeTranslateMatrix(const Vector3 &translate) {
@@ -284,3 +285,201 @@ Vector3 MyMath::Normalize(const Vector3 &v) {
 		v.z / length
 	};
 }
+
+Quaternion MyMath::Multiply(const Quaternion &lhs, const Quaternion &rhs) {
+	Quaternion result;
+	result.w = lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z;
+	result.x = lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y;
+	result.y = lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x;
+	result.z = lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w;
+	return result;
+}
+
+Quaternion MyMath::MakeAxisAngle(const Vector3 &axis, float angle) {
+	float halfAngle = angle * 0.5f;
+	float s = std::sin(halfAngle);
+	// ※引数のaxisは Normalize() されている前提です
+	return { axis.x * s, axis.y * s, axis.z * s, std::cos(halfAngle) };
+}
+
+Vector3 MyMath::RotateVector(const Vector3 &v, const Quaternion &q) {
+	// 既に実装されている関数を組み合わせて、超シンプルに実現！
+	Matrix4x4 rotMatrix = MakeRotateMatrix(q);
+	return Transform(v, rotMatrix);
+}
+
+Quaternion MyMath::Slerp(const Quaternion &q0, const Quaternion &q1, float t) {
+	float dot = q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
+
+	// 内積がマイナスなら、片方を反転して最短経路を通るようにする
+	Quaternion q1_ = q1;
+	if (dot < 0.0f) {
+		q1_ = { -q1.x, -q1.y, -q1.z, -q1.w };
+		dot = -dot;
+	}
+
+	// 角度が非常に近い場合は、通常の線形補間（Lerp）で済ませる
+	if (dot > 0.9995f) {
+		Quaternion result = {
+			q0.x + t * (q1_.x - q0.x),
+			q0.y + t * (q1_.y - q0.y),
+			q0.z + t * (q1_.z - q0.z),
+			q0.w + t * (q1_.w - q0.w)
+		};
+		// 正規化
+		float mag = std::sqrt(result.x * result.x + result.y * result.y + result.z * result.z + result.w * result.w);
+		return { result.x / mag, result.y / mag, result.z / mag, result.w / mag };
+	}
+
+	// 球面線形補間の計算
+	float theta_0 = std::acos(dot);
+	float theta = theta_0 * t;
+	float sin_theta = std::sin(theta);
+	float sin_theta_0 = std::sin(theta_0);
+
+	float s0 = std::cos(theta) - dot * sin_theta / sin_theta_0;
+	float s1 = sin_theta / sin_theta_0;
+
+	return {
+		q0.x * s0 + q1_.x * s1,
+		q0.y * s0 + q1_.y * s1,
+		q0.z * s0 + q1_.z * s1,
+		q0.w * s0 + q1_.w * s1
+	};
+}
+
+// 3D座標から2Dスクリーン座標への変換
+
+Vector3 MyMath::WorldToScreen(const Vector3 &worldPos, const Matrix4x4 &viewProjectionMatrix, float screenWidth, float screenHeight) {
+	// 1. ビュープロジェクション行列を掛けてクリップ座標系へ変換
+	float w = worldPos.x * viewProjectionMatrix.m[0][3] + worldPos.y * viewProjectionMatrix.m[1][3] + worldPos.z * viewProjectionMatrix.m[2][3] + viewProjectionMatrix.m[3][3];
+
+	Vector3 clipPos = {
+		worldPos.x * viewProjectionMatrix.m[0][0] + worldPos.y * viewProjectionMatrix.m[1][0] + worldPos.z * viewProjectionMatrix.m[2][0] + viewProjectionMatrix.m[3][0],
+		worldPos.x * viewProjectionMatrix.m[0][1] + worldPos.y * viewProjectionMatrix.m[1][1] + worldPos.z * viewProjectionMatrix.m[2][1] + viewProjectionMatrix.m[3][1],
+		worldPos.x * viewProjectionMatrix.m[0][2] + worldPos.y * viewProjectionMatrix.m[1][2] + worldPos.z * viewProjectionMatrix.m[2][2] + viewProjectionMatrix.m[3][2]
+	};
+
+	// 2. 透視投影分割（Wで割って正規化デバイス座標 NDC へ）
+	if (w != 0.0f) {
+		clipPos.x /= w;
+		clipPos.y /= w;
+		clipPos.z /= w;
+	}
+
+	// 3. NDC座標（-1.0 ～ 1.0）をスクリーン座標（0 ～ Width/Height）に変換
+	// Y軸は画面の下に行くほどプラスになるので反転させる
+	float screenX = (clipPos.x + 1.0f) * (screenWidth / 2.0f);
+	float screenY = (1.0f - clipPos.y) * (screenHeight / 2.0f);
+
+	// Zには深度値（0～1）をそのまま入れて返す（カメラの後ろにあるかの判定に使える）
+	return { screenX, screenY, clipPos.z };
+}
+
+float MyMath::Dot(const Vector3 &a, const Vector3 &b) {
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+Vector3 MyMath::Cross(const Vector3 &a, const Vector3 &b) {
+	return {
+		a.y * b.z - a.z * b.y,
+		a.z * b.x - a.x * b.z,
+		a.x * b.y - a.y * b.x
+	};
+}
+
+bool MyMath::IsCollision(const OBB &obb1, const OBB &obb2) {
+	// 2つのOBBの中心間の距離ベクトル
+	Vector3 distance = {
+		obb2.center.x - obb1.center.x,
+		obb2.center.y - obb1.center.y,
+		obb2.center.z - obb1.center.z
+	};
+
+	// テストすべき15本の分離軸を格納する配列
+	Vector3 axes[15];
+	int axisCount = 0;
+
+	// 1〜3: obb1のローカル軸
+	axes[axisCount++] = obb1.orientations[0];
+	axes[axisCount++] = obb1.orientations[1];
+	axes[axisCount++] = obb1.orientations[2];
+
+	// 4〜6: obb2のローカル軸
+	axes[axisCount++] = obb2.orientations[0];
+	axes[axisCount++] = obb2.orientations[1];
+	axes[axisCount++] = obb2.orientations[2];
+
+	// 7〜15: obb1の各軸とobb2の各軸の外積（クロス積）
+	for (int i = 0; i < 3; ++i) {
+		for (int j = 0; j < 3; ++j) {
+			Vector3 cross = Cross(obb1.orientations[i], obb2.orientations[j]);
+			// 外積が0ベクトル（2つの軸がほぼ平行）の場合はエラーになるので弾く
+			if (Dot(cross, cross) > 0.00001f) {
+				axes[axisCount++] = Normalize(cross);
+			}
+		}
+	}
+
+	// 15本の軸すべてに対して、投影して隙間があるかチェックする
+	for (int i = 0; i < axisCount; ++i) {
+		const Vector3 &axis = axes[i];
+
+		// 各OBBの「軸に対する投影半径」を計算
+		// obb.size.x は幅の半分、size.yは高さの半分...
+		float rA = obb1.size.x * std::abs(Dot(obb1.orientations[0], axis)) +
+			obb1.size.y * std::abs(Dot(obb1.orientations[1], axis)) +
+			obb1.size.z * std::abs(Dot(obb1.orientations[2], axis));
+
+		float rB = obb2.size.x * std::abs(Dot(obb2.orientations[0], axis)) +
+			obb2.size.y * std::abs(Dot(obb2.orientations[1], axis)) +
+			obb2.size.z * std::abs(Dot(obb2.orientations[2], axis));
+
+		// 中心間距離ベクトルを軸に投影した長さ
+		float distanceProjected = std::abs(Dot(distance, axis));
+
+		// 隙間が見つかった！(当たっていない) -> 即座に判定終了
+		if (distanceProjected > rA + rB) {
+			return false;
+		}
+	}
+
+	// 15本すべての軸で隙間がなかった -> 衝突している！
+	return true;
+}
+
+bool MyMath::IsCollision(const Sphere &sphere, const OBB &obb) {
+	// 1. 球の中心をOBBのローカル空間（OBBから見た相対座標）に変換する
+	Vector3 localSpherePos = {
+		sphere.center.x - obb.center.x,
+		sphere.center.y - obb.center.y,
+		sphere.center.z - obb.center.z
+	};
+
+	Vector3 closestPoint = { 0, 0, 0 };
+
+	// 2. OBBの各軸(X, Y, Z)に対して、球の中心の投影位置をクランプ（箱の範囲内に収める）する
+	for (int i = 0; i < 3; ++i) {
+		// 球の中心をOBBのi番目の軸に投影
+		float dist = Dot(localSpherePos, obb.orientations[i]);
+
+		// OBBのサイズの範囲内に制限する
+		float axisSize = (i == 0) ? obb.size.x : (i == 1) ? obb.size.y : obb.size.z;
+		dist = std::max(-axisSize, std::min(dist, axisSize));
+
+		// 最も近い点を構築
+		closestPoint.x += dist * obb.orientations[i].x;
+		closestPoint.y += dist * obb.orientations[i].y;
+		closestPoint.z += dist * obb.orientations[i].z;
+	}
+
+	// 3. 最も近い点と、実際の球の中心との距離の2乗を計算
+	float dx = localSpherePos.x - closestPoint.x;
+	float dy = localSpherePos.y - closestPoint.y;
+	float dz = localSpherePos.z - closestPoint.z;
+	float distanceSq = dx * dx + dy * dy + dz * dz;
+
+	// 距離の2乗が、球の半径の2乗より小さければ衝突！
+	return distanceSq <= (sphere.radius * sphere.radius);
+}
+

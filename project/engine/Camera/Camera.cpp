@@ -4,7 +4,14 @@
 
 void Camera::Update() {
 
-	worldMatrix= math_->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+	// フラグによってアフィン変換の計算を分ける！
+	if (useQuaternion_) {
+		// クォータニオンモードがONなら、クォータニオン版のアフィン変換を使う
+		worldMatrix = math_->MakeAffineMatrix(transform.scale, quaternion_, transform.translate);
+	} else {
+		// そうでなければ、今まで通りのオイラー角（Vector3）のアフィン変換を使う
+		worldMatrix = math_->MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+	}
 	
 	//ビュー行列
 	viewMatrix = math_->Inverse(worldMatrix);

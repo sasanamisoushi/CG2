@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include "DirectXCollision.h"
-#include "StringUtility.h"
+#include "engine/base/StringUtility.h"
 #include <externals/DirectXTex/DirectXTex.h>
 #include <externals/DirectXTex/d3dx12.h>
 #include <unordered_map>

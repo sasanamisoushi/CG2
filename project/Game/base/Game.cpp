@@ -2,7 +2,7 @@
 #include "3D/ModelManager.h"
 #include "engine/Audio/AudioManager.h"
 #include "engine/Graphics/SrvManager.h"
-#include "SceneManager.h"
+#include "engine/Scene/SceneManager.h"
 #include <engine/Resource/TextureManager.h>
 
 void Game::Initialize() {

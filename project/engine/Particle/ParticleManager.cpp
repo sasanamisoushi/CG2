@@ -3,7 +3,7 @@
 #include "Logger.h"
 #include "engine/Resource/TextureManager.h"
 #include "engine/Graphics/SrvManager.h"
-#include "StringUtility.h"
+#include "engine/base/StringUtility.h"
 
 #pragma comment(lib, "dxcompiler.lib")
 

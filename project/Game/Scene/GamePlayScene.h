@@ -29,6 +29,9 @@ public:
 
 	//描画
 	void Draw() override;
+
+	// UIの更新
+	void UpdateUI();
 private:
 
 	//シーンリソース
