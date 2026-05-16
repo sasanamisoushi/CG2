@@ -377,7 +377,7 @@ void GamePlayScene::Update() {
 	// 弾の更新処理（マネージャーに一任！）
 	// ==========================================
 	if (missileManager_) {
-		missileManager_->Update(camera.get());
+		missileManager_->Update(camera.get(),enemy_.get());
 	}
 
 	

@@ -4,13 +4,15 @@
 #include <list>
 #include <memory>
 
+class Enemy;
+
 class MissileManager {
 public:
     // 初期化（リストを空にするなど）
     void Initialize();
 
     // 全ミサイルの更新と、死んだミサイルの削除
-    void Update(Camera *camera);
+    void Update(Camera *camera,Enemy* enemy);
 
     // 全ミサイルの描画
     void Draw();

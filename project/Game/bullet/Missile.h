@@ -6,6 +6,9 @@
 #include <memory>
 #include <string>
 
+
+class Enemy;
+
 // 弾の種類を定義
 enum class MissileType {
     Normal,         // 真っ直ぐ飛ぶ弾（煙なし）
@@ -18,7 +21,7 @@ public:
     void Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type);
 
     // 毎フレームの更新
-    void Update(Camera *camera);
+    void Update(Camera *camera, Enemy *enemy);
 
     // 描画
     void Draw();
