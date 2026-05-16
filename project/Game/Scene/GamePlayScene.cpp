@@ -10,10 +10,11 @@
 #include "engine/Camera/FlyCamera.h"
 
 
+
 void GamePlayScene::Initialize() {
 
 	//カメラ・シーンリソース
-	camera = std::make_unique<FlyCamera>();
+	camera = std::make_unique<Camera>();
 	camera->SetRotate({ 0.0f,0.0f,0.0f });
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
@@ -29,24 +30,11 @@ void GamePlayScene::Initialize() {
 	skybox = std::make_unique<Skybox>();
 	skybox->Initialize("resources/SkyBox.dds");
 
+
 	//モデル・パーティクル
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
-
-	////1つ目のオブジェクト
-	//objA = std::make_unique<Object3d>();
-	//objA->Initialize(Object3dCommon::GetInstance());
-	//objA->SetModel("plane.obj");
-	//objA->transform.translate = { -2.0f,0.0f,0.0f };
-	//objects.push_back(objA.get());
-
-	//２つ目のオブジェクト
-	/*objB = std::make_unique<Object3d>();
-	objB->Initialize(Object3dCommon::GetInstance());
-	objB->SetModel("Sphere");
-	objB->transform.translate = { 2.0f,0.0f,0.0f };
-	objects.push_back(objB.get());*/
 
 	//======================================================
 	// プリミティブの生成！
@@ -141,12 +129,19 @@ void GamePlayScene::Initialize() {
 
 
 	ModelManager::GetInstance()->CreateBoxModel("PlayerBox");
+	ModelManager::GetInstance()->CreateBoxModel("EnemyBox");
 
 	player_ = std::make_unique<Player>();
 	player_->Initialize("PlayerBox");
 
-	
+	// 弾
+	missileManager_ = std::make_unique<MissileManager>();
+	missileManager_->Initialize();
 
+
+	//敵
+	enemy_ = std::make_unique<Enemy>();
+	enemy_->Initialize({ 0.0f, 0.0f, 50.0f });
 }
 
 void GamePlayScene::Finalize() {
@@ -264,6 +259,11 @@ void GamePlayScene::Update() {
 		player_->UpdateCamera(camera.get());
 	}
 
+	// 敵の更新
+	if (enemy_) {
+		enemy_->Update();
+	}
+
 	//カメラの更新
 	camera->Update();
 
@@ -354,37 +354,35 @@ void GamePlayScene::Update() {
 
 
 	// ==========================================
-	// ミサイル（赤い球）をぐねぐね飛ばす！
+	// ミサイルの発射処理
 	// ==========================================
-	static float missileTime = 0.0f;
-	missileTime += missileSpeed;
+	if (player_) {
+		Vector3 playerPos = player_->GetPosition();
+		Vector3 forward = player_->GetForwardVector();
 
-	// 大きく旋回しながら上下に波打つ、変態軌道（板野サーカス風）
-	Vector3 missilePos = {
-		std::cos(missileTime) *missileAmpX,
-		std::sin(missileTime *missileFreqY) *missileAmpY + missileBaseY,
-		std::sin(missileTime) *missileAmpZ
-	};
+		// スペースキー：速くて煙が出ない通常弾
+		if (Input::GetInstance()->TriggerKey(DIK_SPACE)) {
+			Vector3 vel = { forward.x * 2.0f, forward.y * 2.0f, forward.z * 2.0f };
+			missileManager_->Shoot(playerPos, vel, MissileType::Normal);
+		}
 
-	if (myShere) {
-		myShere->SetTranslate(missilePos);
-		myShere->Update();
+		// Bキー：少し遅くて煙を引くミサイル
+		if (Input::GetInstance()->TriggerKey(DIK_B)) {
+			Vector3 vel = { forward.x * 1.0f, forward.y * 1.0f, forward.z * 1.0f };
+			missileManager_->Shoot(playerPos, vel, MissileType::MissileWithTrail);
+		}
 	}
 
 	// ==========================================
-	// トレイルの更新と頂点生成
+	// 弾の更新処理（マネージャーに一任！）
 	// ==========================================
-	// 1. ミサイルの現在位置を記録させる
-	missileTrail->Update(missilePos);
-
-	// 2. カメラの方向を向いた「太さ1.0f」の板ポリゴンの頂点リストを生成する
-	std::vector<VertexData> trailVertices = missileTrail->GenerateVertices(camera.get(), 1.0f);
-
-	// 3. 生成した頂点をモデルに転送して更新！
-	if (trailObject && trailObject->GetModel()) {
-		trailObject->GetModel()->UpdateTrailVertices(trailVertices);
+	if (missileManager_) {
+		missileManager_->Update(camera.get());
 	}
-	trailObject->Update();
+
+	
+
+	
 
 #ifdef ENABLE_IMGUI
 	UpdateUI();
@@ -395,6 +393,22 @@ void GamePlayScene::Update() {
 void GamePlayScene::Draw() {
 	//3Dオブジェトの描画準備
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
+
+	// プレイヤーの描画
+	if (player_) {
+		player_->Draw();
+	}
+
+	// すべてのミサイルを描画
+	if (missileManager_) {
+		missileManager_->Draw();
+	}
+
+	// 敵の描画
+	if (enemy_) {
+		enemy_->Draw();
+	}
+
 	//3Dオブジェクトの描画
 	if (showPlane) {
 		for (Object3d* object3d : objects) {
@@ -428,15 +442,7 @@ void GamePlayScene::Draw() {
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
-	// ★ プレイヤーの描画
-	if (player_) {
-		player_->Draw();
-	}
-
-	// ミサイルの頭（赤い球）を描画
-	if (showSphere && myShere) {
-		myShere->Draw();
-	}
+	
 
 	// エフェクト系の描画 (深度書き込み無効)
 	Object3dCommon::GetInstance()->SetEffectDrawSettings();
@@ -444,10 +450,6 @@ void GamePlayScene::Draw() {
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
 
-	// トレイルの描画！
-	if (showTrail && trailObject) {
-		trailObject->Draw();
-	}
 
 	//Spriteの描画基準
 	SpriteCommon::GetInstance()->SetCommonPipelineState();

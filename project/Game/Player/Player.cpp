@@ -10,6 +10,9 @@ void Player::Initialize(const std::string &modelName) {
         object_->GetModel()->SetColor({ 0.2f, 0.5f, 1.0f, 1.0f }); // 青色
     }
 
+
+    object_->SetScale({ 0.2f, 0.2f, 0.2f });
+
     position_ = { 0.0f, 0.0f, 0.0f };
     quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
 }
@@ -31,26 +34,22 @@ void Player::Update() {
     if (input->PushKey(DIK_E))     roll -= rotSpeed_; // 右ロール
     if (input->PushKey(DIK_Q))     roll += rotSpeed_; // 左ロール
 
-    // 現在のローカル軸を取得
-    Vector3 localRight = MyMath::RotateVector({ 1.0f, 0.0f, 0.0f }, quaternion_);
-    Vector3 localUp = MyMath::RotateVector({ 0.0f, 1.0f, 0.0f }, quaternion_);
-    Vector3 localForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
-
+  
     // 各軸ごとの回転クォータニオンを作成して合成
-    Quaternion qPitch = MyMath::MakeAxisAngle(localRight, pitch);
-    Quaternion qYaw = MyMath::MakeAxisAngle(localUp, yaw);
-    Quaternion qRoll = MyMath::MakeAxisAngle(localForward, roll);
+    Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+    Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+    Quaternion qRoll = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, roll);
 
-    quaternion_ = MyMath::Multiply(qPitch, quaternion_);
-    quaternion_ = MyMath::Multiply(qYaw, quaternion_);
-    quaternion_ = MyMath::Multiply(qRoll, quaternion_);
+    quaternion_ = MyMath::Multiply(quaternion_, qPitch);
+    quaternion_ = MyMath::Multiply(quaternion_, qYaw);
+    quaternion_ = MyMath::Multiply(quaternion_, qRoll);
     quaternion_ = MyMath::Normalize(quaternion_);
 
     // ==========================================
     // 2. 移動の処理 (Wキーで前進、Sキーでブレーキ/後退)
     // ==========================================
     // 最新の向いている方向を再計算
-    localForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+    Vector3 localForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
 
     if (input->PushKey(DIK_W)) {
         position_.x += localForward.x * speed_;
@@ -77,7 +76,7 @@ void Player::Draw() {
 
 void Player::UpdateCamera(Camera *camera) {
     // 機体から見たカメラの相対位置（真後ろに10m、上に3m）
-    Vector3 offset = { 0.0f, 3.0f, -10.0f };
+    Vector3 offset = { 0.0f, 0.0f, -10.0f };
 
     // このオフセットを、機体の傾きに合わせて回転させる
     Vector3 rotatedOffset = MyMath::RotateVector(offset, quaternion_);
@@ -93,7 +92,7 @@ void Player::UpdateCamera(Camera *camera) {
 
     // カメラの向きも機体と全く同じにする
     camera->SetRotate({ 0,0,0 }); // オイラー角のリセット(ハイブリッド対応のため)
-    //camera->SetQuaternion(quaternion_); // ※Camera.hに実装した関数
+    camera->SetQuaternion(quaternion_); // ※Camera.hに実装した関数
 }
 
 Vector3 Player::GetForwardVector() const {

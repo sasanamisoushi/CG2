@@ -12,6 +12,8 @@
 #include "3D/Animation.h"
 #include "3D/Model.h"
 #include "3D/Trail.h"
+#include "Game/bullet/MissileManager.h"
+#include "Game/enemy/Enemy.h"
 #include <memory>
 #include <vector>
 
@@ -139,5 +141,12 @@ private:
 	float missileBaseY = 5.0f;    // 基準となる飛行高度
 
 	std::unique_ptr<Player> player_;
+
+	// 画面上に存在するすべてのミサイルを管理するリスト
+	std::unique_ptr<MissileManager> missileManager_;
+
+
+	// 敵
+	std::unique_ptr<Enemy> enemy_;
 };
 
