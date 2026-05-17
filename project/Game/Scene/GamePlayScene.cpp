@@ -140,8 +140,10 @@ void GamePlayScene::Initialize() {
 
 
 	//敵
-	enemy_ = std::make_unique<Enemy>();
-	enemy_->Initialize({ 0.0f, 0.0f, 50.0f });
+	enemies_.clear();
+	auto firstEnemy = std::make_unique<Enemy>();
+	firstEnemy->Initialize({ 0.0f, 0.0f, 50.0f });
+	enemies_.push_back(std::move(firstEnemy));
 }
 
 void GamePlayScene::Finalize() {
@@ -259,9 +261,17 @@ void GamePlayScene::Update() {
 		player_->UpdateCamera(camera.get());
 	}
 
-	// 敵の更新
-	if (enemy_) {
-		enemy_->Update();
+	// ==========================================
+	// 敵
+	// ==========================================
+
+	for (auto it = enemies_.begin(); it != enemies_.end(); ) {
+		(*it)->Update();
+		if ((*it)->IsDead()) {
+			it = enemies_.erase(it); // 当たった敵はリストから消滅
+		} else {
+			++it;
+		}
 	}
 
 	//カメラの更新
@@ -377,7 +387,7 @@ void GamePlayScene::Update() {
 	// 弾の更新処理（マネージャーに一任！）
 	// ==========================================
 	if (missileManager_) {
-		missileManager_->Update(camera.get(),enemy_.get());
+		missileManager_->Update(camera.get(), enemies_);
 	}
 
 	
@@ -405,8 +415,8 @@ void GamePlayScene::Draw() {
 	}
 
 	// 敵の描画
-	if (enemy_) {
-		enemy_->Draw();
+	for (const auto &enemy : enemies_) {
+		enemy->Draw();
 	}
 
 	//3Dオブジェクトの描画
@@ -668,6 +678,20 @@ void GamePlayScene::UpdateUI() {
 			camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
 		}
 
+		ImGui::End();
+
+		ImGui::Separator();
+
+		ImGui::Begin("敵");
+		ImGui::Text("=== ターゲット配置 ===");
+		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
+
+		// ボタンを押した瞬間に、新しい敵をリストに追加！
+		if (ImGui::Button("敵を生成する！")) {
+			auto newEnemy = std::make_unique<Enemy>();
+			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
+			enemies_.push_back(std::move(newEnemy));
+		}
 		ImGui::End();
 	}
 #endif

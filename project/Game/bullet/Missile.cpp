@@ -114,3 +114,7 @@ void Missile::Draw() {
 		trailObject_->Draw();
 	}
 }
+
+void Missile::OnCollision() {
+	isDead_ = true;
+}

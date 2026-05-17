@@ -16,6 +16,7 @@
 #include "Game/enemy/Enemy.h"
 #include <memory>
 #include <vector>
+#include <list>
 
 
 
@@ -147,6 +148,10 @@ private:
 
 
 	// 敵
-	std::unique_ptr<Enemy> enemy_;
+	std::list<std::unique_ptr<Enemy>> enemies_;
+
+
+	// ImGuiで敵を出すための座標変数
+	float newEnemyPos[3] = { 0.0f, 0.0f, 50.0f };
 };
 

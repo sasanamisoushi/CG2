@@ -29,6 +29,12 @@ public:
     // 寿命が尽きたかどうか（外部から削除タイミングを判定するため）
     bool IsDead() const { return isDead_; }
 
+    // 当たった時に呼ばれる関数
+    void OnCollision();
+
+    // 自分の座標を外に教えるゲッター
+    Vector3 GetPosition() const { return position_; }
+
 private:
     std::unique_ptr<Object3d> object_;
     MissileType type_;     // 自分のタイプを保持

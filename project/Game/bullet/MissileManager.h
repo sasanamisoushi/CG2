@@ -12,7 +12,7 @@ public:
     void Initialize();
 
     // 全ミサイルの更新と、死んだミサイルの削除
-    void Update(Camera *camera,Enemy* enemy);
+    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies);
 
     // 全ミサイルの描画
     void Draw();

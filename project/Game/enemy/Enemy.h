@@ -14,11 +14,20 @@ public:
     // 描画
     void Draw();
 
-    // ★重要：ミサイルに狙われるためのゲッター
+    // ミサイルに狙われるためのゲッター
     Vector3 GetPosition() const { return position_; }
+
+    // ミサイルと衝突したときの処理
+    void OnCollision();
+
+    // 死んだかどうかのゲッター
+    bool IsDead() const { return isDead_; }
 
 private:
     std::unique_ptr<Object3d> object_;
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
+
+    // 死んだかどうかのフラグ
+    bool isDead_ = false;
 };
 

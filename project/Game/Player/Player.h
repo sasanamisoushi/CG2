@@ -31,7 +31,7 @@ private:
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
 
-    float speed_ = 1.0f;       // 前進スピード
+    float speed_ = 0.2f;       // 前進スピード
     float rotSpeed_ = 0.05f;   // 旋回スピード
 };
 

@@ -30,3 +30,8 @@ void Enemy::Draw() {
         object_->Draw();
     }
 }
+
+// 当たった時の処理
+void Enemy::OnCollision() {
+    isDead_ = true;
+}

@@ -48,19 +48,26 @@ void Player::Update() {
     // ==========================================
     // 2. 移動の処理 (Wキーで前進、Sキーでブレーキ/後退)
     // ==========================================
-    // 最新の向いている方向を再計算
-    Vector3 localForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+    Vector3 moveInput = { 0.0f, 0.0f, 0.0f };
 
-    if (input->PushKey(DIK_W)) {
-        position_.x += localForward.x * speed_;
-        position_.y += localForward.y * speed_;
-        position_.z += localForward.z * speed_;
+    // ① どのキーが押されているかチェック
+    if (input->PushKey(DIK_W)) moveInput.z += 1.0f;
+    if (input->PushKey(DIK_S)) moveInput.z -= 1.0f;
+    if (input->PushKey(DIK_D)) moveInput.x += 1.0f;
+    if (input->PushKey(DIK_A)) moveInput.x -= 1.0f;
+
+    // ② 斜め移動の加速を防ぐ（長さを1にする）
+    if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
+        moveInput = MyMath::Normalize(moveInput);
     }
-    if (input->PushKey(DIK_S)) {
-        position_.x -= localForward.x * speed_;
-        position_.y -= localForward.y * speed_;
-        position_.z -= localForward.z * speed_;
-    }
+
+    // ③ 入力方向を、自機の向いている方向に合わせて曲げる
+    Vector3 velocity = MyMath::RotateVector(moveInput, quaternion_);
+
+    // ④ スピードを掛けて足し込む
+    position_.x += velocity.x * speed_;
+    position_.y += velocity.y * speed_;
+    position_.z += velocity.z * speed_;
 
     // 3. Object3dに座標と回転を適用
     object_->SetTranslate(position_);
