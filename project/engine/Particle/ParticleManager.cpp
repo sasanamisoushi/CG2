@@ -356,9 +356,10 @@ void ParticleManager::Update(Camera *camera) {
 				group.instancingDataPtr[numInstance].World = worldMatrix;
 				group.instancingDataPtr[numInstance].color = it->color;
 
-				// (応用) フェードアウト処理などを入れたい場合はここで color.w を操作
-				// float alpha = 1.0f - (it->currentTime / it->lifeTime);
-				// group.instancingDataPtr[numInstance].color.w = alpha;
+				group.instancingDataPtr[numInstance].color = it->color;
+				// 寿命に近づくにつれて alpha (透明度) を 1.0 から 0.0 へ減らす
+				float alpha = 1.0f - (it->currentTime / it->lifeTime);
+				group.instancingDataPtr[numInstance].color.w = alpha;
 
 				numInstance++; // 書き込んだ件数をカウント
 			}
