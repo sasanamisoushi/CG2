@@ -13,6 +13,11 @@ void ExplosionManager::CreateExplosions(const std::vector<Vector3> &hitPositions
         // "test" パーティクルを生成
         exp.emitter = std::make_unique<ParticleEmitter>("test", pos, particleManager_);
         
+        exp.emitter->count = 30;           // 1回の発生で30個出す
+        exp.emitter->frequency_ = 0.01f;    // 発生間隔を極限まで短くする（一気に出る）
+        exp.emitter->radius = 2.0f;        // 半径2mの範囲に散らす
+
+
         exp.timer = 15; // 15フレームでエミッター消滅
         explosions_.push_back(std::move(exp));
     }
