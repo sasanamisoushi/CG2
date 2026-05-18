@@ -732,9 +732,6 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 			distDir(engine) * kSpeed
 		};
 
-		// Velocity (速度)
-		newParticle.velocity = { 0.0f, 0.0f, 0.0f };
-
 		// ■ Color (色)
 		newParticle.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白
 
