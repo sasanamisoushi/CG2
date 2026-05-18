@@ -105,7 +105,7 @@ void GamePlayScene::Initialize() {
 	//パーティクル
 	particleManager = std::make_unique<ParticleManager>();
 	particleManager->Initialize(DirectXCommon::GetInstance());
-	particleManager->CreateParticleGroup("test", "resources/circle2.png");
+	particleManager->CreateParticleGroup("test", "resources/circle.png");
 	particleEmitter = std::make_unique<ParticleEmitter>("test", Vector3{ 0.0f,0.0f,0.0f }, particleManager.get());
 
 	//音声再生
@@ -704,6 +704,30 @@ void GamePlayScene::UpdateUI() {
 			auto newEnemy = std::make_unique<Enemy>();
 			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
 			enemies_.push_back(std::move(newEnemy));
+		}
+		ImGui::End();
+
+		ImGui::Begin("敵撃破パーティクル設定");
+		if (explosionManager_) {
+			auto& config = explosionManager_->GetConfig();
+			ImGui::DragInt("発生数", &config.count, 1, 0, 1000);
+			ImGui::ColorEdit4("カラー", config.color);
+			ImGui::DragFloat("速度", &config.speed, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("速度ばらつき", &config.speedVariance, 0.01f, 0.0f, 5.0f);
+			ImGui::DragFloat("スケール", &config.scale, 0.001f, 0.0f, 5.0f);
+			ImGui::DragFloat("スケールばらつき", &config.scaleVariance, 0.001f, 0.0f, 2.0f);
+			ImGui::DragFloat("最小寿命", &config.lifeTimeMin, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("最大寿命", &config.lifeTimeMax, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("位置ばらつき", &config.posVariance, 0.01f, 0.0f, 5.0f);
+
+			ImGui::Separator();
+			if (ImGui::Button("設定をJSONに保存")) {
+				explosionManager_->SaveToJson("resources/explosionConfig.json");
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("設定をJSONから読込")) {
+				explosionManager_->LoadFromJson("resources/explosionConfig.json");
+			}
 		}
 		ImGui::End();
 	}

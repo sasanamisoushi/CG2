@@ -393,7 +393,7 @@ void ParticleManager::Draw() {
 		// --- GPU Particle 初回初期化および更新 ---
 		if (group.particleResource) {
 			commandList->SetComputeRootSignature(computeRootSignature_.Get());
-			
+
 			ID3D12DescriptorHeap *descriptorHeaps[] = { SrvManager::GetInstance()->GetDescriptorHeap() };
 			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
@@ -457,43 +457,36 @@ void ParticleManager::Draw() {
 			commandList->SetPipelineState(graphicsPipelineState_.Get());
 		}
 
-		// 描画するインスタンス数（現在のパーティクル数）
-		UINT instanceCount = static_cast<UINT>(group.particle.size());
-
-		// 上限を超えていたら切る（安全策）
-		if (instanceCount > group.kNumMaxInstance) {
-			instanceCount = group.kNumMaxInstance;
+		// ==========================================
+		// 1. CPUパーティクル（今回の爆発エフェクト）の描画
+		// ==========================================
+		UINT cpuInstanceCount = static_cast<UINT>(group.particle.size());
+		if (cpuInstanceCount > group.kNumMaxInstance) {
+			cpuInstanceCount = group.kNumMaxInstance;
 		}
 
-		// パーティクルが0個なら描画しない
-		if (instanceCount == 0) {
-			continue;
-		}
-
-		// 4. リソースのバインド (SrvManagerを利用)
-		// ルートパラメータの番号は CreateRootSignature の設定順序に依存します。
-		// ParticleManager::CreateRootSignature では次の順序です:
-		// [0]=CBV (pixel), [1]=DescriptorTable (vertex) = instancing, [2]=DescriptorTable (pixel) = texture, [3]=CBV (pixel)
-
-		// (1) テクスチャのSRVをセット -> RootParameter index 2
-		SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, group.textureSrvIndex);
-
-		// (2) インスタンシングデータのSRVをセット -> RootParameter index 1
-		if (group.particleResource) {
-			// GPU Particleの場合
-			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.srvIndex);
-			instanceCount = 1024;
-		} else {
-			// CPU Particleの場合
+		if (cpuInstanceCount > 0) {
+			// CPU用のパイプラインステートをセットして描画
+			commandList->SetPipelineState(graphicsPipelineStateCPU_.Get());
+			// CPU用のリソースをバインドして描画
+			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, group.textureSrvIndex);
 			SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.instancingSrvIndex);
+			commandList->SetGraphicsRootConstantBufferView(4, cameraResource_->GetGPUVirtualAddress());
+
+			commandList->DrawInstanced(4, cpuInstanceCount, 0, 0);
 		}
 
-		// (3) カメラデータをセット -> RootParameter index 4
-		commandList->SetGraphicsRootConstantBufferView(4, cameraResource_->GetGPUVirtualAddress());
+		// ==========================================
+		// 2. GPUパーティクル（ImGuiで操作している方）の描画
+		// ==========================================
+		//if (group.particleResource) {
+		//	 GPU用のリソースをバインドして描画
+		//	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(2, group.textureSrvIndex);
+		//	SrvManager::GetInstance()->SetGraphicsRootDescriptorTable(1, group.srvIndex);
+		//	commandList->SetGraphicsRootConstantBufferView(4, cameraResource_->GetGPUVirtualAddress());
 
-		// 5. 描画コマンド発行 (DrawInstanced)
-		// 頂点数4 (トライアングルストリップで四角形), インスタンス数, ...
-		commandList->DrawInstanced(4, instanceCount, 0, 0);
+		//	commandList->DrawInstanced(4, 1024, 0, 0); // GPUは常に1024個
+		//}
 	}
 }
 
@@ -683,7 +676,11 @@ void ParticleManager::CreateParticleGroup(const std::string name, const std::str
 	);
 }
 
-void ParticleManager::Emit(const std::string name, const Vector3 &position, uint32_t count) {
+void ParticleManager::Emit(const std::string name, const Vector3 &position, uint32_t count, const Vector4 &color,
+	float speed, float speedVariance,
+	float scale, float scaleVariance,
+	float lifeTimeMin, float lifeTimeMax,
+	float posVariance) {
 	// 1. 登録済みのパーティクルグループを検索
 	if (particleGroups_.find(name) == particleGroups_.end()) {
 		assert(false); // 指定された名前のグループが見つからない
@@ -694,49 +691,56 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 	ParticleGroup &group = particleGroups_[name];
 
 	// 2. ランダム生成器の準備
-	// staticをつけることで、関数呼び出しのたびに初期化されるのを防ぐ（高速化）
 	static std::random_device seed_gen;
 	static std::mt19937_64 engine(seed_gen());
 
-	//// ランダムの分布設定 (必要に応じて数値を調整してください)
-	std::uniform_real_distribution<float> distDir(-1.0f, 1.0f);   // 方向用 (-1.0 ~ 1.0)
-	//std::uniform_real_distribution<float> distPos(-0.1f, 0.1f);   // 発生位置のズレ
-	//std::uniform_real_distribution<float> distLife(1.0f, 3.0f);   // 寿命 (1秒 ~ 3秒)
-
+	// ランダムの分布設定
+	std::uniform_real_distribution<float> distDir(-1.0f, 1.0f);
 	std::uniform_real_distribution<float> distRotate(-3.14159265f, 3.14159265f);
-	std::uniform_real_distribution<float> distScale(0.4f, 1.5f);
-	std::uniform_real_distribution<float> distPos(-0.1f, 0.1f);
-	std::uniform_real_distribution<float> distLife(0.5f, 1.0f); // ヒットエフェクトなので寿命は短めに
+	std::uniform_real_distribution<float> distScale(scale - scaleVariance, scale + scaleVariance);
+	std::uniform_real_distribution<float> distPos(-posVariance, posVariance);
+	std::uniform_real_distribution<float> distLife(lifeTimeMin, lifeTimeMax);
+	std::uniform_real_distribution<float> distSpeed(speed - speedVariance, speed + speedVariance);
 
 	// 3. 指定された数だけパーティクルを生成
 	for (uint32_t i = 0; i < count; ++i) {
 		Particle newParticle{};
 
-		// ■ Transform (位置・スケール・回転)
-		newParticle.transform.scale = { 0.05f, distScale(engine), 1.0f };
-		newParticle.transform.rotate = { 0.0f, 0.0f, distRotate(engine) };
+		// ==========================================
+		// ■ Transform (位置・スケール・回転)aaa
+		// ==========================================
+		// baスケールを縦横同じにして「真円」にする！
+		float randomScale = distScale(engine);
+		newParticle.transform.scale = { randomScale, randomScale, 1.0f };
 
-		// 指定された座標に、少しランダムなズレを加える（一点から重なって出ないように）
+		newParticle.transform.rotate = { 0.0f, 0.0f, distRotate(engine) };
 		newParticle.transform.translate = {
 			position.x + distPos(engine),
 			position.y + distPos(engine),
 			position.z + distPos(engine)
 		};
 
+		// ==========================================
 		// ■ Velocity (速度)
-		// ランダムなベクトルを作成して正規化し、スピードを掛ける例
-		// ここでは簡易的にxyzそれぞれランダムに設定
-		const float kSpeed = 0.1f; // 移動スピード
+		// ==========================================
+		// ★修正3：ランダムな方向を正規化(Normalize)して、綺麗な球状に散らす！
+		Vector3 dir = { distDir(engine), distDir(engine), distDir(engine) };
+		dir = MyMath::Normalize(dir);
+
+		// 粒ごとに少しスピードにばらつきを持たせる
+		float kSpeed = distSpeed(engine);
 		newParticle.velocity = {
-			distDir(engine) * kSpeed,
-			distDir(engine) * kSpeed,
-			distDir(engine) * kSpeed
+			dir.x * kSpeed,
+			dir.y * kSpeed,
+			dir.z * kSpeed
 		};
 
-		// ■ Color (色)
-		newParticle.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白
+		// ==========================================
+		// ■ Color (色) と Lifetime (寿命)
+		// ==========================================
+		// ★修正4：引数で受け取った色（オレンジなど）を適用する！
+		newParticle.color = color;
 
-		// ■ Lifetime (寿命)
 		newParticle.lifeTime = distLife(engine);
 		newParticle.currentTime = 0.0f; // 経過時間は0からスタート
 
@@ -927,6 +931,21 @@ void ParticleManager::CreatePipelineState() {
 	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineState_));
 	if (FAILED(hr)) {
 		logger.Log("Failed to create GraphicsPipelineState for Particle.\n");
+		assert(false);
+	}
+
+	// CPUパーティクル用のパイプラインステートを作成
+	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderCPUBlob;
+	vertexShaderCPUBlob = CompileShader(L"resources/shaders/ParticleCPU.VS.hlsl",
+		L"vs_6_0", dxcUtils.Get(), dxcCompiler.Get(), includeHandler.Get());
+	assert(vertexShaderCPUBlob != nullptr);
+
+	graphicsPipelineStateDesc.VS = { vertexShaderCPUBlob->GetBufferPointer(),
+	vertexShaderCPUBlob->GetBufferSize() };
+
+	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&graphicsPipelineStateCPU_));
+	if (FAILED(hr)) {
+		logger.Log("Failed to create GraphicsPipelineState for CPU Particle.\n");
 		assert(false);
 	}
 }

@@ -109,7 +109,11 @@ public://メンバ関数
 	//パーティクルグループの生成
 	void CreateParticleGroup(const std::string name, const std::string textureFilePath);
 
-	void Emit(const std::string name, const Vector3 &position, uint32_t count);
+	void Emit(const std::string name, const Vector3 &position, uint32_t count, const Vector4 &color,
+		float speed = 0.5f, float speedVariance = 0.2f,
+		float scale = 0.1f, float scaleVariance = 0.05f,
+		float lifeTimeMin = 0.5f, float lifeTimeMax = 1.0f,
+		float posVariance = 0.1f);
 
 	// getter/setter
 	EmitterSphere* GetEmitterSphere() { return emitterDataPtr_; }
@@ -136,6 +140,7 @@ private://メンバ変数
 	//パイプライン関連
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineStateCPU_;
 
 	// --- GPU Particle 追加分 ---
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> computeRootSignature_;
