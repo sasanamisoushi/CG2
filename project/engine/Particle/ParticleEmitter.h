@@ -14,9 +14,14 @@ public:
    
     void Emit();
 
+public:
     uint32_t count = 8;          // 1回の発生数
     float frequency_ = 0.1f;      // 発生間隔
     float radius = 1.0f;         // ※今回は使わなくても一応置いておく
+
+
+    // エミッターが持つ色プロパティ（初期値は白）
+    Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
 private:
     std::string name_;              // 放出するパーティクルグループの名前
