@@ -138,6 +138,9 @@ void GamePlayScene::Initialize() {
 	missileManager_ = std::make_unique<MissileManager>();
 	missileManager_->Initialize();
 
+	// 爆発エフェクト
+	explosionManager_ = std::make_unique<ExplosionManager>();
+	explosionManager_->Initialize(particleManager.get());
 
 	//敵
 	enemies_.clear();
@@ -384,13 +387,25 @@ void GamePlayScene::Update() {
 	}
 
 	// ==========================================
-	// 弾の更新処理（マネージャーに一任！）
+	// 弾の更新処理
 	// ==========================================
+	std::vector<Vector3> hitPositions;
 	if (missileManager_) {
-		missileManager_->Update(camera.get(), enemies_);
+		missileManager_->Update(camera.get(), enemies_, hitPositions);
 	}
 
-	
+	// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
+	if (explosionManager_ && !hitPositions.empty()) {
+		explosionManager_->CreateExplosions(hitPositions);
+	}
+
+	// 爆発マネージャーの更新
+	if (explosionManager_) {
+		explosionManager_->Update();
+	}
+
+	// 大元のパーティクル全体の更新
+	particleManager->Update(camera.get());
 
 	
 
@@ -468,9 +483,7 @@ void GamePlayScene::Draw() {
 		sprite->Draw();
 	}
 
-	if (showParticles) {
-		particleManager->Draw();
-	}
+	particleManager->Draw();
 }
 
 void GamePlayScene::UpdateUI() {

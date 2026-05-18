@@ -155,6 +155,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="engine\Particle\ExplosionManager.cpp" />
     <ClCompile Include="Game\enemy\Enemy.cpp" />
     <ClCompile Include="engine\Collision\Collider.cpp" />
     <ClCompile Include="engine\Collision\CollisionConfig.cpp" />
@@ -273,6 +274,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="engine\Particle\ExplosionManager.h" />
     <ClInclude Include="Game\enemy\Enemy.h" />
     <ClInclude Include="engine\Collision\Collider.h" />
     <ClInclude Include="engine\Collision\CollisionConfig.h" />

@@ -1,8 +1,10 @@
 #pragma once
 #include "Game/bullet/Missile.h"
+#include "engine/Particle/ParticleEmitter.h"
 #include "engine/Camera/Camera.h"
 #include <list>
 #include <memory>
+#include <vector>
 
 class Enemy;
 
@@ -12,7 +14,7 @@ public:
     void Initialize();
 
     // 全ミサイルの更新と、死んだミサイルの削除
-    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies);
+    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, std::vector<Vector3> &hitPositions);
 
     // 全ミサイルの描画
     void Draw();

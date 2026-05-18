@@ -4,6 +4,7 @@
 #include "3D/Object3d.h"
 #include "engine/Particle/ParticleManager.h"
 #include "engine/Particle/ParticleEmitter.h"
+#include "engine/Particle/ExplosionManager.h"
 #include "engine/Audio/AudioManager.h"
 #include "Game/base/BaseScene.h"
 #include "Game/Player/Player.h"
@@ -37,6 +38,7 @@ public:
 
 	// UIの更新
 	void UpdateUI();
+
 private:
 
 	//シーンリソース
@@ -153,5 +155,8 @@ private:
 
 	// ImGuiで敵を出すための座標変数
 	float newEnemyPos[3] = { 0.0f, 0.0f, 50.0f };
+
+	// 爆破エフェクト
+	std::unique_ptr<ExplosionManager> explosionManager_;
 };
 

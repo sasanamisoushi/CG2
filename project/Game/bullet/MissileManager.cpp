@@ -5,7 +5,7 @@ void MissileManager::Initialize() {
 	missiles_.clear();
 }
 
-void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies) {
+void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, std::vector<Vector3> &hitPositions) {
     for (auto it = missiles_.begin(); it != missiles_.end(); ) {
         Missile *missile = it->get();
 
@@ -53,6 +53,9 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                 if (distSq <= radius * radius) {
                     missile->OnCollision();
                     enemy->OnCollision();
+
+                    // 当たった場所（敵の中心）を爆発リストに報告！
+                    hitPositions.push_back(ePos);
                 }
             }
         }
