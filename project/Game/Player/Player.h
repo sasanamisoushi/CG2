@@ -25,6 +25,9 @@ public:
     Quaternion GetQuaternion() const { return quaternion_; }
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
+    void OnCollision();
+    bool IsDead() const { return isDead_; }
+
 private:
     std::unique_ptr<Object3d> object_;
 
@@ -33,5 +36,7 @@ private:
 
     float speed_ = 0.2f;       // 前進スピード
     float rotSpeed_ = 0.05f;   // 旋回スピード
+
+    bool isDead_ = false;
 };
 

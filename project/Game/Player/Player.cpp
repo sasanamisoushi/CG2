@@ -18,61 +18,66 @@ void Player::Initialize(const std::string &modelName) {
 }
 
 void Player::Update() {
-    auto input = Input::GetInstance();
+    // 死んでいたら何もしない（モデルがないのでアクセス禁止）
+    if (isDead_) return;
 
-    // ==========================================
-    // 1. 回転の処理 (矢印キーと Q/E)
-    // ==========================================
-    float pitch = 0.0f;
-    float yaw = 0.0f;
-    float roll = 0.0f;
+    if (object_) {
+        auto input = Input::GetInstance();
 
-    if (input->PushKey(DIK_UP))    pitch -= rotSpeed_; // 機首下げ
-    if (input->PushKey(DIK_DOWN))  pitch += rotSpeed_; // 機首上げ
-    if (input->PushKey(DIK_RIGHT)) yaw += rotSpeed_; // 右旋回
-    if (input->PushKey(DIK_LEFT))  yaw -= rotSpeed_; // 左旋回
-    if (input->PushKey(DIK_E))     roll -= rotSpeed_; // 右ロール
-    if (input->PushKey(DIK_Q))     roll += rotSpeed_; // 左ロール
+        // ==========================================
+        // 1. 回転の処理 (矢印キーと Q/E)
+        // ==========================================
+        float pitch = 0.0f;
+        float yaw = 0.0f;
+        float roll = 0.0f;
 
-  
-    // 各軸ごとの回転クォータニオンを作成して合成
-    Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
-    Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
-    Quaternion qRoll = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, roll);
+        if (input->PushKey(DIK_UP))    pitch -= rotSpeed_; // 機首下げ
+        if (input->PushKey(DIK_DOWN))  pitch += rotSpeed_; // 機首上げ
+        if (input->PushKey(DIK_RIGHT)) yaw += rotSpeed_; // 右旋回
+        if (input->PushKey(DIK_LEFT))  yaw -= rotSpeed_; // 左旋回
+        if (input->PushKey(DIK_E))     roll -= rotSpeed_; // 右ロール
+        if (input->PushKey(DIK_Q))     roll += rotSpeed_; // 左ロール
 
-    quaternion_ = MyMath::Multiply(quaternion_, qPitch);
-    quaternion_ = MyMath::Multiply(quaternion_, qYaw);
-    quaternion_ = MyMath::Multiply(quaternion_, qRoll);
-    quaternion_ = MyMath::Normalize(quaternion_);
 
-    // ==========================================
-    // 2. 移動の処理 (Wキーで前進、Sキーでブレーキ/後退)
-    // ==========================================
-    Vector3 moveInput = { 0.0f, 0.0f, 0.0f };
+        // 各軸ごとの回転クォータニオンを作成して合成
+        Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+        Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+        Quaternion qRoll = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, roll);
 
-    // ① どのキーが押されているかチェック
-    if (input->PushKey(DIK_W)) moveInput.z += 1.0f;
-    if (input->PushKey(DIK_S)) moveInput.z -= 1.0f;
-    if (input->PushKey(DIK_D)) moveInput.x += 1.0f;
-    if (input->PushKey(DIK_A)) moveInput.x -= 1.0f;
+        quaternion_ = MyMath::Multiply(quaternion_, qPitch);
+        quaternion_ = MyMath::Multiply(quaternion_, qYaw);
+        quaternion_ = MyMath::Multiply(quaternion_, qRoll);
+        quaternion_ = MyMath::Normalize(quaternion_);
 
-    // ② 斜め移動の加速を防ぐ（長さを1にする）
-    if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
-        moveInput = MyMath::Normalize(moveInput);
+        // ==========================================
+        // 2. 移動の処理 (Wキーで前進、Sキーでブレーキ/後退)
+        // ==========================================
+        Vector3 moveInput = { 0.0f, 0.0f, 0.0f };
+
+        // ① どのキーが押されているかチェック
+        if (input->PushKey(DIK_W)) moveInput.z += 1.0f;
+        if (input->PushKey(DIK_S)) moveInput.z -= 1.0f;
+        if (input->PushKey(DIK_D)) moveInput.x += 1.0f;
+        if (input->PushKey(DIK_A)) moveInput.x -= 1.0f;
+
+        // ② 斜め移動の加速を防ぐ（長さを1にする）
+        if (moveInput.x != 0.0f || moveInput.z != 0.0f) {
+            moveInput = MyMath::Normalize(moveInput);
+        }
+
+        // ③ 入力方向を、自機の向いている方向に合わせて曲げる
+        Vector3 velocity = MyMath::RotateVector(moveInput, quaternion_);
+
+        // ④ スピードを掛けて足し込む
+        position_.x += velocity.x * speed_;
+        position_.y += velocity.y * speed_;
+        position_.z += velocity.z * speed_;
+
+        // 3. Object3dに座標と回転を適用
+        object_->SetTranslate(position_);
+        object_->SetQuaternionRotate(quaternion_);
+        object_->Update();
     }
-
-    // ③ 入力方向を、自機の向いている方向に合わせて曲げる
-    Vector3 velocity = MyMath::RotateVector(moveInput, quaternion_);
-
-    // ④ スピードを掛けて足し込む
-    position_.x += velocity.x * speed_;
-    position_.y += velocity.y * speed_;
-    position_.z += velocity.z * speed_;
-
-    // 3. Object3dに座標と回転を適用
-    object_->SetTranslate(position_);
-    object_->SetQuaternionRotate(quaternion_);
-    object_->Update();
 }
 
 void Player::Draw() {
@@ -104,4 +109,15 @@ void Player::UpdateCamera(Camera *camera) {
 
 Vector3 Player::GetForwardVector() const {
     return MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+}
+
+void Player::OnCollision() {
+    isDead_ = true;
+
+    // 3Dモデルのリソースを解放して「消去」する！
+    if (object_) {
+        // オブジェクトのスマートポインタを nullptr にする
+        // これで裏側で描画リソースが解放され、二度と描画されなくなります
+        object_.reset();
+    }
 }

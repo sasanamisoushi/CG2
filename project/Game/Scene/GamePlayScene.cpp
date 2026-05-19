@@ -8,6 +8,8 @@
 #include "engine/Debug/ImGuiManager.h"
 #include <externals/imgui/imgui.h>
 #include "engine/Camera/FlyCamera.h"
+#include "engine/Graphics/PostEffect.h"
+#include "engine/Scene/SceneManager.h"
 
 
 
@@ -147,6 +149,13 @@ void GamePlayScene::Initialize() {
 	auto firstEnemy = std::make_unique<Enemy>();
 	firstEnemy->Initialize({ 0.0f, 0.0f, 50.0f });
 	enemies_.push_back(std::move(firstEnemy));
+
+	enemyBulletManager_ = std::make_unique<EnemyBulletManager>();
+	enemyBulletManager_->Initialize();
+
+	// ゲームオーバー演出の初期化
+	isGameOver_ = false;
+	gameOverTimer_ = 0;
 }
 
 void GamePlayScene::Finalize() {
@@ -157,11 +166,59 @@ void GamePlayScene::Finalize() {
 
 	AudioManager::GetInstance()->UnloadWave(soundData1);
 	AudioManager::GetInstance()->UnloadWave(soundData2);
+
+	// シーン切り替え時にポストエフェクトを通常に戻す
+	if (PostEffect::GetInstance()) {
+		PostEffect::GetInstance()->SetEffectType(0);
+	}
 }
 
 void GamePlayScene::Update() {
 	if (Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
+	}
+
+	// ==========================================
+	// ゲームオーバー判定と演出進行
+	// ==========================================
+	if (!isGameOver_ && player_ && player_->IsDead()) {
+		isGameOver_ = true;
+		gameOverTimer_ = 0;
+
+		// 💥 自機がやられた時の大爆発パーティクルを生成！
+		std::vector<Vector3> playerHitPos = { player_->GetPosition() };
+		if (explosionManager_) {
+			explosionManager_->CreateExplosions(playerHitPos);
+		}
+
+		// 🎵 BGMを停止して絶望感を演出
+		if (pVoice2) {
+			pVoice2->Stop();
+		}
+	}
+
+	bool shouldUpdateGame = true;
+
+	if (isGameOver_) {
+		gameOverTimer_++;
+
+		// 絶望の白黒化（グレースケール）エフェクトを適用！
+		if (PostEffect::GetInstance()) {
+			PostEffect::GetInstance()->SetEffectType(1); // 1: Grayscale
+		}
+
+		// 5フレームに1回だけ更新することで、スローモーション（世界停止）を実現！
+		shouldUpdateGame = (gameOverTimer_ % 5 == 0);
+
+		// 約2秒（120フレーム）経過したら、正式にゲームオーバーシーンへ遷移する！
+		if (gameOverTimer_ >= 120) {
+			SceneManager::GetInstance()->ChangeScene("GAMEOVER");
+		}
+	} else {
+		// 通常時はノーマルエフェクト
+		if (PostEffect::GetInstance()) {
+			PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
+		}
 	}
 
 	if (myBox && animationData.duration > 0.0f) {
@@ -258,22 +315,40 @@ void GamePlayScene::Update() {
 
 	// プレイヤーの更新と、カメラの追従
 	if (player_) {
-		player_->Update();
+		if (shouldUpdateGame) {
+			player_->Update();
+		}
 
 		// ※デバッグカメラ(FlyCamera)をオフにして、自機追従カメラにする
+		// カメラワークはスロー下でも滑らかにするため、毎フレーム更新する
 		player_->UpdateCamera(camera.get());
 	}
 
 	// ==========================================
 	// 敵
 	// ==========================================
+	// プレイヤーの最新座標を取得する
+	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
 
-	for (auto it = enemies_.begin(); it != enemies_.end(); ) {
-		(*it)->Update();
-		if ((*it)->IsDead()) {
-			it = enemies_.erase(it); // 当たった敵はリストから消滅
-		} else {
-			++it;
+	if (shouldUpdateGame) {
+		// 敵の弾の更新（被弾時の爆発座標を受け取る）
+		std::vector<Vector3> enemyBulletHits;
+		if (enemyBulletManager_ && player_) {
+			enemyBulletManager_->Update(player_.get(), enemyBulletHits);
+		}
+
+		// 敵の弾がプレイヤーに当たった場合も爆発を発生させる
+		if (explosionManager_ && !enemyBulletHits.empty()) {
+			explosionManager_->CreateExplosions(enemyBulletHits);
+		}
+
+		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
+			(*it)->Update(playerPos, enemyBulletManager_.get());
+			if ((*it)->IsDead()) {
+				it = enemies_.erase(it); // 当たった敵はリストから消滅
+			} else {
+				++it;
+			}
 		}
 	}
 
@@ -369,7 +444,7 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ミサイルの発射処理
 	// ==========================================
-	if (player_) {
+	if (player_ && !isGameOver_) {
 		Vector3 playerPos = player_->GetPosition();
 		Vector3 forward = player_->GetForwardVector();
 
@@ -390,18 +465,20 @@ void GamePlayScene::Update() {
 	// 弾の更新処理
 	// ==========================================
 	std::vector<Vector3> hitPositions;
-	if (missileManager_) {
-		missileManager_->Update(camera.get(), enemies_, hitPositions);
-	}
+	if (shouldUpdateGame) {
+		if (missileManager_) {
+			missileManager_->Update(camera.get(), enemies_, hitPositions);
+		}
 
-	// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
-	if (explosionManager_ && !hitPositions.empty()) {
-		explosionManager_->CreateExplosions(hitPositions);
-	}
+		// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
+		if (explosionManager_ && !hitPositions.empty()) {
+			explosionManager_->CreateExplosions(hitPositions);
+		}
 
-	// 爆発マネージャーの更新
-	if (explosionManager_) {
-		explosionManager_->Update();
+		// 爆発マネージャーの更新
+		if (explosionManager_) {
+			explosionManager_->Update();
+		}
 	}
 
 	// 大元のパーティクル全体の更新
@@ -427,6 +504,11 @@ void GamePlayScene::Draw() {
 	// すべてのミサイルを描画
 	if (missileManager_) {
 		missileManager_->Draw();
+	}
+
+	// 敵の弾を描画
+	if (enemyBulletManager_) {
+		enemyBulletManager_->Draw();
 	}
 
 	// 敵の描画

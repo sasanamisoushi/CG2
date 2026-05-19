@@ -2,7 +2,10 @@
 #include <cassert>
 #include <externals/imgui/imgui.h>
 
+PostEffect* PostEffect::instance_ = nullptr;
+
 void PostEffect::Initialize() {
+    instance_ = this;
 
     auto dxCommon = DirectXCommon::GetInstance();
     auto device = dxCommon->GetDevice();

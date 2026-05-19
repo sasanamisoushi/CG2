@@ -2,8 +2,14 @@
 #include "3D/Object3dCommon.h"
 #include "engine/Input/Input.h"
 #include "engine/Scene/SceneManager.h"
+#include "engine/Graphics/PostEffect.h"
 
 void TitleScene::Initialize() {
+	// ポストエフェクトを通常状態にクリアする
+	if (PostEffect::GetInstance()) {
+		PostEffect::GetInstance()->SetEffectType(0);
+	}
+
 	//カメラ・シーンリソース
 	camera = std::make_unique<Camera>();
 	camera->SetRotate({ 0.0f,0.0f,0.0f });

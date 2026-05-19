@@ -1,6 +1,7 @@
 #include "SceneFactory.h"
 #include "Game/Scene/TitleScene.h"
 #include "Game/Scene/GamePlayScene.h"
+#include "Game/Scene/GameOverScene.h"
 #include <cassert>
 
 std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneName) {
@@ -11,6 +12,8 @@ std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneNam
 		newScene = std::make_unique<TitleScene>();
 	} else if (sceneName == "GAMEPLAY") {
 		newScene = std::make_unique<GamePlayScene>();
+	} else if (sceneName == "GAMEOVER") {
+		newScene = std::make_unique<GameOverScene>();
 	}
 
 	//該当するシーン名がない場合エラーで止める

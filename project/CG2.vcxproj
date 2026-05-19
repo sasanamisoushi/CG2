@@ -155,6 +155,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Game\enemy\EnemyBulletManager.cpp" />
     <ClCompile Include="engine\Particle\ExplosionManager.cpp" />
     <ClCompile Include="Game\enemy\Enemy.cpp" />
     <ClCompile Include="engine\Collision\Collider.cpp" />
@@ -195,6 +196,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="engine\base\StringUtility.cpp" />
     <ClCompile Include="engine\Resource\TextureManager.cpp" />
     <ClCompile Include="Game\Scene\TitleScene.cpp" />
+    <ClCompile Include="Game\Scene\GameOverScene.cpp" />
     <ClCompile Include="engine\base\WinApp.cpp" />
     <ClCompile Include="3D\Trail.cpp" />
     <ClCompile Include="Game\Player\Player.cpp" />
@@ -274,6 +276,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Game\enemy\EnemyBulletManager.h" />
     <ClInclude Include="engine\Particle\ExplosionManager.h" />
     <ClInclude Include="Game\enemy\Enemy.h" />
     <ClInclude Include="engine\Collision\Collider.h" />
@@ -315,6 +318,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="engine\base\StringUtility.h" />
     <ClInclude Include="engine\Resource\TextureManager.h" />
     <ClInclude Include="Game\Scene\TitleScene.h" />
+    <ClInclude Include="Game\Scene\GameOverScene.h" />
     <ClInclude Include="engine\base\WinApp.h" />
     <ClInclude Include="3D\Trail.h" />
     <ClInclude Include="Game\Player\Player.h" />

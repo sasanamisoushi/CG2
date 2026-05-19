@@ -15,6 +15,7 @@
 #include "3D/Trail.h"
 #include "Game/bullet/MissileManager.h"
 #include "Game/enemy/Enemy.h"
+#include "Game/enemy/EnemyBulletManager.h"
 #include <memory>
 #include <vector>
 #include <list>
@@ -151,6 +152,7 @@ private:
 
 	// 敵
 	std::list<std::unique_ptr<Enemy>> enemies_;
+	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
 
 
 	// ImGuiで敵を出すための座標変数
@@ -158,5 +160,9 @@ private:
 
 	// 爆破エフェクト
 	std::unique_ptr<ExplosionManager> explosionManager_;
+
+	// ゲームオーバー演出用
+	bool isGameOver_ = false;
+	int gameOverTimer_ = 0;
 };
 
