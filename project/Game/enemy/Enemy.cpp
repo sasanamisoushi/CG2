@@ -16,7 +16,7 @@ void Enemy::Initialize(const Vector3 &position) {
     }
 
     // 的として当てやすいように自機より少し大きくする
-    object_->SetScale({ 2.0f, 2.0f, 2.0f });
+    object_->SetScale({ 1.0f, 1.0f, 1.0f });
 
     position_ = position;
 }

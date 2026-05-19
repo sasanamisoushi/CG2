@@ -10,6 +10,8 @@
 #include "engine/Camera/FlyCamera.h"
 #include "engine/Graphics/PostEffect.h"
 #include "engine/Scene/SceneManager.h"
+#include "engine/Utility/StageLoader.h"
+#include "EditorReceiver.h"
 
 
 
@@ -156,6 +158,15 @@ void GamePlayScene::Initialize() {
 	// ゲームオーバー演出の初期化
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
+
+	// 敵のリストを一旦空にする
+	enemies_.clear();
+
+	// Blenderから出力したJSONを読み込んで、敵を一発配置！！！
+	StageLoader::LoadSceneJson("resources/scene.json", enemies_);
+
+	// エディターレシーバーの初期化
+	EditorReceiver::GetInstance()->Initialize();
 }
 
 void GamePlayScene::Finalize() {
@@ -171,9 +182,15 @@ void GamePlayScene::Finalize() {
 	if (PostEffect::GetInstance()) {
 		PostEffect::GetInstance()->SetEffectType(0);
 	}
+
+	EditorReceiver::GetInstance()->Finalize();
 }
 
 void GamePlayScene::Update() {
+
+	// Blenderからデータが来ていたら敵をリアルタイム更新！
+	EditorReceiver::GetInstance()->Update(enemies_);
+
 	if (Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
 	}
@@ -787,6 +804,18 @@ void GamePlayScene::UpdateUI() {
 			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
 			enemies_.push_back(std::move(newEnemy));
 		}
+
+		ImGui::Separator();
+		ImGui::Text("=== 敵のリスト (総数: %d) ===", (int)enemies_.size());
+		int index = 0;
+		for (const auto& enemy : enemies_) {
+			Vector3 pos = enemy->GetPosition();
+			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", index, pos.x, pos.y, pos.z);
+			index++;
+		}
+		if (enemies_.empty()) {
+			ImGui::Text("現在、敵は存在しません。");
+		}
 		ImGui::End();
 
 		ImGui::Begin("敵撃破パーティクル設定");
@@ -811,6 +840,16 @@ void GamePlayScene::UpdateUI() {
 				explosionManager_->LoadFromJson("resources/explosionConfig.json");
 			}
 		}
+		ImGui::End();
+
+		ImGui::Begin("Level Editor Tools"); // 新しいウィンドウを作る場合
+
+		// もしボタンが押されたら { } の中が実行される
+		if (ImGui::Button("Open Blender")) {
+			// ここでBlenderを起動！
+			ShellExecuteA(nullptr, "open", "resources\\stage.blend", nullptr, nullptr, SW_SHOW);
+		}
+
 		ImGui::End();
 	}
 #endif

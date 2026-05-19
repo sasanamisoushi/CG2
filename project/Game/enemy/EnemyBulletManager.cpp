@@ -48,7 +48,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
                 bullet.isDead = true; // 弾を消す
 
                 // プレイヤーにダメージを与える（倒す）！
-                player->OnCollision();
+                //player->OnCollision();
 
                 // 当たった場所（自機の座標）を爆発リストに報告！
                 hitPositions.push_back(playerPos);

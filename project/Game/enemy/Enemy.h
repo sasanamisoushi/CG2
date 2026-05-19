@@ -32,6 +32,9 @@ public:
     // 死んだかどうかのゲッター
     bool IsDead() const { return isDead_; }
 
+    // サイズ（スケール）を設定するセッター
+    void SetScale(const Vector3 &scale) { if (object_) object_->SetScale(scale); }
+
 private:
 
     // ★追加：AI用の変数
