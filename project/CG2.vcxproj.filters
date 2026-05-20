@@ -43,6 +43,18 @@
     <Filter Include="ヘッダー ファイル\Utility">
       <UniqueIdentifier>{e83b4b88-1234-4bc8-8ae8-2004d2ad90ac}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\Game">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Game\editor">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game\editor">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="engine\base\main.cpp">
@@ -192,8 +204,8 @@
     <ClCompile Include="engine\Utility\StageLoader.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="EditorReceiver.cpp">
-      <Filter>ソース ファイル</Filter>
+    <ClCompile Include="Game\editor\EditorReceiver.cpp">
+      <Filter>ソース ファイル\Game\editor</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -353,8 +365,8 @@
     <ClInclude Include="engine\Utility\StageLoader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="EditorReceiver.h">
-      <Filter>ヘッダー ファイル</Filter>
+    <ClInclude Include="Game\editor\EditorReceiver.h">
+      <Filter>ヘッダー ファイル\Game\editor</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

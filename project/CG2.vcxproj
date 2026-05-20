@@ -155,7 +155,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="EditorReceiver.cpp" />
+    <ClCompile Include="Game\editor\EditorReceiver.cpp" />
     <ClCompile Include="Game\enemy\EnemyBulletManager.cpp" />
     <ClCompile Include="engine\Particle\ExplosionManager.cpp" />
     <ClCompile Include="Game\enemy\Enemy.cpp" />
@@ -279,7 +279,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="EditorReceiver.h" />
+    <ClInclude Include="Game\editor\EditorReceiver.h" />
     <ClInclude Include="Game\enemy\EnemyBulletManager.h" />
     <ClInclude Include="engine\Particle\ExplosionManager.h" />
     <ClInclude Include="Game\enemy\Enemy.h" />

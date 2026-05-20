@@ -324,41 +324,45 @@ void ParticleManager::Update(Camera *camera) {
 			it->currentTime += kDeltaTime;
 
 
-			// ■ ワールド行列を計算 (スライド)
-			// ビルボード行列を使うため、回転計算は matBillboard を使用
-			// 手順: スケール -> 回転(ビルボード) -> 平行移動
-			Matrix4x4 scaleMat = myMath.MkeScaleMatrix(it->transform.scale);
-			Matrix4x4 translateMat = myMath.MakeTranslateMatrix(it->transform.translate);
-
-			// Z軸の回転行列を作成
-			// （MyMathに MakeRotateZMatrix が無ければ、直接計算して作ります）
-			Matrix4x4 rotateZMat = myMath.MakeIdentity4x4();
-			rotateZMat.m[0][0] = std::cos(it->transform.rotate.z);
-			rotateZMat.m[0][1] = std::sin(it->transform.rotate.z);
-			rotateZMat.m[1][0] = -std::sin(it->transform.rotate.z);
-			rotateZMat.m[1][1] = std::cos(it->transform.rotate.z);
-
-			// 行列の合成 (Scale * Billboard * Translate)
-			Matrix4x4 worldMatrix = myMath.Multiply(scaleMat, rotateZMat);
-			worldMatrix = myMath.Multiply(worldMatrix, matBillboard);
-			worldMatrix = myMath.Multiply(worldMatrix, translateMat);
-
-
-			// ■ ワールドビュープロジェクション行列を合成 (スライド)
-			Matrix4x4 worldViewProjection = myMath.Multiply(worldMatrix, myMath.Multiply(matView, matProjection));
-
-
 			// ■ インスタンシング用データ1個分の書き込み (スライド)
 			// インスタンス数が最大数を超えない範囲で書き込む
 			if (numInstance < group.kNumMaxInstance) {
+				// ■ ワールド行列を計算 (スライド)
+				// ビルボード行列を使うため、回転計算は matBillboard を使用
+				// 手順: スケール -> 回転(ビルボード) -> 平行移動
+				Matrix4x4 scaleMat = myMath.MkeScaleMatrix(it->transform.scale);
+				Matrix4x4 translateMat = myMath.MakeTranslateMatrix(it->transform.translate);
+
+				// Z軸の回転行列を作成
+				// （MyMathに MakeRotateZMatrix が無ければ、直接計算して作ります）
+				Matrix4x4 rotateZMat = myMath.MakeIdentity4x4();
+				rotateZMat.m[0][0] = std::cos(it->transform.rotate.z);
+				rotateZMat.m[0][1] = std::sin(it->transform.rotate.z);
+				rotateZMat.m[1][0] = -std::sin(it->transform.rotate.z);
+				rotateZMat.m[1][1] = std::cos(it->transform.rotate.z);
+
+				// 行列の合成 (Scale * Billboard * Translate)
+				Matrix4x4 worldMatrix = myMath.Multiply(scaleMat, rotateZMat);
+				worldMatrix = myMath.Multiply(worldMatrix, matBillboard);
+				worldMatrix = myMath.Multiply(worldMatrix, translateMat);
+
+				// ■ ワールドビュープロジェクション行列を合成 (スライド)
+				Matrix4x4 worldViewProjection = myMath.Multiply(worldMatrix, myMath.Multiply(matView, matProjection));
 
 				group.instancingDataPtr[numInstance].WVP = worldViewProjection;
 				group.instancingDataPtr[numInstance].World = worldMatrix;
 				group.instancingDataPtr[numInstance].color = it->color;
 
-				group.instancingDataPtr[numInstance].color = it->color;
 				// 寿命に近づくにつれて alpha (透明度) を 1.0 から 0.0 へ減らす
-				float alpha = 1.0f - (it->currentTime / it->lifeTime);
+				float alpha = 1.0f;
+				if (it->lifeTime > 0.0f) {
+					alpha = 1.0f - (it->currentTime / it->lifeTime);
+					if (alpha < 0.0f) {
+						alpha = 0.0f;
+					} else if (alpha > 1.0f) {
+						alpha = 1.0f;
+					}
+				}
 				group.instancingDataPtr[numInstance].color.w = alpha;
 
 				numInstance++; // 書き込んだ件数をカウント

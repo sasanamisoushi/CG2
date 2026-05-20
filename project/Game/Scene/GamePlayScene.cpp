@@ -11,7 +11,7 @@
 #include "engine/Graphics/PostEffect.h"
 #include "engine/Scene/SceneManager.h"
 #include "engine/Utility/StageLoader.h"
-#include "EditorReceiver.h"
+#include "Game/editor/EditorReceiver.h"
 
 
 
