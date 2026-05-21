@@ -16,7 +16,6 @@ public:
     // 弾を発射する
     void Shoot(const Vector3 &position, const Vector3 &velocity);
 
-private:
     // 弾1発のデータ構造
     struct Bullet {
         std::unique_ptr<Object3d> object;
@@ -26,6 +25,10 @@ private:
         int lifeTimer = 120; // 120フレーム（2秒）で自然消滅
     };
 
+    // デバッグ表示用のゲッター
+    const std::vector<Bullet>& GetBullets() const { return bullets_; }
+
+private:
     static const size_t kMaxBullets = 50; // 弾の最大プール数
     std::vector<Bullet> bullets_;
 };

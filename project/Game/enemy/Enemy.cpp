@@ -2,6 +2,7 @@
 #include "3D/Object3dCommon.h"
 #include "engine/Math/MyMath.h"
 #include "Game/enemy/EnemyBulletManager.h"
+#include "Game/obstacle/Obstacle.h"
 
 void Enemy::Initialize(const Vector3 &position) {
     object_ = std::make_unique<Object3d>();
@@ -16,14 +17,42 @@ void Enemy::Initialize(const Vector3 &position) {
     }
 
     // 的として当てやすいように自機より少し大きくする
-    object_->SetScale({ 1.0f, 1.0f, 1.0f });
+    scale_ = { 1.0f, 1.0f, 1.0f };
+    object_->SetScale(scale_);
 
     position_ = position;
 }
 
-void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
+void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 
     if (isDead_) return; // 死んでいたら何もしない
+
+    // 1. AI思考と移動
+    UpdateAI(playerPos, bulletManager);
+
+    // 2. 当たり判定（押し出し）
+    CheckCollision(obstacles);
+
+    // 今は動かないので、座標をセットして更新するだけ
+    object_->SetTranslate(position_);
+    // モデルに回転を適用する！
+    object_->SetRotate(rotation_);
+    object_->SetScale(scale_);
+    object_->Update();
+}
+
+void Enemy::Draw() {
+    if (object_) {
+        object_->Draw();
+    }
+}
+
+// 当たった時の処理
+void Enemy::OnCollision() {
+    isDead_ = true;
+}
+
+void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
 
     // ==========================================
     // 1. プレイヤーまでの距離と方向を計算
@@ -99,19 +128,55 @@ void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager) 
         }
         break;
     }
-
-    // 今は動かないので、座標をセットして更新するだけ
-    object_->SetTranslate(position_);
-    object_->Update();
 }
 
-void Enemy::Draw() {
-    if (object_) {
-        object_->Draw();
+
+void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
+    // =========================================================
+    //    敵と障害物の当たり判定
+    // =========================================================
+    // 敵のAABB half-extents (EnemyBoxモデルは頂点±1 × スケール1.0 = extents 1.0)
+    Vector3 enemyHalf = GetWorldHalfExtents();
+
+    for (const auto &obstacle : obstacles) {
+        Vector3 obsPos = obstacle->GetPosition();
+        Vector3 obsRot = obstacle->GetRotation();
+        // モデルの実際のバウンディングボックス半径 × Blenderスケール
+        Vector3 obsHalf = obstacle->GetWorldHalfExtents();
+
+        Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(obsRot.x), MyMath::MakeRotateYMatrix(obsRot.y)), MyMath::MakeRotateZMatrix(obsRot.z));
+        Matrix4x4 invRotMat = MyMath::Transpose(rotMat);
+
+        Vector3 diff = { position_.x - obsPos.x, position_.y - obsPos.y, position_.z - obsPos.z };
+        Vector3 localDiff = MyMath::Transform(diff, invRotMat);
+
+        float dx = localDiff.x;
+        float dy = localDiff.y;
+        float dz = localDiff.z;
+
+        float halfWidth = enemyHalf.x + obsHalf.x;
+        float halfHeight = enemyHalf.y + obsHalf.y;
+        float halfDepth = enemyHalf.z + obsHalf.z;
+
+        float overlapX = halfWidth - std::abs(dx);
+        float overlapY = halfHeight - std::abs(dy);
+        float overlapZ = halfDepth - std::abs(dz);
+
+        if (overlapX > 0.0f && overlapY > 0.0f && overlapZ > 0.0f) {
+            Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
+
+            if (overlapX < overlapY && overlapX < overlapZ) {
+                localPushOut.x = (dx > 0.0f) ? overlapX : -overlapX;
+            } else if (overlapY < overlapX && overlapY < overlapZ) {
+                localPushOut.y = (dy > 0.0f) ? overlapY : -overlapY;
+            } else {
+                localPushOut.z = (dz > 0.0f) ? overlapZ : -overlapZ;
+            }
+
+            Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+            position_.x += worldPushOut.x;
+            position_.y += worldPushOut.y;
+            position_.z += worldPushOut.z;
+        }
     }
-}
-
-// 当たった時の処理
-void Enemy::OnCollision() {
-    isDead_ = true;
 }

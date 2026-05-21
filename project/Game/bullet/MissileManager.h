@@ -22,6 +22,9 @@ public:
     // ミサイルを発射する（GamePlaySceneから呼ばれる）
     void Shoot(const Vector3 &position, const Vector3 &velocity, MissileType type);
 
+    // デバッグ表示用のゲッター
+    const std::list<std::unique_ptr<Missile>>& GetMissiles() const { return missiles_; }
+
 private:
     // ミサイルの実体を管理するリスト
     std::list<std::unique_ptr<Missile>> missiles_;

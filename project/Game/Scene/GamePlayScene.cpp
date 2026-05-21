@@ -89,6 +89,17 @@ void GamePlayScene::Initialize() {
 	skeletonLinesObject->Initialize(Object3dCommon::GetInstance());
 	skeletonLinesObject->SetModel("SkeletonLines");
 
+	// デバッグ用コライダー表示ラインオブジェクトの初期化
+	ModelManager::GetInstance()->CreateLineModel("DebugColliderLines");
+	debugColliderLinesObject = std::make_unique<Object3d>();
+	debugColliderLinesObject->Initialize(Object3dCommon::GetInstance());
+	debugColliderLinesObject->SetModel("DebugColliderLines");
+
+	// デバッグ用フリーカメラの初期化
+	debugFlyCamera_ = std::make_unique<FlyCamera>();
+	debugFlyCamera_->SetTranslate({ 0.0f, 5.0f, -20.0f }); // 初期位置
+	isDebugCameraActive_ = false;
+
 
 	// リング
 	myRing = std::make_unique<Primitive>();
@@ -134,6 +145,7 @@ void GamePlayScene::Initialize() {
 
 	ModelManager::GetInstance()->CreateBoxModel("PlayerBox");
 	ModelManager::GetInstance()->CreateBoxModel("EnemyBox");
+	ModelManager::GetInstance()->CreateBoxModel("ObstacleBox");
 
 	player_ = std::make_unique<Player>();
 	player_->Initialize("PlayerBox");
@@ -159,14 +171,38 @@ void GamePlayScene::Initialize() {
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
 
-	// 敵のリストを一旦空にする
+	// 敵と障害物のリストを一旦空にする
 	enemies_.clear();
+	obstacles_.clear();
 
-	// Blenderから出力したJSONを読み込んで、敵を一発配置！！！
-	StageLoader::LoadSceneJson("resources/scene.json", enemies_);
+	// Blenderから出力したJSONを読み込んで、敵と障害物を一発配置！！！
+	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get());
+
+	// 最初のファイル更新日時を記録しておく
+	try {
+		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
+	} catch (...) {
+		// ※万が一ファイルが見つからない時のためのエラー回避
+	}
 
 	// エディターレシーバーの初期化
 	EditorReceiver::GetInstance()->Initialize();
+}
+
+void GamePlayScene::SetDebugCameraActive(bool isActive) {
+	if (isDebugCameraActive_ == isActive) {
+		return;
+	}
+
+	isDebugCameraActive_ = isActive;
+	if (isDebugCameraActive_) {
+		debugFlyCamera_->SetTranslate(camera->GetTranslate());
+		Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
+		OutputDebugStringA("[DebugCamera] ON: FlyCamera\n");
+	} else {
+		Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
+		OutputDebugStringA("[DebugCamera] OFF: Player Camera\n");
+	}
 }
 
 void GamePlayScene::Finalize() {
@@ -189,7 +225,34 @@ void GamePlayScene::Finalize() {
 void GamePlayScene::Update() {
 
 	// Blenderからデータが来ていたら敵をリアルタイム更新！
-	EditorReceiver::GetInstance()->Update(enemies_);
+	EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_);
+
+
+	// =========================================================
+	// ホットリロードの監視処理！
+	// =========================================================
+	try {
+		// 今の "scene.json" の更新日時をチェックする
+		auto currentTime = std::filesystem::last_write_time("resources/scene.json");
+
+		// もし記憶している日時よりも新しければ（＝Blenderで上書き保存されたら！）
+		if (currentTime > lastJsonWriteTime_) {
+			lastJsonWriteTime_ = currentTime; // 新しい日時で上書き
+
+			// 画面上の敵と障害物を一旦すべて消す
+			enemies_.clear();
+			obstacles_.clear();
+
+			// 最新のJSONをもう一度読み込み直す！
+			StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get());
+
+			// デバッグウィンドウにお知らせを出す
+			OutputDebugStringA("Hot Reloaded: scene.json を再読み込みしました！\n");
+		}
+	} catch (...) {
+		// 💡超重要：Blenderがファイルに書き込んでいる最中（数ミリ秒）は
+		// C++からアクセスできずエラーになることがあるため、try-catchで握りつぶす
+	}
 
 	if (Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
@@ -330,15 +393,33 @@ void GamePlayScene::Update() {
 		myModelObject->Update();
 	}
 
+	// =====================================================
+	// F1 キー: デバッグフリーカメラ ON/OFF
+	// =====================================================
+	// Debug camera switching is handled by the ImGui button in UpdateUI().
+	if (false && Input::GetInstance()->TriggerKey(DIK_F1)) {
+		isDebugCameraActive_ = !isDebugCameraActive_;
+		if (isDebugCameraActive_) {
+			// 自機追従カメラの現在位置をフリーカメラの初期座標として引き継ぐ
+			debugFlyCamera_->SetTranslate(camera->GetTranslate());
+			Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
+			OutputDebugStringA("[DebugCamera] ON: FlyCamera\n");
+		} else {
+			Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
+			OutputDebugStringA("[DebugCamera] OFF: Player Camera\n");
+		}
+	}
+
 	// プレイヤーの更新と、カメラの追従
 	if (player_) {
 		if (shouldUpdateGame) {
-			player_->Update();
+			player_->Update(obstacles_);
 		}
 
-		// ※デバッグカメラ(FlyCamera)をオフにして、自機追従カメラにする
-		// カメラワークはスロー下でも滑らかにするため、毎フレーム更新する
-		player_->UpdateCamera(camera.get());
+		// デバッグカメラが OFFのときのみ、自機追従カメラを適用
+		if (!isDebugCameraActive_) {
+			player_->UpdateCamera(camera.get());
+		}
 	}
 
 	// ==========================================
@@ -360,20 +441,28 @@ void GamePlayScene::Update() {
 		}
 
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
-			(*it)->Update(playerPos, enemyBulletManager_.get());
+			(*it)->Update(playerPos, enemyBulletManager_.get(), obstacles_);
 			if ((*it)->IsDead()) {
 				it = enemies_.erase(it); // 当たった敵はリストから消滅
 			} else {
 				++it;
 			}
 		}
+
+		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します）
+		for (auto &obstacle : obstacles_) {
+			obstacle->Update();
+		}
 	}
 
-	//カメラの更新
-	camera->Update();
-
-	// カメラの更新後にスカイボックスも更新（カメラの行列を渡す）
-	skybox->Update(camera.get());
+	// カメラの更新
+	if (isDebugCameraActive_) {
+		debugFlyCamera_->Update(); // FlyCameraが自分で入力を消化して自分を更新する
+		skybox->Update(debugFlyCamera_.get());
+	} else {
+		camera->Update();
+		skybox->Update(camera.get());
+	}
 
 	if (myRing && showNormalRing) {
 		static float ringTime = 0.0f;
@@ -452,9 +541,11 @@ void GamePlayScene::Update() {
 	size.y = 300.0f;
 	sprite->SetSize(size);
 
+	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+
 	if (showParticles) {
 		particleEmitter->Update();
-		particleManager->Update(camera.get());
+		particleManager->Update(activeCamera);
 	}
 
 
@@ -465,14 +556,14 @@ void GamePlayScene::Update() {
 		Vector3 playerPos = player_->GetPosition();
 		Vector3 forward = player_->GetForwardVector();
 
-		// スペースキー：速くて煙が出ない通常弾
-		if (Input::GetInstance()->TriggerKey(DIK_SPACE)) {
+		// 左クリック：速くて煙が出ない通常弾
+		if (Input::GetInstance()->TriggerMouseButton(0)) {
 			Vector3 vel = { forward.x * 2.0f, forward.y * 2.0f, forward.z * 2.0f };
 			missileManager_->Shoot(playerPos, vel, MissileType::Normal);
 		}
 
-		// Bキー：少し遅くて煙を引くミサイル
-		if (Input::GetInstance()->TriggerKey(DIK_B)) {
+		// 右クリック：少し遅くて煙を引くミサイル
+		if (Input::GetInstance()->TriggerMouseButton(1)) {
 			Vector3 vel = { forward.x * 1.0f, forward.y * 1.0f, forward.z * 1.0f };
 			missileManager_->Shoot(playerPos, vel, MissileType::MissileWithTrail);
 		}
@@ -484,7 +575,7 @@ void GamePlayScene::Update() {
 	std::vector<Vector3> hitPositions;
 	if (shouldUpdateGame) {
 		if (missileManager_) {
-			missileManager_->Update(camera.get(), enemies_, hitPositions);
+			missileManager_->Update(activeCamera, enemies_, hitPositions);
 		}
 
 		// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
@@ -499,9 +590,175 @@ void GamePlayScene::Update() {
 	}
 
 	// 大元のパーティクル全体の更新
-	particleManager->Update(camera.get());
+	particleManager->Update(activeCamera);
 
-	
+	// ==========================================
+	// デバッグ用コライダー頂点構築
+	// ==========================================
+	if (showDebugColliders && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
+		std::vector<VertexData> colliderVertices;
+
+		// AABB構築ヘルパー
+		auto addAABB = [&](const Vector3& center, const Vector3& extents, const Vector4& color) {
+			Vector3 p[8] = {
+				{ center.x - extents.x, center.y - extents.y, center.z - extents.z },
+				{ center.x + extents.x, center.y - extents.y, center.z - extents.z },
+				{ center.x + extents.x, center.y + extents.y, center.z - extents.z },
+				{ center.x - extents.x, center.y + extents.y, center.z - extents.z },
+				{ center.x - extents.x, center.y - extents.y, center.z + extents.z },
+				{ center.x + extents.x, center.y - extents.y, center.z + extents.z },
+				{ center.x + extents.x, center.y + extents.y, center.z + extents.z },
+				{ center.x - extents.x, center.y + extents.y, center.z + extents.z }
+			};
+
+			auto addLine = [&](int i1, int i2) {
+				VertexData v1, v2;
+				v1.position = { p[i1].x, p[i1].y, p[i1].z, 1.0f };
+				v1.color = color;
+				v2.position = { p[i2].x, p[i2].y, p[i2].z, 1.0f };
+				v2.color = color;
+				colliderVertices.push_back(v1);
+				colliderVertices.push_back(v2);
+			};
+
+			// 底面
+			addLine(0, 1); addLine(1, 2); addLine(2, 3); addLine(3, 0);
+			// 天面
+			addLine(4, 5); addLine(5, 6); addLine(6, 7); addLine(7, 4);
+			// 側面
+			addLine(0, 4); addLine(1, 5); addLine(2, 6); addLine(3, 7);
+		};
+
+		auto addOBB = [&](const Vector3& center, const Vector3& extents, const Vector3& rotation, const Vector4& color) {
+			Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation.x), MyMath::MakeRotateYMatrix(rotation.y)), MyMath::MakeRotateZMatrix(rotation.z));
+
+			Vector3 local[8] = {
+				{ -extents.x, -extents.y, -extents.z },
+				{  extents.x, -extents.y, -extents.z },
+				{  extents.x,  extents.y, -extents.z },
+				{ -extents.x,  extents.y, -extents.z },
+				{ -extents.x, -extents.y,  extents.z },
+				{  extents.x, -extents.y,  extents.z },
+				{  extents.x,  extents.y,  extents.z },
+				{ -extents.x,  extents.y,  extents.z }
+			};
+
+			Vector3 p[8];
+			for (int i = 0; i < 8; ++i) {
+				Vector3 rotated = MyMath::Transform(local[i], rotMat);
+				p[i] = { center.x + rotated.x, center.y + rotated.y, center.z + rotated.z };
+			}
+
+			auto addLine = [&](int i1, int i2) {
+				VertexData v1, v2;
+				v1.position = { p[i1].x, p[i1].y, p[i1].z, 1.0f };
+				v1.color = color;
+				v2.position = { p[i2].x, p[i2].y, p[i2].z, 1.0f };
+				v2.color = color;
+				colliderVertices.push_back(v1);
+				colliderVertices.push_back(v2);
+			};
+
+			addLine(0, 1); addLine(1, 2); addLine(2, 3); addLine(3, 0);
+			addLine(4, 5); addLine(5, 6); addLine(6, 7); addLine(7, 4);
+			addLine(0, 4); addLine(1, 5); addLine(2, 6); addLine(3, 7);
+		};
+
+		// 球体構築ヘルパー
+		auto addSphere = [&](const Vector3& center, float radius, const Vector4& color) {
+			const int subdiv = 24;
+			for (int i = 0; i < subdiv; ++i) {
+				float theta1 = 2.0f * 3.14159265f * (float)i / (float)subdiv;
+				float theta2 = 2.0f * 3.14159265f * (float)(i + 1) / (float)subdiv;
+
+				float cos1 = std::cos(theta1);
+				float sin1 = std::sin(theta1);
+				float cos2 = std::cos(theta2);
+				float sin2 = std::sin(theta2);
+
+				// X-Y 平面
+				VertexData v1, v2;
+				v1.color = color;
+				v2.color = color;
+
+				v1.position = { center.x + radius * cos1, center.y + radius * sin1, center.z, 1.0f };
+				v2.position = { center.x + radius * cos2, center.y + radius * sin2, center.z, 1.0f };
+				colliderVertices.push_back(v1);
+				colliderVertices.push_back(v2);
+
+				// Y-Z 平面
+				v1.position = { center.x, center.y + radius * cos1, center.z + radius * sin1, 1.0f };
+				v2.position = { center.x, center.y + radius * cos2, center.z + radius * sin2, 1.0f };
+				colliderVertices.push_back(v1);
+				colliderVertices.push_back(v2);
+
+				// Z-X 平面
+				v1.position = { center.x + radius * sin1, center.y, center.z + radius * cos1, 1.0f };
+				v2.position = { center.x + radius * sin2, center.y, center.z + radius * cos2, 1.0f };
+				colliderVertices.push_back(v1);
+				colliderVertices.push_back(v2);
+			}
+		};
+
+		// 1. プレイヤーのAABBと球
+		if (player_ && !player_->IsDead()) {
+			// AABB: Green, Size: 0.4x0.4x0.4 (extents: 0.2)
+			addAABB(player_->GetPosition(), { 0.2f, 0.2f, 0.2f }, { 0.0f, 1.0f, 0.0f, 1.0f });
+			// Sphere (対敵の弾用当たり判定): Cyan/Green (radius: 1.0f)
+			addSphere(player_->GetPosition(), 1.0f, { 0.0f, 1.0f, 0.5f, 1.0f });
+		}
+
+		// 2. 障害物のAABB
+		for (const auto& obstacle : obstacles_) {
+			// モデルの実際のバウンディングボックス × Blenderスケール = 正確なワールドAABB
+			Vector3 extents = obstacle->GetWorldHalfExtents();
+			addOBB(obstacle->GetPosition(), extents, obstacle->GetRotation(), { 0.0f, 1.0f, 1.0f, 1.0f });
+		}
+
+		// 3. 敵のAABBと球
+		for (const auto& enemy : enemies_) {
+			if (!enemy->IsDead()) {
+				// AABB: Red, scaled from Blender object.
+				addAABB(enemy->GetPosition(), enemy->GetWorldHalfExtents(), { 1.0f, 0.0f, 0.0f, 1.0f });
+				// Sphere (対プレイヤーミサイル用当たり判定): Red/Orange (radius: 1.0f)
+				addSphere(enemy->GetPosition(), 1.0f, { 1.0f, 0.3f, 0.0f, 1.0f });
+			}
+		}
+
+		// 4. 自機ミサイル（Player Bullets）
+		if (missileManager_) {
+			for (const auto& missile : missileManager_->GetMissiles()) {
+				if (!missile->IsDead()) {
+					// Sphere: Magenta (radius: 0.5f)
+					addSphere(missile->GetPosition(), 0.5f, { 1.0f, 0.0f, 1.0f, 1.0f });
+				}
+			}
+		}
+
+		// 5. 敵の弾（Enemy Bullets）
+		if (enemyBulletManager_) {
+			for (const auto& bullet : enemyBulletManager_->GetBullets()) {
+				if (!bullet.isDead) {
+					// Sphere: Orange (radius: 0.5f)
+					addSphere(bullet.position, 0.5f, { 1.0f, 0.5f, 0.0f, 1.0f });
+				}
+			}
+		}
+
+		// 空の場合はダミーの透明な線を追加（リソース stuck 防止）
+		if (colliderVertices.empty()) {
+			VertexData v1, v2;
+			v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
+			v1.color = { 0.0f, 0.0f, 0.0f, 0.0f };
+			v2.position = { 0.0f, 0.0f, 0.0f, 1.0f };
+			v2.color = { 0.0f, 0.0f, 0.0f, 0.0f };
+			colliderVertices.push_back(v1);
+			colliderVertices.push_back(v2);
+		}
+
+		debugColliderLinesObject->GetModel()->UpdateLineVertices(colliderVertices);
+		debugColliderLinesObject->Update();
+	}
 
 #ifdef ENABLE_IMGUI
 	UpdateUI();
@@ -533,6 +790,11 @@ void GamePlayScene::Draw() {
 		enemy->Draw();
 	}
 
+	// 障害物の描画
+	for (const auto &obstacle : obstacles_) {
+		obstacle->Draw();
+	}
+
 	//3Dオブジェクトの描画
 	if (showPlane) {
 		for (Object3d* object3d : objects) {
@@ -553,6 +815,13 @@ void GamePlayScene::Draw() {
 		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
 			skeletonLinesObject->Draw();
 		}
+	}
+
+	// デバッグコライダーの描画
+	if (showDebugColliders && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
+		// 描画の前に設定を確実にする
+		Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		debugColliderLinesObject->Draw();
 	}
 	
 	// スカイボックスの描画
@@ -609,6 +878,15 @@ void GamePlayScene::UpdateUI() {
 		ImGui::Checkbox("パーティクルを表示", &showParticles);
 		ImGui::Checkbox("ボーンを表示", &showBones);
 		ImGui::Checkbox("スプライトを表示", &showSprite);
+		ImGui::Checkbox("Show Debug Colliders", &showDebugColliders);
+
+		ImGui::Separator();
+		ImGui::Text("デバック　カメラ");
+		if (ImGui::Button(isDebugCameraActive_ ? "Switch to Player Camera" : "Switch to Debug Camera")) {
+			SetDebugCameraActive(!isDebugCameraActive_);
+		}
+		ImGui::SameLine();
+		ImGui::Text("%s", isDebugCameraActive_ ? "Active: Debug Camera" : "Active: Player Camera");
 
 		ImGui::Separator();
 		ImGui::Text("GPUパーティクルの操作");
@@ -744,57 +1022,83 @@ void GamePlayScene::UpdateUI() {
 
 		ImGui::Begin("Camera Settings");
 
-		// ① 現在のカメラの回転角と座標を取得
-		Vector3 camRot = camera->GetRotate();
-		Vector3 camPos = camera->GetTranslate();
+		// =====================================================
+		// デバッグカメラ 切り替え
+		// =====================================================
+		if (isDebugCameraActive_) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[FREE CAM ACTIVE]");
+			ImGui::Text("WASD: 移動  /  矢印キー: 回転  /  Q,E: ロール");
+			ImGui::Text("F1 を押すと自機追従カメラに戻ります");
 
-		//// ImGuiウィンドウ上にマウスがない場合、画面のドラッグでカメラを動かす
-		//if (!ImGui::GetIO().WantCaptureMouse) {
-		//	// 左ドラッグでカメラ回転
-		//	if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-		//		ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left);
-		//		ImGui::ResetMouseDragDelta(ImGuiMouseButton_Left);
-		//		camRot.y += delta.x * 0.01f; // 左右ドラッグでY軸回転 (Yaw)
-		//		camRot.x += delta.y * 0.01f; // 上下ドラッグでX軸回転 (Pitch)
-		//		camera->SetRotate(camRot);
-		//	}
-		//	// 右ドラッグでカメラの平行移動
-		//	if (ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-		//		ImVec2 delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right);
-		//		ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
-		//		camPos.x -= delta.x * 0.05f;
-		//		camPos.y += delta.y * 0.05f;
-		//		camera->SetTranslate(camPos);
-		//	}
-		//	// マウスホイールで前進・後退
-		//	float wheel = ImGui::GetIO().MouseWheel;
-		//	if (wheel != 0.0f) {
-		//		camPos.z += wheel * 1.0f;
-		//		camera->SetTranslate(camPos);
-		//	}
-		//}
+			if (ImGui::Button("自機追従カメラに戻る (F1)")) {
+				isDebugCameraActive_ = false;
+				Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
+			}
 
-		// ② ImGuiで扱いやすいように配列に格納
-		float camRotArr[3] = { camRot.x, camRot.y, camRot.z };
-		float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
+			ImGui::Separator();
+			ImGui::Text("操作方法:");
+			ImGui::BulletText("右クリック + ドラッグ : 視点回転");
+			ImGui::BulletText("スクロールホイール   : 前後移動");
+			ImGui::BulletText("中クリック + ドラッグ : 上下左右パン");
+			ImGui::BulletText("WASD                  : 前後左右移動");
+			ImGui::BulletText("矢印キー              : 視点回転(キーボード)");
+			ImGui::BulletText("Q / E                 : ロール");
 
-		//// ③ スライダー（ドラッグ操作）で値を変更できるようにする
-		//// ※ 0.01f はマウスでドラッグしたときの変化スピードです
-		//if (ImGui::DragFloat3("Rotation (Pitch, Yaw, Roll)", camRotArr, 0.01f)) {
-		//	// 値が変更されたらカメラに反映
-		//	camera->SetRotate({ camRotArr[0], camRotArr[1], camRotArr[2] });
-		//}
+			ImGui::Separator();
+			// フリーカメラの速度調整（カメラから現在値を読む）
+			float moveSpd = debugFlyCamera_->GetMoveSpeed();
+			float rotSpd  = debugFlyCamera_->GetRotateSpeed();
+			float sens    = debugFlyCamera_->GetMouseSensitivity();
+			float scroll  = debugFlyCamera_->GetScrollSpeed();
+			float pan     = debugFlyCamera_->GetPanSpeed();
+			if (ImGui::DragFloat("移動速度 (WASD)##fly",      &moveSpd, 0.01f, 0.01f, 20.0f)) {
+				debugFlyCamera_->SetMoveSpeed(moveSpd);
+			}
+			if (ImGui::DragFloat("回転感度 (マウス右)##fly",  &sens,    0.0001f, 0.0001f, 0.05f, "%.4f")) {
+				debugFlyCamera_->SetMouseSensitivity(sens);
+			}
+			if (ImGui::DragFloat("スクロール速度##fly",       &scroll,  0.1f, 0.1f, 20.0f)) {
+				debugFlyCamera_->SetScrollSpeed(scroll);
+			}
+			if (ImGui::DragFloat("パン速度 (中ボタン)##fly",  &pan,     0.001f, 0.001f, 1.0f)) {
+				debugFlyCamera_->SetPanSpeed(pan);
+			}
+			if (ImGui::DragFloat("回転速度 (キーボード)##fly",&rotSpd,  0.001f, 0.001f, 0.5f)) {
+				debugFlyCamera_->SetRotateSpeed(rotSpd);
+			}
 
-		// （おまけ）位置も変えたい場合
-		if (ImGui::DragFloat3("Position (X, Y, Z)", camPosArr, 0.1f)) {
-			camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
+			ImGui::Separator();
+			// フリーカメラの現在位置表示
+			Vector3 flyPos = debugFlyCamera_->GetTranslate();
+			float flyPosArr[3] = { flyPos.x, flyPos.y, flyPos.z };
+			if (ImGui::DragFloat3("カメラ位置##fly", flyPosArr, 0.1f)) {
+				debugFlyCamera_->SetTranslate({ flyPosArr[0], flyPosArr[1], flyPosArr[2] });
+			}
+
+		} else {
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[PLAYER FOLLOW CAM]");
+			ImGui::Text("F1 を押すとフリーカメラに切り替わります");
+
+			if (ImGui::Button("フリーカメラに切り替え (F1)")) {
+				isDebugCameraActive_ = true;
+				debugFlyCamera_->SetTranslate(camera->GetTranslate());
+				Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
+			}
+
+			ImGui::Separator();
+			// 自機追従カメラの現在位置表示（参考用）
+			Vector3 camPos = camera->GetTranslate();
+			float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
+			if (ImGui::DragFloat3("カメラ位置 (参考)##follow", camPosArr, 0.1f)) {
+				camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
+			}
 		}
 
 		ImGui::End();
 
 		ImGui::Separator();
 
-		ImGui::Begin("敵");
+		ImGui::Begin("敵 & 障害物");
 		ImGui::Text("=== ターゲット配置 ===");
 		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
 
@@ -815,6 +1119,18 @@ void GamePlayScene::UpdateUI() {
 		}
 		if (enemies_.empty()) {
 			ImGui::Text("現在、敵は存在しません。");
+		}
+
+		ImGui::Separator();
+		ImGui::Text("=== 障害物のリスト (総数: %d) ===", (int)obstacles_.size());
+		int obsIndex = 0;
+		for (const auto& obstacle : obstacles_) {
+			Vector3 pos = obstacle->GetPosition();
+			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", obsIndex, pos.x, pos.y, pos.z);
+			obsIndex++;
+		}
+		if (obstacles_.empty()) {
+			ImGui::Text("現在、障害物は存在しません。");
 		}
 		ImGui::End();
 

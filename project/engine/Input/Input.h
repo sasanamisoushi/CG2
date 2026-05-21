@@ -33,6 +33,19 @@ public:
 
 	bool TriggerKey(BYTE keyNumber);
 
+	// ===========================
+	// マウス入力 ゲッター
+	// ===========================
+	// マウスボタン押しっぱなし (0=左, 1=右, 2=中)
+	bool PushMouseButton(int button) const;
+	// マウスボタンを押した瞬間
+	bool TriggerMouseButton(int button) const;
+	// マウスの移動量 (フレームごとの差分: X/Y)
+	long GetMouseDeltaX() const { return mouseState_.lX; }
+	long GetMouseDeltaY() const { return mouseState_.lY; }
+	// マウスホイールの回転量（上=正, 下=負）
+	long GetMouseWheel() const { return mouseState_.lZ; }
+
 
 
 private:
@@ -58,5 +71,12 @@ private:
 	//WindowsAPI
 	WinApp *winApp_ = nullptr;
 
+	// ===========================
+	// マウス入力 メンバー
+	// ===========================
+	ComPtr<IDirectInputDevice8> mouse_;
+	DIMOUSESTATE mouseState_ = {};
+	DIMOUSESTATE mouseStatePre_ = {};
 };
+
 

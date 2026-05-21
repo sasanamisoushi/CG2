@@ -3,6 +3,7 @@
 #include "engine/Audio/AudioManager.h"
 #include "engine/Graphics/SrvManager.h"
 #include "engine/Scene/SceneManager.h"
+#include "engine/Camera/FlyCamera.h"
 #include <engine/Resource/TextureManager.h>
 
 void Game::Initialize() {
@@ -73,6 +74,8 @@ void Game::Update() {
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
 		postEffect_->DrawImGui();
+	} else {
+		FlyCamera::SetGameViewHovered(false);
 	}
 #endif
 
@@ -124,8 +127,38 @@ void Game::Draw() {
 		ImGui::Begin("Game View");
 
 		// ウィンドウのサイズを取得し、そのサイズに合わせて2枚目のテクスチャを画像として貼り付ける
-		ImVec2 windowSize = ImGui::GetContentRegionAvail();
-		ImGui::Image((ImTextureID)postEffectTexture_->GetSrvHandle().ptr, windowSize);
+		ImVec2 availableSize = ImGui::GetContentRegionAvail();
+		const float gameViewAspect = static_cast<float>(WinApp::kClientWidth) / static_cast<float>(WinApp::kClientHeight);
+		ImVec2 imageSize = availableSize;
+		if (availableSize.x / availableSize.y > gameViewAspect) {
+			imageSize.x = availableSize.y * gameViewAspect;
+		} else {
+			imageSize.y = availableSize.x / gameViewAspect;
+		}
+
+		ImVec2 cursorPos = ImGui::GetCursorPos();
+		ImGui::SetCursorPos(ImVec2(
+			cursorPos.x + (availableSize.x - imageSize.x) * 0.5f,
+			cursorPos.y + (availableSize.y - imageSize.y) * 0.5f
+		));
+		ImGui::Image((ImTextureID)postEffectTexture_->GetSrvHandle().ptr, imageSize);
+		ImVec2 imageMin = ImGui::GetItemRectMin();
+		ImVec2 imageMax = ImGui::GetItemRectMax();
+		ImGuiIO &io = ImGui::GetIO();
+		bool isMouseInGameView =
+			io.MousePos.x >= imageMin.x && io.MousePos.x <= imageMax.x &&
+			io.MousePos.y >= imageMin.y && io.MousePos.y <= imageMax.y;
+		FlyCamera::SetGameViewBounds(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
+		FlyCamera::SetGameViewHovered(isMouseInGameView);
+		FlyCamera::SubmitGameViewMouseInput(
+			isMouseInGameView,
+			ImGui::IsMouseClicked(ImGuiMouseButton_Right),
+			ImGui::IsMouseClicked(ImGuiMouseButton_Middle),
+			ImGui::IsMouseDown(ImGuiMouseButton_Right),
+			ImGui::IsMouseDown(ImGuiMouseButton_Middle),
+			io.MouseDelta.x,
+			io.MouseDelta.y,
+			io.MouseWheel);
 
 		ImGui::End();
 

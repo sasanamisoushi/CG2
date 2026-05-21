@@ -43,8 +43,8 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
             float dz = playerPos.z - bullet.position.z;
             float distSq = dx * dx + dy * dy + dz * dz;
 
-            // 半径2m以内ならヒット
-            if (distSq < 2.0f * 2.0f) {
+            // 半径1m以内ならヒット
+            if (distSq < 1.0f * 1.0f) {
                 bullet.isDead = true; // 弾を消す
 
                 // プレイヤーにダメージを与える（倒す）！

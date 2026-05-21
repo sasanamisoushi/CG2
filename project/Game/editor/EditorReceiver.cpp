@@ -6,6 +6,8 @@
 #include "EditorReceiver.h"
 #include "externals/json.hpp"
 #include "Game/enemy/Enemy.h"
+#include "Game/Player/Player.h"
+#include "Game/obstacle/Obstacle.h"
 
 
 // Windowsの通信用ライブラリを自動でリンクする
@@ -71,7 +73,7 @@ void EditorReceiver::ReceiveLoop() {
 	WSACleanup();
 }
 
-void EditorReceiver::Update(std::list<std::unique_ptr<Enemy>> &enemies) {
+void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles) {
 	std::string jsonStr;
 	{
 		std::lock_guard<std::mutex> lock(dataMutex_);
@@ -86,19 +88,95 @@ void EditorReceiver::Update(std::list<std::unique_ptr<Enemy>> &enemies) {
 		if (root.contains("objects") && root["objects"].is_array()) {
 
 			enemies.clear(); // 一旦リセットして再配置（エディタモード用のシンプルな同期）
+			obstacles.clear();
 
 			for (auto &objData : root["objects"]) {
-				if (objData.contains("enemy")) {
-					auto &trans = objData["transform"]["translation"];
-					Vector3 position = { trans[0].get<float>(), trans[1].get<float>(), trans[2].get<float>() };
+				// ==========================================
+				// 1. 座標・スケール・回転 の取得
+				// ==========================================
+				auto &trans = objData["transform"]["translation"];
+				Vector3 position = { trans[0].get<float>(), trans[2].get<float>(), trans[1].get<float>() };
 
-					auto &scaleData = objData["transform"]["scale"];
-					Vector3 scale = { scaleData[0].get<float>(), scaleData[1].get<float>(), scaleData[2].get<float>() };
+				auto &scaleData = objData["transform"]["scale"];
+				Vector3 scale = { scaleData[0].get<float>(), scaleData[2].get<float>(), scaleData[1].get<float>() };
 
+				// ★追加：回転データを Degree(度) から Radian(弧度) に変換して読み込む！
+				Vector3 rotation = { 0.0f, 0.0f, 0.0f };
+				if (objData["transform"].contains("rotation")) {
+					auto &rotData = objData["transform"]["rotation"];
+					float toRad = 3.141592654f / 180.0f; // 変換用の魔法の数字
+					rotation = {
+						rotData[0].get<float>() * toRad,
+						rotData[2].get<float>() * toRad,
+						rotData[1].get<float>() * toRad
+					};
+				}
+
+				// ==========================================
+				// 2. 種類(category)ごとの生成処理
+				// ==========================================
+				if (objData.contains("category")) {
+					std::string category = objData["category"].get<std::string>();
+
+					if (category == "PLAYER") {
+						// プレイヤーの座標を上書き
+						if (player) {
+							// ※Playerクラスに SetPosition などがあればここで呼ぶ
+							player->SetPosition(position);
+							player->SetRotation(rotation);
+						}
+					} else if (category == "ENEMY") {
+						auto newEnemy = std::make_unique<Enemy>();
+						newEnemy->Initialize(position);
+						newEnemy->SetScale(scale);
+						newEnemy->SetRotation(rotation);
+						enemies.push_back(std::move(newEnemy));
+					} else if (category == "OBSTACLE") {
+						// Blenderのオブジェクト名をモデル名として使う
+						std::string modelName = "ObstacleBox";
+						if (objData.contains("name")) {
+							std::string objName = objData["name"].get<std::string>();
+							
+							// Blenderで名前が重複した際につくサフィックス（.001など）を切り取る
+							size_t dotPos = objName.find('.');
+							if (dotPos != std::string::npos) {
+								modelName = objName.substr(0, dotPos);
+							} else {
+								modelName = objName;
+							}
+						}
+
+						auto newObstacle = std::make_unique<Obstacle>();
+						// さっき作ってくれた完璧なInitialize関数！
+						newObstacle->Initialize(modelName, position, rotation, scale);
+						obstacles.push_back(std::move(newObstacle));
+					}
+				}
+				// 互換性用（Blenderで種類を設定し忘れた時のための予備）
+				else if (objData.contains("enemy")) {
 					auto newEnemy = std::make_unique<Enemy>();
 					newEnemy->Initialize(position);
 					newEnemy->SetScale(scale);
+					newEnemy->SetRotation(rotation);
 					enemies.push_back(std::move(newEnemy));
+				}
+				else if (objData.contains("type") && objData["type"].get<std::string>() == "MESH") {
+					std::string modelName = "ObstacleBox";
+					if (objData.contains("name")) {
+						std::string objName = objData["name"].get<std::string>();
+						
+						// Blenderで名前が重複した際につくサフィックス（.001など）を切り取る
+						size_t dotPos = objName.find('.');
+						if (dotPos != std::string::npos) {
+							modelName = objName.substr(0, dotPos);
+						} else {
+							modelName = objName;
+						}
+					}
+
+					auto newObstacle = std::make_unique<Obstacle>();
+					newObstacle->Initialize(modelName, position, rotation, scale);
+					obstacles.push_back(std::move(newObstacle));
 				}
 			}
 		}

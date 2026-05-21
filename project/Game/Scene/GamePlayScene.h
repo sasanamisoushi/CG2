@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/Camera/Camera.h"
+#include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
 #include "3D/Object3d.h"
 #include "engine/Particle/ParticleManager.h"
@@ -16,9 +17,11 @@
 #include "Game/bullet/MissileManager.h"
 #include "Game/enemy/Enemy.h"
 #include "Game/enemy/EnemyBulletManager.h"
+#include "Game/obstacle/Obstacle.h"
 #include <memory>
 #include <vector>
 #include <list>
+#include <filesystem>
 
 
 
@@ -41,6 +44,7 @@ public:
 	void UpdateUI();
 
 private:
+	void SetDebugCameraActive(bool isActive);
 
 	//シーンリソース
 	std::unique_ptr<Camera> camera;
@@ -126,6 +130,18 @@ private:
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
 
+	// デバッグ用のコライダー描画
+	std::unique_ptr<Object3d> debugColliderLinesObject;
+	bool showDebugColliders = true;
+
+	// =====================================================
+	// デバッグ用フリーカメラ
+	// F1 キーで自機追従 ⇔ フリー移動カメラを切り替え
+	// フリーカメラ中は WASD: 移動, 矢印: 回転, Q/E: ロール
+	// =====================================================
+	std::unique_ptr<FlyCamera> debugFlyCamera_;
+	bool isDebugCameraActive_ = false;
+
 	// UIと状態管理
 	bool showParticles = false;
 	bool showModel = false;
@@ -155,6 +171,9 @@ private:
 	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
 
 
+	// 障害物
+	std::list<std::unique_ptr<Obstacle>> obstacles_;
+
 	// ImGuiで敵を出すための座標変数
 	float newEnemyPos[3] = { 0.0f, 0.0f, 50.0f };
 
@@ -164,5 +183,9 @@ private:
 	// ゲームオーバー演出用
 	bool isGameOver_ = false;
 	int gameOverTimer_ = 0;
+
+
+	// JSONファイルが最後に更新された日時を記録する変数
+	std::filesystem::file_time_type lastJsonWriteTime_;
 };
 

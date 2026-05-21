@@ -9,6 +9,8 @@
 
 
 class Enemy;
+class Player;
+class Obstacle;
 
 class EditorReceiver {
 public:
@@ -19,7 +21,7 @@ public:
 	void Finalize();
 
 	// 毎フレーム呼んで、Blenderから最新のデータが届いていたら敵を更新する
-	void Update(std::list<std::unique_ptr<Enemy>> &enemies);
+	void Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles);
 
 private:
 	EditorReceiver() = default;

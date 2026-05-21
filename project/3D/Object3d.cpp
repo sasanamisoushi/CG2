@@ -38,6 +38,7 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 }
 
 void Object3d::Update() {
+	camera = object3dCommon->GetDefaultCamera();
 
 	//transform.rotate.y += 0.01f;
 

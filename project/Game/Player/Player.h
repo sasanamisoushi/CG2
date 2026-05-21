@@ -5,6 +5,10 @@
 #include "engine/math/MyMath.h"
 #include <memory>
 #include <string>
+#include <list>
+
+
+class Obstacle;
 
 class Player {
 public:
@@ -12,7 +16,7 @@ public:
     void Initialize(const std::string &modelName);
 
     // 毎フレームの更新（キーボード入力による移動と回転）
-    void Update();
+    void Update(const std::list<std::unique_ptr<Obstacle>> &obstacles);
 
     // 描画
     void Draw();
@@ -25,8 +29,16 @@ public:
     Quaternion GetQuaternion() const { return quaternion_; }
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
+    //セッター
+    void SetPosition(const Vector3 &position) { position_ = position; }
+    void SetScale(const Vector3 &scale) { if (object_) object_->SetScale(scale); }
+    void SetRotation(const Vector3 &eulerRotation);
+
     void OnCollision();
     bool IsDead() const { return isDead_; }
+
+    void Move(); // 移動と回転の処理
+    void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
 
 private:
     std::unique_ptr<Object3d> object_;
@@ -34,7 +46,7 @@ private:
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
 
-    float speed_ = 0.2f;       // 前進スピード
+    float speed_ = 0.02f;       // 前進スピード
     float rotSpeed_ = 0.05f;   // 旋回スピード
 
     bool isDead_ = false;

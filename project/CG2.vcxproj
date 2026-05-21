@@ -205,6 +205,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="Game\bullet\MissileManager.cpp" />
     <ClCompile Include="engine\Utility\JsonHelper.cpp" />
     <ClCompile Include="engine\Utility\StageLoader.cpp" />
+    <ClCompile Include="Game\obstacle\Obstacle.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="resources\shaders\CopyImage.PS.hlsl">
@@ -330,6 +331,7 @@ copy "$(windowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="Game\bullet\MissileManager.h" />
     <ClInclude Include="engine\Utility\JsonHelper.h" />
     <ClInclude Include="engine\Utility\StageLoader.h" />
+    <ClInclude Include="Game\obstacle\Obstacle.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="externals\DirectXTex\DirectXTex_Desktop_2022_Win10.vcxproj">

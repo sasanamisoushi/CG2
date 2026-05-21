@@ -55,6 +55,12 @@
     <Filter Include="ヘッダー ファイル\Game\editor">
       <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\Game\obstacle">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2fd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game\obstacle">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfe}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="engine\base\main.cpp">
@@ -206,6 +212,9 @@
     </ClCompile>
     <ClCompile Include="Game\editor\EditorReceiver.cpp">
       <Filter>ソース ファイル\Game\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\obstacle\Obstacle.cpp">
+      <Filter>ソース ファイル\Game\obstacle</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -367,6 +376,9 @@
     </ClInclude>
     <ClInclude Include="Game\editor\EditorReceiver.h">
       <Filter>ヘッダー ファイル\Game\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\obstacle\Obstacle.h">
+      <Filter>ヘッダー ファイル\Game\obstacle</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

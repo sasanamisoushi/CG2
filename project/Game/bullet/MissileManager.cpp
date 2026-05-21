@@ -49,7 +49,7 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                 float dz = ePos.z - mPos.z;
                 float distSq = dx * dx + dy * dy + dz * dz;
 
-                float radius = 2.5f; // 当たり判定の大きさ
+                float radius = 1.0f; // 当たり判定の大きさ
                 if (distSq <= radius * radius) {
                     missile->OnCollision();
                     enemy->OnCollision();

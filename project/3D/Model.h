@@ -211,6 +211,26 @@ public:
 	void InitializeTrail(ModelCommon *modelCommon);
 	void UpdateTrailVertices(const std::vector<VertexData> &vertices);
 
+	// モデルのローカル空間でのバウンディングボックス半径（頂点から計算）を返す
+	// 例: BoxModel(頂点±1) は {1,1,1} を返す
+	// これに Object3d の scale を掛けると、ワールド空間での当たり判定サイズになる
+	Vector3 GetHalfExtents() const {
+		if (modelData.vertices.empty()) return { 1.0f, 1.0f, 1.0f };
+		float maxX = 0.0f, maxY = 0.0f, maxZ = 0.0f;
+		for (const auto& v : modelData.vertices) {
+			float ax = v.position.x < 0.0f ? -v.position.x : v.position.x;
+			float ay = v.position.y < 0.0f ? -v.position.y : v.position.y;
+			float az = v.position.z < 0.0f ? -v.position.z : v.position.z;
+			if (ax > maxX) maxX = ax;
+			if (ay > maxY) maxY = ay;
+			if (az > maxZ) maxZ = az;
+		}
+		if (maxX == 0.0f) maxX = 1.0f;
+		if (maxY == 0.0f) maxY = 1.0f;
+		if (maxZ == 0.0f) maxZ = 1.0f;
+		return { maxX, maxY, maxZ };
+	}
+
 private:
 	ModelCommon *modelCommon_;
 
