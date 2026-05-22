@@ -33,6 +33,8 @@ void DirectXCommon::Initialize(WinApp *winApp) {
 
 	//メンバ変数に記録
 	this->winApp = winApp;
+	renderWidth_ = WinApp::GetClientWidth();
+	renderHeight_ = WinApp::GetClientHeight();
 
 	//FPS固定初期化
 	InitialieFixFPS();
@@ -50,7 +52,7 @@ void DirectXCommon::Initialize(WinApp *winApp) {
 	CreateDescriptorHeaps();
 
 	//深度バッファの生成
-	depthBufferGeneration(WinApp::kClientWidth,WinApp::kClientHeight);
+	depthBufferGeneration(renderWidth_, renderHeight_);
 	
 	//レンダーターゲットビューの初期化
 	CreateRenderTargetView();
@@ -206,9 +208,9 @@ void DirectXCommon::CreateSwapChain() {
 
 	HRESULT hr;
 	//画面の幅
-	swapChainDesc.Width = WinApp::kClientWidth;
+	swapChainDesc.Width = renderWidth_;
 	//画面の高さ
-	swapChainDesc.Height = WinApp::kClientHeight;
+	swapChainDesc.Height = renderHeight_;
 	//色の形式
 	swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	//マルチサンプルしない
@@ -381,8 +383,8 @@ void DirectXCommon::CreateFence() {
 void DirectXCommon::CreateViewportScissorRect() {
 
 	//クライアント領域のサイズと一緒にして画面全体に表示
-	viewport.Width = WinApp::kClientWidth;
-	viewport.Height = WinApp::kClientHeight;
+	viewport.Width = static_cast<float>(renderWidth_);
+	viewport.Height = static_cast<float>(renderHeight_);
 	viewport.TopLeftX = 0;
 	viewport.TopLeftY = 0;
 	viewport.MinDepth = 0.0f;
@@ -393,9 +395,9 @@ void DirectXCommon::CreateScissorRect() {
 
 	//基本的にビューポートと同じ矩形が構成されるようにする
 	scissorRecct.left = 0;
-	scissorRecct.right = WinApp::kClientWidth;
+	scissorRecct.right = renderWidth_;
 	scissorRecct.top = 0;
-	scissorRecct.bottom = WinApp::kClientHeight;
+	scissorRecct.bottom = renderHeight_;
 
 }
 
@@ -543,6 +545,51 @@ void DirectXCommon::PreDrawSwapchain() {
 
 	commandList->RSSetViewports(1, &viewport);
 	commandList->RSSetScissorRects(1, &scissorRecct);
+}
+
+void DirectXCommon::Resize(int32_t width, int32_t height) {
+	if (width <= 0 || height <= 0) {
+		return;
+	}
+	if (width == renderWidth_ && height == renderHeight_) {
+		return;
+	}
+
+	WaitForGPU();
+
+	for (auto &resource : swapChainResources) {
+		resource.Reset();
+	}
+	depthStencilResource.Reset();
+
+	HRESULT hr = swapChain->ResizeBuffers(
+		swapChainDesc.BufferCount,
+		static_cast<UINT>(width),
+		static_cast<UINT>(height),
+		swapChainDesc.Format,
+		0);
+	assert(SUCCEEDED(hr));
+
+	renderWidth_ = width;
+	renderHeight_ = height;
+	swapChainDesc.Width = width;
+	swapChainDesc.Height = height;
+
+	CreateRenderTargetView();
+	depthBufferGeneration(renderWidth_, renderHeight_);
+	CreateDepthStencilView();
+	CreateViewportScissorRect();
+	CreateScissorRect();
+}
+
+void DirectXCommon::WaitForGPU() {
+	fenceValue++;
+	commandQueue->Signal(fence.Get(), fenceValue);
+
+	if (fence->GetCompletedValue() < fenceValue) {
+		fence->SetEventOnCompletion(fenceValue, fenceEvent);
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
 }
 
 Microsoft::WRL::ComPtr<IDxcBlob> DirectXCommon::CompileShader(const std::wstring &filePath, const wchar_t *profile) {

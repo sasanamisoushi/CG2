@@ -75,7 +75,7 @@ void Object3d::Update() {
 	}
 
 	//projectionMatrix
-	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClientHeight), 0.1f, 100.0f);
+	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::GetClientWidth()) / float(WinApp::GetClientHeight()), 0.1f, 100.0f);
 
 	//worldViewProjectionMatrix
 	Matrix4x4 worldViewProjectionMatrix;

@@ -3,6 +3,8 @@
 #include <cassert>
 
 void RenderTexture::Initialize(uint32_t width, uint32_t height) {
+    width_ = width;
+    height_ = height;
 
     // ★追加：DirectXCommonのインスタンスを取得して、変数「dxCommon」に入れる
     DirectXCommon *dxCommon = DirectXCommon::GetInstance();
@@ -53,7 +55,9 @@ void RenderTexture::Initialize(uint32_t width, uint32_t height) {
     // 5. RTV（描画先の窓口）の作成
     // ※RTV用のディスクリプタヒープから場所を確保する処理が必要です
     // 今回は簡易的に「専用のRTVヒープがある」前提の擬似コードです
-     rtvHandle_ = dxCommon->GetNewRtvHandle(); 
+     if (rtvHandle_.ptr == 0) {
+         rtvHandle_ = dxCommon->GetNewRtvHandle();
+     }
      device->CreateRenderTargetView(resource_.Get(), nullptr, rtvHandle_);
 
 
@@ -66,11 +70,25 @@ void RenderTexture::Initialize(uint32_t width, uint32_t height) {
 
     // 6. SRV（画像として使う窓口）の作成
     // あなたのエンジンの SrvManager を利用します
-    uint32_t srvIndex = SrvManager::GetInstance()->Allocate();
-    srvHandleCPU_ = SrvManager::GetInstance()->GetCPUDescriptorHandle(srvIndex);
-    srvHandleGPU_ = SrvManager::GetInstance()->GetGPUDescriptorHandle(srvIndex);
+    if (srvHandleCPU_.ptr == 0) {
+        uint32_t srvIndex = SrvManager::GetInstance()->Allocate();
+        srvHandleCPU_ = SrvManager::GetInstance()->GetCPUDescriptorHandle(srvIndex);
+        srvHandleGPU_ = SrvManager::GetInstance()->GetGPUDescriptorHandle(srvIndex);
+    }
 
     
 
     device->CreateShaderResourceView(resource_.Get(), &srvDesc, srvHandleCPU_);
+}
+
+void RenderTexture::Resize(uint32_t width, uint32_t height) {
+    if (width == 0 || height == 0) {
+        return;
+    }
+    if (width == width_ && height == height_) {
+        return;
+    }
+
+    resource_.Reset();
+    Initialize(width, height);
 }

@@ -174,9 +174,11 @@ void GamePlayScene::Initialize() {
 	// 敵と障害物のリストを一旦空にする
 	enemies_.clear();
 	obstacles_.clear();
+	enemySpawnPoints_.clear();
 
 	// Blenderから出力したJSONを読み込んで、敵と障害物を一発配置！！！
-	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get());
+	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawnPoints_);
+	SpawnEnemiesFromSpawnPoints();
 
 	// 最初のファイル更新日時を記録しておく
 	try {
@@ -205,6 +207,14 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 	}
 }
 
+void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
+	for (const Vector3 &spawnPoint : enemySpawnPoints_) {
+		auto enemy = std::make_unique<Enemy>();
+		enemy->Initialize(spawnPoint);
+		enemies_.push_back(std::move(enemy));
+	}
+}
+
 void GamePlayScene::Finalize() {
 	if (pVoice1) {
 		pVoice1->Stop();
@@ -225,7 +235,7 @@ void GamePlayScene::Finalize() {
 void GamePlayScene::Update() {
 
 	// Blenderからデータが来ていたら敵をリアルタイム更新！
-	EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_);
+	EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawnPoints_);
 
 
 	// =========================================================
@@ -242,9 +252,11 @@ void GamePlayScene::Update() {
 			// 画面上の敵と障害物を一旦すべて消す
 			enemies_.clear();
 			obstacles_.clear();
+			enemySpawnPoints_.clear();
 
 			// 最新のJSONをもう一度読み込み直す！
-			StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get());
+			StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawnPoints_);
+			SpawnEnemiesFromSpawnPoints();
 
 			// デバッグウィンドウにお知らせを出す
 			OutputDebugStringA("Hot Reloaded: scene.json を再読み込みしました！\n");
@@ -256,6 +268,12 @@ void GamePlayScene::Update() {
 
 	if (Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
+	}
+
+	// Rキーでシーンを最初からやり直す
+	if (Input::GetInstance()->TriggerKey(DIK_R)) {
+		SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+		return;
 	}
 
 	// ==========================================
@@ -432,7 +450,7 @@ void GamePlayScene::Update() {
 		// 敵の弾の更新（被弾時の爆発座標を受け取る）
 		std::vector<Vector3> enemyBulletHits;
 		if (enemyBulletManager_ && player_) {
-			enemyBulletManager_->Update(player_.get(), enemyBulletHits);
+			enemyBulletManager_->Update(player_.get(), enemyBulletHits, obstacles_);
 		}
 
 		// 敵の弾がプレイヤーに当たった場合も爆発を発生させる
@@ -575,7 +593,7 @@ void GamePlayScene::Update() {
 	std::vector<Vector3> hitPositions;
 	if (shouldUpdateGame) {
 		if (missileManager_) {
-			missileManager_->Update(activeCamera, enemies_, hitPositions);
+			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions);
 		}
 
 		// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！

@@ -4,38 +4,47 @@
 #include "Game/enemy/EnemyBulletManager.h"
 #include "Game/obstacle/Obstacle.h"
 
+namespace {
+    constexpr float kAttackRadius = 120.0f;
+    constexpr int kAttackInterval = 300;
+    constexpr float kEnemyMoveSpeed = 0.2f;
+    constexpr float kEnemyBulletSpeed = 0.6f;
+}
+
 void Enemy::Initialize(const Vector3 &position) {
     object_ = std::make_unique<Object3d>();
     object_->Initialize(Object3dCommon::GetInstance());
 
-    // 自機と同じBoxモデルを使い回す
+    // 閾ｪ讖溘→蜷後§Box繝｢繝・Ν繧剃ｽｿ縺・屓縺・
     object_->SetModel("EnemyBox");
 
-    // 敵っぽく赤色にする
+    // 謨ｵ縺｣縺ｽ縺剰ｵ､濶ｲ縺ｫ縺吶ｋ
     if (object_->GetModel()) {
         object_->GetModel()->SetColor({ 0.8f, 0.1f, 0.1f, 1.0f });
     }
 
-    // 的として当てやすいように自機より少し大きくする
-    scale_ = { 1.0f, 1.0f, 1.0f };
+    // 繝励Ξ繧､繝､繝ｼ縺ｨ蜷後§螟ｧ縺阪＆縺ｫ縺吶ｋ
+    scale_ = { 0.2f, 0.2f, 0.2f };
     object_->SetScale(scale_);
 
     position_ = position;
+    state_ = EnemyState::Approach;
+    attackTimer_ = kAttackInterval;
 }
 
 void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 
-    if (isDead_) return; // 死んでいたら何もしない
+    if (isDead_) return; // 豁ｻ繧薙〒縺・◆繧我ｽ輔ｂ縺励↑縺・
 
-    // 1. AI思考と移動
+    // 1. AI諤晁・→遘ｻ蜍・
     UpdateAI(playerPos, bulletManager);
 
-    // 2. 当たり判定（押し出し）
+    // 2. 蠖薙◆繧雁愛螳夲ｼ域款縺怜・縺暦ｼ・
     CheckCollision(obstacles);
 
-    // 今は動かないので、座標をセットして更新するだけ
+    // 莉翫・蜍輔°縺ｪ縺・・縺ｧ縲∝ｺｧ讓吶ｒ繧ｻ繝・ヨ縺励※譖ｴ譁ｰ縺吶ｋ縺縺・
     object_->SetTranslate(position_);
-    // モデルに回転を適用する！
+    // 繝｢繝・Ν縺ｫ蝗櫁ｻ｢繧帝←逕ｨ縺吶ｋ・・
     object_->SetRotate(rotation_);
     object_->SetScale(scale_);
     object_->Update();
@@ -47,101 +56,59 @@ void Enemy::Draw() {
     }
 }
 
-// 当たった時の処理
+// 蠖薙◆縺｣縺滓凾縺ｮ蜃ｦ逅・
 void Enemy::OnCollision() {
     isDead_ = true;
 }
 
 void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
-
-    // ==========================================
-    // 1. プレイヤーまでの距離と方向を計算
-    // ==========================================
-    Vector3 myPos = GetPosition(); // 今の自分の座標
-
-    // 敵からプレイヤーへのベクトル（向き）
-    Vector3 dir = {
-        playerPos.x - myPos.x,
-        playerPos.y - myPos.y,
-        playerPos.z - myPos.z
+    Vector3 toPlayer = {
+        playerPos.x - position_.x,
+        playerPos.y - position_.y,
+        playerPos.z - position_.z
     };
 
-    // 距離の2乗を計算（ルートの計算は重いので、2乗のまま比べるのがゲームの基本です）
-    float distSq = dir.x * dir.x + dir.y * dir.y + dir.z * dir.z;
-    float attackRadius = 30.0f; // 攻撃を開始する距離（30m）
+    float distSqToPlayer = toPlayer.x * toPlayer.x + toPlayer.y * toPlayer.y + toPlayer.z * toPlayer.z;
+    float distToPlayer = std::sqrt(distSqToPlayer);
+    Vector3 directionToPlayer = { 0.0f, 0.0f, -1.0f };
+    if (distToPlayer > 0.001f) {
+        directionToPlayer.x = toPlayer.x / distToPlayer;
+        directionToPlayer.y = toPlayer.y / distToPlayer;
+        directionToPlayer.z = toPlayer.z / distToPlayer;
+    }
 
-    // ==========================================
-    // 2. 状態（ステート）ごとの行動
-    // ==========================================
-    switch (state_) {
+    if (distSqToPlayer > kAttackRadius * kAttackRadius) {
+        state_ = EnemyState::Approach;
+        position_.x += directionToPlayer.x * kEnemyMoveSpeed;
+        position_.y += directionToPlayer.y * kEnemyMoveSpeed;
+        position_.z += directionToPlayer.z * kEnemyMoveSpeed;
+        return;
+    }
 
-    case EnemyState::Approach:
-        // もし攻撃範囲に入ったら、状態を「攻撃」に切り替える！
-        if (distSq <= attackRadius * attackRadius) {
-            state_ = EnemyState::Attack;
-            attackTimer_ = 0; // タイマーをリセット
-        } else {
-            // 遠い場合はプレイヤーに向かって移動
-            float dist = std::sqrt(distSq); // 実際の距離
-            if (dist > 0.0f) {
-                dir.x /= dist; // 方向ベクトルを正規化（長さを1にする）
-                dir.y /= dist;
-                dir.z /= dist;
-            }
-
-            float speed = 0.2f; // 敵の移動スピード
-            position_.x += dir.x * speed;
-            position_.y += dir.y * speed;
-            position_.z += dir.z * speed;
-        }
-        break;
-
-    case EnemyState::Attack:
-        if (distSq > attackRadius * attackRadius) {
-            state_ = EnemyState::Approach;
-        } else {
-            attackTimer_++;
-            if (attackTimer_ >= 60) {
-                // position_.y += 2.0f; // 攻撃の合図のジャンプ (下降処理がないため、戻り値がなく永久に上昇してしまうバグの原因になっていたのでコメントアウト)
-
-                // ==========================================
-                // 💥 弾を撃つ処理を追加！
-                // ==========================================
-                if (bulletManager) {
-                    float dist = std::sqrt(distSq);
-                    Vector3 velocity = { 0, 0, 0 };
-
-                    // プレイヤーの方向へ向かう速度ベクトルを作る
-                    if (dist > 0.0f) {
-                        float bulletSpeed = 1.0f; // 弾の飛ぶ速さ
-                        velocity.x = (dir.x / dist) * bulletSpeed;
-                        velocity.y = (dir.y / dist) * bulletSpeed;
-                        velocity.z = (dir.z / dist) * bulletSpeed;
-                    }
-
-                    // マネージャーに発射を依頼
-                    bulletManager->Shoot(position_, velocity);
-                }
-
-                attackTimer_ = 0;
-            }
-        }
-        break;
+    state_ = EnemyState::Attack;
+    attackTimer_++;
+    if (attackTimer_ >= kAttackInterval && bulletManager) {
+        Vector3 velocity = {
+            directionToPlayer.x * kEnemyBulletSpeed,
+            directionToPlayer.y * kEnemyBulletSpeed,
+            directionToPlayer.z * kEnemyBulletSpeed
+        };
+        bulletManager->Shoot(position_, velocity);
+        attackTimer_ = 0;
     }
 }
 
-
 void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
     // =========================================================
-    //    敵と障害物の当たり判定
+    //    謨ｵ縺ｨ髫懷ｮｳ迚ｩ縺ｮ蠖薙◆繧雁愛螳・
     // =========================================================
-    // 敵のAABB half-extents (EnemyBoxモデルは頂点±1 × スケール1.0 = extents 1.0)
+    // 謨ｵ縺ｮAABB half-extents (EnemyBox繝｢繝・Ν縺ｯ鬆らせﾂｱ1 ﾃ・繧ｹ繧ｱ繝ｼ繝ｫ1.0 = extents 1.0)
     Vector3 enemyHalf = GetWorldHalfExtents();
 
     for (const auto &obstacle : obstacles) {
         Vector3 obsPos = obstacle->GetPosition();
         Vector3 obsRot = obstacle->GetRotation();
-        // モデルの実際のバウンディングボックス半径 × Blenderスケール
+        // 繝｢繝・Ν縺ｮ螳滄圀縺ｮ繝舌え繝ｳ繝・ぅ繝ｳ繧ｰ繝懊ャ繧ｯ繧ｹ蜊雁ｾ・ﾃ・Blender繧ｹ繧ｱ繝ｼ繝ｫ
         Vector3 obsHalf = obstacle->GetWorldHalfExtents();
 
         Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(obsRot.x), MyMath::MakeRotateYMatrix(obsRot.y)), MyMath::MakeRotateZMatrix(obsRot.z));
@@ -180,3 +147,5 @@ void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles
         }
     }
 }
+
+

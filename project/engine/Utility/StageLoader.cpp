@@ -12,7 +12,8 @@ bool StageLoader::LoadSceneJson(
 	const std::string &filePath, 
 	std::list<std::unique_ptr<Enemy>> &enemies,
 	std::list<std::unique_ptr<Obstacle>> &obstacles,
-	Player *player) {
+	Player *player,
+	std::vector<Vector3> *enemySpawnPoints) {
 	
 	// ファイルを開く
 	std::ifstream ifs(filePath);
@@ -78,17 +79,25 @@ bool StageLoader::LoadSceneJson(
 				}
 
 				if (category == "ENEMY") {
-					auto newEnemy = std::make_unique<Enemy>();
-					newEnemy->Initialize(position);
-					newEnemy->SetScale(scale);
-					newEnemy->SetRotation(rotation);
-					enemies.push_back(std::move(newEnemy));
+					if (enemySpawnPoints) {
+						enemySpawnPoints->push_back(position);
+					} else {
+						auto newEnemy = std::make_unique<Enemy>();
+						newEnemy->Initialize(position);
+						newEnemy->SetRotation(rotation);
+						enemies.push_back(std::move(newEnemy));
+					}
 					continue;
 				}
 
 				if (category == "OBSTACLE") {
 					auto newObstacle = std::make_unique<Obstacle>();
-					newObstacle->Initialize(getModelName(), position, rotation, scale);
+					std::string modelName = getModelName();
+					newObstacle->Initialize(modelName, position, rotation, scale);
+					if (modelName.find("StageBounds") != std::string::npos) {
+						newObstacle->SetStageBounds(true);
+						OutputDebugStringA((" StageBounds Spawned at: " + std::to_string(position.x) + "\n").c_str());
+					}
 					obstacles.push_back(std::move(newObstacle));
 					continue;
 				}
@@ -98,11 +107,14 @@ bool StageLoader::LoadSceneJson(
 				std::string enemyType = objData["enemy"]["type"].get<std::string>();
 
 				// 敵を実体化！
-				auto newEnemy = std::make_unique<Enemy>();
-				newEnemy->Initialize(position);
-				newEnemy->SetScale(scale);
-				newEnemy->SetRotation(rotation);
-				enemies.push_back(std::move(newEnemy));
+				if (enemySpawnPoints) {
+					enemySpawnPoints->push_back(position);
+				} else {
+					auto newEnemy = std::make_unique<Enemy>();
+					newEnemy->Initialize(position);
+					newEnemy->SetRotation(rotation);
+					enemies.push_back(std::move(newEnemy));
+				}
 
 				OutputDebugStringA((" Enemy Spawned at: " + std::to_string(position.x) + "\n").c_str());
 			}
@@ -123,9 +135,16 @@ bool StageLoader::LoadSceneJson(
 
 				auto newObstacle = std::make_unique<Obstacle>();
 				newObstacle->Initialize(modelName, position, rotation, scale);
-				obstacles.push_back(std::move(newObstacle));
 
-				OutputDebugStringA((" Obstacle Spawned at: " + std::to_string(position.x) + "\n").c_str());
+				// ブレンダーで「StageBounds」という名前にした場合はステージの枠として扱う
+				if (modelName.find("StageBounds") != std::string::npos) {
+					newObstacle->SetStageBounds(true);
+					OutputDebugStringA((" StageBounds Spawned at: " + std::to_string(position.x) + "\n").c_str());
+				} else {
+					OutputDebugStringA((" Obstacle Spawned at: " + std::to_string(position.x) + "\n").c_str());
+				}
+
+				obstacles.push_back(std::move(newObstacle));
 			}
 		}
 	}

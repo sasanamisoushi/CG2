@@ -28,8 +28,10 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         layout.label(text="Hello")
         layout.separator()
         layout.label(text="Hello2", icon='MESH_CUBE')
+        
         # シーンのプロパティをUIに表示する
         layout.prop(context.scene, "myaddon_custom_string", text="カスタム文字列")
+        
         # Boxコライダーのメニューを実装
         box = layout.box()
         box.label(text="Collider")
@@ -46,10 +48,26 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         if obj.game_obj_type == 'ENEMY':
             game_box.prop(obj, "enemy_type", text="敵のタイプ")
 
+        # ★修正1：区切り線のインデント（字下げ）を左に戻しました！
+        layout.separator()
+        layout.label(text="=== レベル構築ツール ===")
+        
+        # ★修正2：アイコンを 'WIRE' から 'SHADING_WIRE' に直しました！
+        layout.operator(operators.MYADDON_OT_create_stage_bounds.bl_idname, text="ステージ範囲 (ワイヤーフレーム) を配置", icon='SHADING_WIRE')
+
+        # スポーン地点配置ボタン（横に2つ並べる）
+        row = layout.row()
+        op_player = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="自機スポーン", icon='OUTLINER_OB_ARMATURE')
+        op_player.spawn_type = "PLAYER" # 引数として PLAYER を渡す
+        
+        op_enemy = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="敵スポーン", icon='OUTLINER_OB_ARMATURE')
+        op_enemy.spawn_type = "ENEMY"   # 引数として ENEMY を渡す
+
         # エクスポート用の区切り線、ラベル、実行ボタン
         layout.separator()
         layout.label(text="Export")
         layout.operator(operators.MYADDON_OT_export_scene.bl_idname, text="Scene Export")
+
 
 classes = (
     TOPBAR_MT_my_menu,

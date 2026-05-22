@@ -3,6 +3,11 @@
 
 
 void Camera::Update() {
+	int32_t clientWidth = WinApp::GetClientWidth();
+	int32_t clientHeight = WinApp::GetClientHeight();
+	if (clientWidth > 0 && clientHeight > 0) {
+		aspectRatio_ = static_cast<float>(clientWidth) / static_cast<float>(clientHeight);
+	}
 
 	// フラグによってアフィン変換の計算を分ける！
 	if (useQuaternion_) {

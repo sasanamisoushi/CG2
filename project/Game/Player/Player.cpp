@@ -181,31 +181,67 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 		float halfHeight = playerHalf.y + obsHalf.y;
 		float halfDepth = playerHalf.z + obsHalf.z;
 
-		// どれくらい食い込んでいるか（オーバーラップ量）
-		float overlapX = halfWidth - std::abs(dx);
-		float overlapY = halfHeight - std::abs(dy);
-		float overlapZ = halfDepth - std::abs(dz);
-
-		// 3軸全てが重なっていたら「衝突している」
-		if (overlapX > 0.0f && overlapY > 0.0f && overlapZ > 0.0f) {
+		// StageBoundsの場合は内側に留める（反転当たり判定）
+		if (obstacle->IsStageBounds()) {
 			Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 
-			// 一番食い込みが「浅い」方向へプレイヤーを押し出す（壁めり込み防止）
-			if (overlapX < overlapY && overlapX < overlapZ) {
-				localPushOut.x = (dx > 0.0f) ? overlapX : -overlapX;
-			} else if (overlapY < overlapX && overlapY < overlapZ) {
-				localPushOut.y = (dy > 0.0f) ? overlapY : -overlapY;
-			} else {
-				localPushOut.z = (dz > 0.0f) ? overlapZ : -overlapZ;
+			// X軸の境界チェック
+			if (dx > obsHalf.x - playerHalf.x) {
+				localPushOut.x = (obsHalf.x - playerHalf.x) - dx;
+			} else if (dx < -(obsHalf.x - playerHalf.x)) {
+				localPushOut.x = -(obsHalf.x - playerHalf.x) - dx;
 			}
 
-			// 押し出しベクトルをワールド空間に戻す
-			Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+			// Y軸の境界チェック
+			if (dy > obsHalf.y - playerHalf.y) {
+				localPushOut.y = (obsHalf.y - playerHalf.y) - dy;
+			} else if (dy < -(obsHalf.y - playerHalf.y)) {
+				localPushOut.y = -(obsHalf.y - playerHalf.y) - dy;
+			}
 
-			// プレイヤーの座標に適用
-			position_.x += worldPushOut.x;
-			position_.y += worldPushOut.y;
-			position_.z += worldPushOut.z;
+			// Z軸の境界チェック
+			if (dz > obsHalf.z - playerHalf.z) {
+				localPushOut.z = (obsHalf.z - playerHalf.z) - dz;
+			} else if (dz < -(obsHalf.z - playerHalf.z)) {
+				localPushOut.z = -(obsHalf.z - playerHalf.z) - dz;
+			}
+
+			// 押し出しベクトルをワールド空間に戻す（移動が発生した場合のみ）
+			if (localPushOut.x != 0.0f || localPushOut.y != 0.0f || localPushOut.z != 0.0f) {
+				Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+				position_.x += worldPushOut.x;
+				position_.y += worldPushOut.y;
+				position_.z += worldPushOut.z;
+			}
+		} 
+		// 通常の障害物の場合は外側に押し出す（既存の処理）
+		else {
+			// どれくらい食い込んでいるか（オーバーラップ量）
+			float overlapX = halfWidth - std::abs(dx);
+			float overlapY = halfHeight - std::abs(dy);
+			float overlapZ = halfDepth - std::abs(dz);
+
+			// 3軸全てが重なっていたら「衝突している」
+			if (overlapX > 0.0f && overlapY > 0.0f && overlapZ > 0.0f) {
+				Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
+
+				// 一番食い込みが「浅い」方向へプレイヤーを押し出す（壁めり込み防止）
+				if (overlapX < overlapY && overlapX < overlapZ) {
+					localPushOut.x = (dx > 0.0f) ? overlapX : -overlapX;
+				} else if (overlapY < overlapX && overlapY < overlapZ) {
+					localPushOut.y = (dy > 0.0f) ? overlapY : -overlapY;
+				} else {
+					localPushOut.z = (dz > 0.0f) ? overlapZ : -overlapZ;
+				}
+
+				// 押し出しベクトルをワールド空間に戻す
+				Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+
+				// プレイヤーの座標に適用
+				position_.x += worldPushOut.x;
+				position_.y += worldPushOut.y;
+				position_.z += worldPushOut.z;
+			}
 		}
 	}
 

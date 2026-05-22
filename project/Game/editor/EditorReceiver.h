@@ -6,6 +6,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 
 class Enemy;
@@ -21,7 +22,7 @@ public:
 	void Finalize();
 
 	// 毎フレーム呼んで、Blenderから最新のデータが届いていたら敵を更新する
-	void Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles);
+	void Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints);
 
 private:
 	EditorReceiver() = default;

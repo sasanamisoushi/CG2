@@ -2,6 +2,8 @@
 #include <string>
 #include <list>
 #include <memory>
+#include <vector>
+#include "engine/math/MyMath.h"
 
 class Enemy;
 class Obstacle;
@@ -14,5 +16,6 @@ public:
 		const std::string &filePath, 
 		std::list<std::unique_ptr<Enemy>> &enemies,
 		std::list<std::unique_ptr<Obstacle>> &obstacles,
-		Player *player = nullptr);
+		Player *player = nullptr,
+		std::vector<Vector3> *enemySpawnPoints = nullptr);
 };

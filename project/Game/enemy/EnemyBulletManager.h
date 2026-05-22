@@ -3,14 +3,16 @@
 #include "engine/math/MyMath.h"
 #include <vector>
 #include <memory>
+#include <list>
 
 class Player; // 前方宣言
+class Obstacle; // 前方宣言
 
 class EnemyBulletManager {
 public:
     void Initialize();
     // プレイヤーへのポインタを受け取って当たり判定を行う
-    void Update(Player *player, std::vector<Vector3> &hitPositions);
+    void Update(Player *player, std::vector<Vector3> &hitPositions, const std::list<std::unique_ptr<Obstacle>> &obstacles);
     void Draw();
 
     // 弾を発射する
@@ -29,7 +31,6 @@ public:
     const std::vector<Bullet>& GetBullets() const { return bullets_; }
 
 private:
-    static const size_t kMaxBullets = 50; // 弾の最大プール数
+    static const size_t kMaxBullets = 200; // 弾の最大プール数
     std::vector<Bullet> bullets_;
 };
-

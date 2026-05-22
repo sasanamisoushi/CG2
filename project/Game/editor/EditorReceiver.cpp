@@ -73,7 +73,7 @@ void EditorReceiver::ReceiveLoop() {
 	WSACleanup();
 }
 
-void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles) {
+void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints) {
 	std::string jsonStr;
 	{
 		std::lock_guard<std::mutex> lock(dataMutex_);
@@ -89,6 +89,7 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 
 			enemies.clear(); // 一旦リセットして再配置（エディタモード用のシンプルな同期）
 			obstacles.clear();
+			enemySpawnPoints.clear();
 
 			for (auto &objData : root["objects"]) {
 				// ==========================================
@@ -126,9 +127,9 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 							player->SetRotation(rotation);
 						}
 					} else if (category == "ENEMY") {
+						enemySpawnPoints.push_back(position);
 						auto newEnemy = std::make_unique<Enemy>();
 						newEnemy->Initialize(position);
-						newEnemy->SetScale(scale);
 						newEnemy->SetRotation(rotation);
 						enemies.push_back(std::move(newEnemy));
 					} else if (category == "OBSTACLE") {
@@ -154,9 +155,9 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 				}
 				// 互換性用（Blenderで種類を設定し忘れた時のための予備）
 				else if (objData.contains("enemy")) {
+					enemySpawnPoints.push_back(position);
 					auto newEnemy = std::make_unique<Enemy>();
 					newEnemy->Initialize(position);
-					newEnemy->SetScale(scale);
 					newEnemy->SetRotation(rotation);
 					enemies.push_back(std::move(newEnemy));
 				}

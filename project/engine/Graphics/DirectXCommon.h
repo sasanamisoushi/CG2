@@ -81,12 +81,16 @@ public:
 	//スワップチェーンの描画前処理
 	void PreDrawSwapchain();
 
+	void Resize(int32_t width, int32_t height);
+
 	//getter
 	ID3D12Device *GetDevice() { return device.Get(); }
 	ID3D12GraphicsCommandList *GetCommandList() { return commandList.Get(); }
 	ID3D12DescriptorHeap *GetSRVDescriptorHeap() { return srvDescriptorHeap.Get(); }
 	uint32_t GetDescriptorSizeSRV() { return descriptorSizeSRV; }
 	HANDLE GetFenceEvent() { return fenceEvent; }
+	int32_t GetRenderWidth() const { return renderWidth_; }
+	int32_t GetRenderHeight() const { return renderHeight_; }
 
 	// シェーダーのコンパイル
 	Microsoft::WRL::ComPtr<IDxcBlob> CompileShader(const std::wstring& filePath, const wchar_t *profile);
@@ -193,6 +197,9 @@ private:
 	//TransitionBarrierの設定
 	D3D12_RESOURCE_BARRIER barrier{};
 
+	int32_t renderWidth_ = WinApp::kClientWidth;
+	int32_t renderHeight_ = WinApp::kClientHeight;
+
 	//DXC関連
 	Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils_;
 	Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler_;
@@ -205,6 +212,8 @@ private:
 
 	//記録時間
 	std::chrono::steady_clock::time_point reference_;
+
+	void WaitForGPU();
 
 	size_t Align256(size_t size) {
 		return (size + 255) & ~255;

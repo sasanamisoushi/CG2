@@ -10,13 +10,16 @@ void Game::Initialize() {
 
 	Framework::Initialize();
 
+	renderWidth_ = static_cast<uint32_t>(WinApp::GetClientWidth());
+	renderHeight_ = static_cast<uint32_t>(WinApp::GetClientHeight());
+
 	// RenderTextureの生成と初期化
 	renderTexture_ = std::make_unique<RenderTexture>();
-	renderTexture_->Initialize(WinApp::kClientWidth, WinApp::kClientHeight);
+	renderTexture_->Initialize(renderWidth_, renderHeight_);
 
 	// ポストエフェクト用テクスチャも初期化
 	postEffectTexture_ = std::make_unique<RenderTexture>();
-	postEffectTexture_->Initialize(WinApp::kClientWidth, WinApp::kClientHeight);
+	postEffectTexture_->Initialize(renderWidth_, renderHeight_);
 
 
 	postEffect_ = std::make_unique<PostEffect>();
@@ -58,6 +61,7 @@ void Game::Finalize() {
 void Game::Update() {
 
 	Framework::Update();
+	HandleResize();
 
 #ifdef ENABLE_IMGUI
 	// F1キーでImGuiの表示・非表示を切り替え
@@ -83,6 +87,25 @@ void Game::Update() {
 	postEffect_->Update();
 
 	SceneManager::GetInstance()->Update();
+}
+
+void Game::HandleResize() {
+	uint32_t width = static_cast<uint32_t>(WinApp::GetClientWidth());
+	uint32_t height = static_cast<uint32_t>(WinApp::GetClientHeight());
+	if (width == 0 || height == 0) {
+		return;
+	}
+	if (width == renderWidth_ && height == renderHeight_) {
+		return;
+	}
+
+	DirectXCommon::GetInstance()->Resize(static_cast<int32_t>(width), static_cast<int32_t>(height));
+	renderTexture_->Resize(width, height);
+	postEffectTexture_->Resize(width, height);
+	DirectXCommon::GetInstance()->CreateDepthSrv(SrvManager::GetInstance()->GetCPUDescriptorHandle(depthSrvIndex_));
+
+	renderWidth_ = width;
+	renderHeight_ = height;
 }
 
 void Game::Draw() {
@@ -128,7 +151,7 @@ void Game::Draw() {
 
 		// ウィンドウのサイズを取得し、そのサイズに合わせて2枚目のテクスチャを画像として貼り付ける
 		ImVec2 availableSize = ImGui::GetContentRegionAvail();
-		const float gameViewAspect = static_cast<float>(WinApp::kClientWidth) / static_cast<float>(WinApp::kClientHeight);
+		const float gameViewAspect = static_cast<float>(renderWidth_) / static_cast<float>(renderHeight_);
 		ImVec2 imageSize = availableSize;
 		if (availableSize.x / availableSize.y > gameViewAspect) {
 			imageSize.x = availableSize.y * gameViewAspect;

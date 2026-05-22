@@ -7,6 +7,7 @@
 #include <vector>
 
 class Enemy;
+class Obstacle; // 追加
 
 class MissileManager {
 public:
@@ -14,7 +15,7 @@ public:
     void Initialize();
 
     // 全ミサイルの更新と、死んだミサイルの削除
-    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, std::vector<Vector3> &hitPositions);
+    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, const std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &hitPositions);
 
     // 全ミサイルの描画
     void Draw();
