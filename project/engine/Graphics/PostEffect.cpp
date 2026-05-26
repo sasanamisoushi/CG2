@@ -158,16 +158,20 @@ void PostEffect::DrawImGui() {
 
     // エフェクト選択
     const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia",
-        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve","Random Noise" };
+        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve","Random Noise", "Vignette Smoothing" };
     ImGui::Combo("Type", &param_.effectType, items, IM_ARRAYSIZE(items));
 
     ImGui::Separator();
 
     // エフェクトごとの数値調整
-    if (param_.effectType == 4) { // Vignette
+    if (param_.effectType == 4 || param_.effectType == 12) { // Vignette
         ImGui::Text("Vignette Parameters");
         ImGui::SliderFloat("Radius", &param_.vignetteRadius, 0.0f, 1.0f);
         ImGui::SliderFloat("Softness", &param_.vignetteSoftness, 0.01f, 1.0f);
+        if (param_.effectType == 12) {
+            ImGui::Text("Smoothing Parameters");
+            ImGui::SliderFloat("Intensity", &param_.blurIntensity, 0.0f, 10.0f);
+        }
     } else if (param_.effectType >= 5 && param_.effectType <= 7 || param_.effectType == 9) { // Box Filter
         ImGui::Text("Blur Parameters");
         ImGui::SliderFloat("Intensity", &param_.blurIntensity, 0.0f, 10.0f);

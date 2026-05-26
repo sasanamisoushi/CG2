@@ -14,7 +14,7 @@ void GameOverScene::Initialize() {
 
 	// ポストエフェクトをグレースケール状態にする（演出の継続）
 	if (PostEffect::GetInstance()) {
-		PostEffect::GetInstance()->SetEffectType(1);
+		PostEffect::GetInstance()->SetVignetteSmoothing(0.42f, 0.42f, 3.0f);
 	}
 
 	// ゲームオーバー表示スプライトの生成と初期化

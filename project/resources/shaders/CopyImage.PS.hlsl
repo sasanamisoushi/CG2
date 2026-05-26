@@ -299,6 +299,32 @@ PixelShaderOutput main(VertexShaderOutput input)
         // 💡 おまけ：もし「元の画像の上にうっすらノイズを乗せたい」場合はこう書きます
         // output.color = texColor + float4(noiseValue, noiseValue, noiseValue, 0.0f) * 0.2f;
     }
+    else if (effectType == 12)
+    {
+        uint width, height;
+        gTexture.GetDimensions(width, height);
+        float2 uvStep = float2(1.0f / width, 1.0f / height);
+
+        float smoothAmount = max(1.0f, blurIntensity) * (1.0f + 0.12f * sin(time * 3.0f));
+        float2 offset = uvStep * smoothAmount;
+
+        float4 smoothColor = texColor * 0.36f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2( offset.x, 0.0f)) * 0.10f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2(-offset.x, 0.0f)) * 0.10f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2(0.0f,  offset.y)) * 0.10f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2(0.0f, -offset.y)) * 0.10f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2( offset.x,  offset.y)) * 0.06f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2(-offset.x,  offset.y)) * 0.06f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2( offset.x, -offset.y)) * 0.06f;
+        smoothColor += gTexture.Sample(gSampler, input.texcoord + float2(-offset.x, -offset.y)) * 0.06f;
+
+        float dist = distance(input.texcoord, float2(0.5f, 0.5f));
+        float pulse = 0.03f * sin(time * 2.0f);
+        float vignette = 1.0f - smoothstep(vignetteRadius + pulse, vignetteRadius + vignetteSoftness + pulse, dist);
+        vignette = lerp(0.22f, 1.0f, vignette);
+
+        output.color = float4(smoothColor.rgb * vignette, texColor.a);
+    }
     else
     {
         // 0: ノーマル（そのまま）

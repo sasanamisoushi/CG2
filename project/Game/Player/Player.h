@@ -35,7 +35,9 @@ public:
     void SetRotation(const Vector3 &eulerRotation);
 
     void OnCollision();
+    void TakeDamage(int damage);
     bool IsDead() const { return isDead_; }
+    int GetHP() const { return hp_; }
 
     void Move(); // 移動と回転の処理
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
@@ -50,5 +52,6 @@ private:
     float rotSpeed_ = 0.05f;   // 旋回スピード
 
     bool isDead_ = false;
+    int hp_ = 3;
 };
 

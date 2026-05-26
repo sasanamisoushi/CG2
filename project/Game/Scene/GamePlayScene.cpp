@@ -302,7 +302,13 @@ void GamePlayScene::Update() {
 
 		// 絶望の白黒化（グレースケール）エフェクトを適用！
 		if (PostEffect::GetInstance()) {
-			PostEffect::GetInstance()->SetEffectType(1); // 1: Grayscale
+			float effectProgress = static_cast<float>(gameOverTimer_) / 120.0f;
+			if (effectProgress > 1.0f) {
+				effectProgress = 1.0f;
+			}
+			float vignetteRadius = 0.62f - 0.22f * effectProgress;
+			float blurIntensity = 1.5f + 3.0f * effectProgress;
+			PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.38f, blurIntensity);
 		}
 
 		// 5フレームに1回だけ更新することで、スローモーション（世界停止）を実現！

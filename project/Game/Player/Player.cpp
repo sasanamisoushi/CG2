@@ -16,6 +16,8 @@ void Player::Initialize(const std::string &modelName) {
 
 	position_ = { 0.0f, 0.0f, 0.0f };
 	quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
+	hp_ = 3;
+	isDead_ = false;
 }
 
 void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
@@ -88,6 +90,18 @@ void Player::OnCollision() {
 		// オブジェクトのスマートポインタを nullptr にする
 		// これで裏側で描画リソースが解放され、二度と描画されなくなります
 		object_.reset();
+	}
+}
+
+void Player::TakeDamage(int damage) {
+	if (isDead_) {
+		return;
+	}
+
+	hp_ -= damage;
+	if (hp_ <= 0) {
+		hp_ = 0;
+		OnCollision();
 	}
 }
 

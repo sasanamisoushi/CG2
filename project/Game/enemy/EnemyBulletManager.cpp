@@ -80,7 +80,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
                 bullet.isDead = true; // 蠑ｾ繧呈ｶ医☆
 
                 // 繝励Ξ繧､繝､繝ｼ縺ｫ繝繝｡繝ｼ繧ｸ繧剃ｸ弱∴繧具ｼ亥偵☆・会ｼ・
-                //player->OnCollision();
+                player->TakeDamage(1);
 
                 // 蠖薙◆縺｣縺溷ｴ謇・郁・讖溘・蠎ｧ讓呻ｼ峨ｒ辷・匱繝ｪ繧ｹ繝医↓蝣ｱ蜻奇ｼ・
                 hitPositions.push_back(playerPos);
