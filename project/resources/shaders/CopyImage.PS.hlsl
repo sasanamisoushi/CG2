@@ -47,7 +47,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     if (effectType == 1)
     {
         // 1: モノクロ
-        float gray = texColor.r * 0.299f + texColor.g * 0.587f + texColor.b * 0.114f;
+        float gray = texColor.r * 0.2125f + texColor.g * 0.7154f + texColor.b * 0.0721f;
         output.color = float4(gray, gray, gray, texColor.a);
     }
     else if (effectType == 2)
@@ -58,10 +58,9 @@ PixelShaderOutput main(VertexShaderOutput input)
     else if (effectType == 3)
     {
         // 3: セピア (NTSC規格などでよく使われるセピア化の係数)
-        float r = (texColor.r * 0.393f) + (texColor.g * 0.769f) + (texColor.b * 0.189f);
-        float g = (texColor.r * 0.349f) + (texColor.g * 0.686f) + (texColor.b * 0.168f);
-        float b = (texColor.r * 0.272f) + (texColor.g * 0.534f) + (texColor.b * 0.131f);
-        output.color = float4(r, g, b, texColor.a);
+        float value = texColor.r * 0.2125f + texColor.g * 0.7154f + texColor.b * 0.0721f;
+        output.color.rgb = value * float32_t3(1.0f, 74.0f / 107.0f, 43.0f / 107.0f);
+        output.color.a = texColor.a;
     }
     else if (effectType == 4)
     {
