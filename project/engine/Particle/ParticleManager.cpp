@@ -318,10 +318,18 @@ void ParticleManager::Update(Camera *camera) {
 			it->transform.translate.x += it->velocity.x;
 			it->transform.translate.y += it->velocity.y;
 			it->transform.translate.z += it->velocity.z;
+			it->transform.rotate.z += it->angularVelocity;
 
 			// ■ 経過時間を加算 (スライド)
 			const float kDeltaTime = 1.0f / 60.0f; // 固定60fps想定
 			it->currentTime += kDeltaTime;
+			float lifeProgress = 1.0f;
+			if (it->lifeTime > 0.0f) {
+				lifeProgress = (std::min)(it->currentTime / it->lifeTime, 1.0f);
+			}
+			const float currentScale =
+				it->initialScale + (it->finalScale - it->initialScale) * lifeProgress;
+			it->transform.scale = { currentScale, currentScale, 1.0f };
 
 
 			// ■ インスタンシング用データ1個分の書き込み (スライド)
@@ -699,10 +707,14 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 	static std::mt19937_64 engine(seed_gen());
 
 	// ランダムの分布設定
-	std::uniform_real_distribution<float> distDir(-1.0f, 1.0f);
+	constexpr float kPi = 3.14159265f;
+	std::uniform_real_distribution<float> distZ(-1.0f, 1.0f);
+	std::uniform_real_distribution<float> distAngle(0.0f, kPi * 2.0f);
 	std::uniform_real_distribution<float> distRotate(-3.14159265f, 3.14159265f);
+	std::uniform_real_distribution<float> distAngularSpeed(0.06f, 0.16f);
+	std::uniform_int_distribution<int> distSpinDirection(0, 1);
 	std::uniform_real_distribution<float> distScale(scale - scaleVariance, scale + scaleVariance);
-	std::uniform_real_distribution<float> distPos(-posVariance, posVariance);
+	std::uniform_real_distribution<float> distRadius(posVariance * 0.4f, posVariance);
 	std::uniform_real_distribution<float> distLife(lifeTimeMin, lifeTimeMax);
 	std::uniform_real_distribution<float> distSpeed(speed - speedVariance, speed + speedVariance);
 
@@ -711,26 +723,37 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 		Particle newParticle{};
 
 		// ==========================================
-		// ■ Transform (位置・スケール・回転)aaa
+		// ■ Transform (位置・スケール・回転)
 		// ==========================================
-		// baスケールを縦横同じにして「真円」にする！
+		// スケールを縦横同じにして「真円」にする
 		float randomScale = distScale(engine);
+		newParticle.initialScale = randomScale;
+		newParticle.finalScale = 0.0f;
 		newParticle.transform.scale = { randomScale, randomScale, 1.0f };
 
 		newParticle.transform.rotate = { 0.0f, 0.0f, distRotate(engine) };
+		const float spinDirection = distSpinDirection(engine) == 0 ? -1.0f : 1.0f;
+		newParticle.angularVelocity = distAngularSpeed(engine) * spinDirection;
+
+		// 球面上の一様な方向を作り、初期位置と飛ぶ方向をそろえる
+		const float z = distZ(engine);
+		const float angle = distAngle(engine);
+		const float xyLength = std::sqrt(1.0f - z * z);
+		const Vector3 dir = {
+			xyLength * std::cos(angle),
+			xyLength * std::sin(angle),
+			z
+		};
+		const float spawnRadius = distRadius(engine);
 		newParticle.transform.translate = {
-			position.x + distPos(engine),
-			position.y + distPos(engine),
-			position.z + distPos(engine)
+			position.x + dir.x * spawnRadius,
+			position.y + dir.y * spawnRadius,
+			position.z + dir.z * spawnRadius
 		};
 
 		// ==========================================
 		// ■ Velocity (速度)
 		// ==========================================
-		// ★修正3：ランダムな方向を正規化(Normalize)して、綺麗な球状に散らす！
-		Vector3 dir = { distDir(engine), distDir(engine), distDir(engine) };
-		dir = MyMath::Normalize(dir);
-
 		// 粒ごとに少しスピードにばらつきを持たせる
 		float kSpeed = distSpeed(engine);
 		newParticle.velocity = {
@@ -750,6 +773,60 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 
 		// リストに追加
 		group.particle.push_back(newParticle);
+	}
+}
+
+void ParticleManager::EmitFireball(const std::string name, const Vector3 &position, uint32_t count,
+	const Vector4 &color, float initialScale, float finalScale, float lifeTime, float radius) {
+	if (particleGroups_.find(name) == particleGroups_.end()) {
+		assert(false);
+		return;
+	}
+
+	ParticleGroup &group = particleGroups_[name];
+	static std::random_device seedGenerator;
+	static std::mt19937_64 engine(seedGenerator());
+
+	constexpr float kPi = 3.14159265f;
+	std::uniform_real_distribution<float> distZ(-1.0f, 1.0f);
+	std::uniform_real_distribution<float> distAngle(0.0f, kPi * 2.0f);
+	std::uniform_real_distribution<float> distRadius(0.0f, radius);
+	std::uniform_real_distribution<float> distScale(0.85f, 1.15f);
+	std::uniform_real_distribution<float> distLife(0.9f, 1.1f);
+	std::uniform_real_distribution<float> distRotate(-kPi, kPi);
+	std::uniform_real_distribution<float> distAngularSpeed(0.04f, 0.11f);
+	std::uniform_int_distribution<int> distSpinDirection(0, 1);
+
+	for (uint32_t i = 0; i < count; ++i) {
+		const float z = distZ(engine);
+		const float angle = distAngle(engine);
+		const float xyLength = std::sqrt(1.0f - z * z);
+		const Vector3 dir = {
+			xyLength * std::cos(angle),
+			xyLength * std::sin(angle),
+			z
+		};
+		const float spawnRadius = distRadius(engine);
+		const float scaleFactor = distScale(engine);
+
+		Particle particle{};
+		particle.transform.translate = {
+			position.x + dir.x * spawnRadius,
+			position.y + dir.y * spawnRadius,
+			position.z + dir.z * spawnRadius
+		};
+		particle.velocity = { dir.x * 0.004f, dir.y * 0.004f, dir.z * 0.004f };
+		particle.transform.rotate = { 0.0f, 0.0f, distRotate(engine) };
+		particle.angularVelocity =
+			distAngularSpeed(engine) * (distSpinDirection(engine) == 0 ? -1.0f : 1.0f);
+		particle.initialScale = initialScale * scaleFactor;
+		particle.finalScale = finalScale * scaleFactor;
+		particle.transform.scale = { particle.initialScale, particle.initialScale, 1.0f };
+		particle.color = color;
+		particle.lifeTime = lifeTime * distLife(engine);
+		particle.currentTime = 0.0f;
+
+		group.particle.push_back(particle);
 	}
 }
 

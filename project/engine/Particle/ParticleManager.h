@@ -16,6 +16,9 @@ public://構造体定義
 	struct Particle {
 		EulerTransform transform;
 		Vector3 velocity;
+		float angularVelocity;
+		float initialScale;
+		float finalScale;
 		Vector4 color;
 		float lifeTime;
 		float currentTime;
@@ -114,6 +117,11 @@ public://メンバ関数
 		float scale = 0.1f, float scaleVariance = 0.05f,
 		float lifeTimeMin = 0.5f, float lifeTimeMax = 1.0f,
 		float posVariance = 0.1f);
+
+	// 中心に留まり、回転しながら膨らんで消える火球用Plane粒子
+	void EmitFireball(const std::string name, const Vector3 &position, uint32_t count, const Vector4 &color,
+		float initialScale = 0.5f, float finalScale = 2.5f,
+		float lifeTime = 0.65f, float radius = 0.25f);
 
 	// getter/setter
 	EmitterSphere* GetEmitterSphere() { return emitterDataPtr_; }

@@ -1,7 +1,8 @@
 #pragma once
 #include "engine/Particle/ParticleManager.h"
-#include "engine/Particle/ParticleEmitter.h"
+#include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
+#include <array>
 #include <list>
 #include <memory>
 #include <vector>
@@ -26,6 +27,9 @@ public:
     // 毎フレームの更新（寿命のカウントダウンと削除）
     void Update();
 
+    // RingとCylinderを描画
+    void Draw();
+
     // 報告された座標リストを受け取り、爆発を一気に発生させる
     void CreateExplosions(const std::vector<Vector3> &hitPositions);
 
@@ -37,10 +41,13 @@ public:
     void LoadFromJson(const std::string &filepath);
 
 private:
-    // 爆発を管理する構造体
+    // Plane粒子と同時に表示する立体エフェクト
     struct Explosion {
-        std::unique_ptr<ParticleEmitter> emitter;
-        int timer;
+        std::array<std::unique_ptr<Object3d>, 3> rings;
+        std::unique_ptr<Object3d> cylinder;
+        Vector3 position;
+        float age = 0.0f;
+        float duration = 0.7f;
     };
 
     std::list<Explosion> explosions_;

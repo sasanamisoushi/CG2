@@ -569,7 +569,6 @@ void GamePlayScene::Update() {
 
 	if (showParticles) {
 		particleEmitter->Update();
-		particleManager->Update(activeCamera);
 	}
 
 
@@ -858,14 +857,7 @@ void GamePlayScene::Draw() {
 	if (myRing && showNormalRing) myRing->Draw();
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
-
-	
-
-	// エフェクト系の描画 (深度書き込み無効)
-	Object3dCommon::GetInstance()->SetEffectDrawSettings();
-	if (myRing && showNormalRing) myRing->Draw();
-	if (myPartialRing && showPartialRing) myPartialRing->Draw();
-	if (myCylinder && showCylinder) myCylinder->Draw();
+	if (explosionManager_) explosionManager_->Draw();
 
 
 	//Spriteの描画基準

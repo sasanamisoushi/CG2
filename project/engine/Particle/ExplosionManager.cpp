@@ -1,4 +1,7 @@
 #include "ExplosionManager.h"
+#include "3D/ModelManager.h"
+#include "3D/Object3dCommon.h"
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -9,6 +12,19 @@ void ExplosionManager::Initialize(ParticleManager *particleManager) {
 
     // アプリ起動時に前回の設定があれば読み込む
     LoadFromJson("resources/explosionConfig.json");
+    particleManager_->CreateParticleGroup("explosionCore", "resources/circle2.png");
+
+    // ヒット演出用のモデルは全Explosionで共有する。
+    ModelManager::GetInstance()->CreateRingModel(
+        "Explosion_OrbitRing", 64, 1.0f, 0.72f, true,
+        { 1.0f, 0.4f, 0.05f, 0.0f }, { 1.0f, 1.0f, 0.75f, 0.95f });
+    ModelManager::GetInstance()->CreateCylinderModel(
+        "Explosion_Cylinder", 32, 0.9f, 0.75f, 1.5f);
+
+    if (Model *cylinderModel = ModelManager::GetInstance()->FindModel("Explosion_Cylinder")) {
+        cylinderModel->SetColor({ 1.0f, 0.25f, 0.02f, 0.25f });
+        cylinderModel->SetAlphaReference(0.0f);
+    }
 }
 
 void ExplosionManager::CreateExplosions(const std::vector<Vector3> &hitPositions) {
@@ -21,11 +37,78 @@ void ExplosionManager::CreateExplosions(const std::vector<Vector3> &hitPositions
             config_.scale, config_.scaleVariance,
             config_.lifeTimeMin, config_.lifeTimeMax,
             config_.posVariance);
+        particleManager_->EmitFireball(
+            "explosionCore", pos, 14, { 1.0f, 0.32f, 0.04f, 0.72f },
+            0.45f, 2.6f, 0.7f, 0.22f);
+
+        Explosion explosion;
+        explosion.position = pos;
+        for (auto &ring : explosion.rings) {
+            ring = std::make_unique<Object3d>();
+            ring->Initialize(Object3dCommon::GetInstance());
+            ring->SetModel("Explosion_OrbitRing");
+            ring->SetTranslate(pos);
+            ring->SetScale({ 0.05f, 0.05f, 0.05f });
+        }
+
+        explosion.cylinder = std::make_unique<Object3d>();
+        explosion.cylinder->Initialize(Object3dCommon::GetInstance());
+        explosion.cylinder->SetModel("Explosion_Cylinder");
+        explosion.cylinder->SetTranslate(pos);
+        explosion.cylinder->SetScale({ 0.2f, 0.2f, 0.2f });
+
+        explosions_.push_back(std::move(explosion));
     }
 }
 
 void ExplosionManager::Update() {
-    
+    constexpr float kDeltaTime = 1.0f / 60.0f;
+
+    for (auto it = explosions_.begin(); it != explosions_.end();) {
+        it->age += kDeltaTime;
+        if (it->age >= it->duration) {
+            it = explosions_.erase(it);
+            continue;
+        }
+
+        const float progress = it->age / it->duration;
+        const float pulse = std::sin(progress * 3.14159265f);
+        const float ringScale = pulse * 3.0f;
+        const float cylinderRadius = pulse * 1.8f;
+        const float cylinderHeight = pulse * 0.28f;
+
+        it->rings[0]->SetScale({ ringScale, ringScale, ringScale });
+        it->rings[0]->SetRotate({ 0.75f, 0.15f, progress * 2.5f });
+        it->rings[0]->Update();
+
+        it->rings[1]->SetScale({ ringScale * 0.92f, ringScale * 0.92f, ringScale * 0.92f });
+        it->rings[1]->SetRotate({ -0.5f, 0.4f, -progress * 2.1f });
+        it->rings[1]->Update();
+
+        it->rings[2]->SetScale({ ringScale * 0.82f, ringScale * 0.82f, ringScale * 0.82f });
+        it->rings[2]->SetRotate({ 0.2f, -0.65f, progress * 1.8f });
+        it->rings[2]->Update();
+
+        it->cylinder->SetTranslate({
+            it->position.x,
+            it->position.y - cylinderHeight * 0.75f,
+            it->position.z
+        });
+        it->cylinder->SetScale({ cylinderRadius, cylinderHeight, cylinderRadius });
+        it->cylinder->SetRotate({ 0.0f, progress * 1.5f, 0.0f });
+        it->cylinder->Update();
+
+        ++it;
+    }
+}
+
+void ExplosionManager::Draw() {
+    for (const Explosion &explosion : explosions_) {
+        for (const auto &ring : explosion.rings) {
+            ring->Draw();
+        }
+        explosion.cylinder->Draw();
+    }
 }
 
 void ExplosionManager::SaveToJson(const std::string &filepath) {
