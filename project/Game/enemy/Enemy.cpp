@@ -28,8 +28,15 @@ void Enemy::Initialize(const Vector3 &position) {
     object_->SetScale(scale_);
 
     position_ = position;
+    rotation_ = { 0.0f, 0.0f, 0.0f };
+    isDead_ = false;
     state_ = EnemyState::Approach;
     attackTimer_ = kAttackInterval;
+
+    // リスポーン直後の描画でもBlenderで設定した地点に表示されるように同期する。
+    object_->SetTranslate(position_);
+    object_->SetRotate(rotation_);
+    object_->Update();
 }
 
 void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
@@ -124,6 +131,35 @@ void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles
         float halfWidth = enemyHalf.x + obsHalf.x;
         float halfHeight = enemyHalf.y + obsHalf.y;
         float halfDepth = enemyHalf.z + obsHalf.z;
+
+        // StageBounds は壁ではなくステージ全体の範囲なので、内側に留める。
+        if (obstacle->IsStageBounds()) {
+            Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
+
+            if (dx > obsHalf.x - enemyHalf.x) {
+                localPushOut.x = (obsHalf.x - enemyHalf.x) - dx;
+            } else if (dx < -(obsHalf.x - enemyHalf.x)) {
+                localPushOut.x = -(obsHalf.x - enemyHalf.x) - dx;
+            }
+
+            if (dy > obsHalf.y - enemyHalf.y) {
+                localPushOut.y = (obsHalf.y - enemyHalf.y) - dy;
+            } else if (dy < -(obsHalf.y - enemyHalf.y)) {
+                localPushOut.y = -(obsHalf.y - enemyHalf.y) - dy;
+            }
+
+            if (dz > obsHalf.z - enemyHalf.z) {
+                localPushOut.z = (obsHalf.z - enemyHalf.z) - dz;
+            } else if (dz < -(obsHalf.z - enemyHalf.z)) {
+                localPushOut.z = -(obsHalf.z - enemyHalf.z) - dz;
+            }
+
+            Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+            position_.x += worldPushOut.x;
+            position_.y += worldPushOut.y;
+            position_.z += worldPushOut.z;
+            continue;
+        }
 
         float overlapX = halfWidth - std::abs(dx);
         float overlapY = halfHeight - std::abs(dy);

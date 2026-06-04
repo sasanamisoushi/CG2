@@ -34,6 +34,7 @@ public:
 
     // 自分の座標を外に教えるゲッター
     Vector3 GetPosition() const { return position_; }
+    float GetCollisionRadius() const { return collisionRadius_; }
 
 private:
     std::unique_ptr<Object3d> object_;
@@ -45,6 +46,7 @@ private:
 
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 1フレームに進む量
+    float collisionRadius_ = 0.3f;
 
     // 寿命（画面外に飛び去った弾をメモリから消すため）
     int lifeTimer_ = 0;

@@ -13,9 +13,11 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	if (type_ == MissileType::Normal) {
 		if (object_->GetModel()) object_->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f }); // 通常弾は黄色
 		object_->SetScale({ 0.3f, 0.3f, 0.3f }); // 通常弾は小さめ
+		collisionRadius_ = 0.3f;
 	} else {
 		if (object_->GetModel()) object_->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f }); // ミサイルは赤
 		object_->SetScale({ 0.5f, 0.5f, 0.5f });
+		collisionRadius_ = 0.5f;
 	}
 
 

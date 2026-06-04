@@ -22,7 +22,7 @@ public:
 	void Finalize();
 
 	// 毎フレーム呼んで、Blenderから最新のデータが届いていたら敵を更新する
-	void Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints);
+	bool Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints);
 
 private:
 	EditorReceiver() = default;
@@ -36,6 +36,7 @@ private:
 	std::mutex dataMutex_; // データの衝突を防ぐ鍵
 
 	std::string latestJsonData_; // 届いた最新のJSON文字列
+	std::string lastAppliedJsonData_;
 	bool hasNewData_ = false;    // 新しいデータが届いたかどうかのフラグ
 };
 

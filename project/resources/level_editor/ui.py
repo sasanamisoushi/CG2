@@ -60,7 +60,7 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         op_player = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="自機スポーン", icon='OUTLINER_OB_ARMATURE')
         op_player.spawn_type = "PLAYER" # 引数として PLAYER を渡す
         
-        op_enemy = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="敵スポーン", icon='OUTLINER_OB_ARMATURE')
+        op_enemy = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="敵リスポーン地点", icon='OUTLINER_OB_ARMATURE')
         op_enemy.spawn_type = "ENEMY"   # 引数として ENEMY を渡す
 
         # エクスポート用の区切り線、ラベル、実行ボタン

@@ -4,6 +4,7 @@ import os
 
 import bpy
 import bpy_extras
+from mathutils import Vector
 
 
 def _default_scene_json_path():
@@ -11,6 +12,17 @@ def _default_scene_json_path():
     if not blend_dir:
         return "scene.json"
     return os.path.join(blend_dir, "scene.json")
+
+
+def _get_world_transform(obj):
+    trans, rot, scale = obj.matrix_world.decompose()
+
+    # 敵モデルをリスポーン地点として使う場合は、原点ではなく見た目の中心を送る。
+    if obj.type == "MESH" and getattr(obj, "game_obj_type", "NONE") == "ENEMY":
+        local_center = sum((Vector(corner) for corner in obj.bound_box), Vector()) / 8.0
+        trans = obj.matrix_world @ local_center
+
+    return trans, rot, scale
 
 
 class MYADDON_OT_stretch_vertex(bpy.types.Operator):
@@ -45,7 +57,7 @@ class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelp
     filename_ext = ".json"
 
     def _build_object_data(self, obj):
-        trans, rot, scale = obj.matrix_local.decompose()
+        trans, rot, scale = _get_world_transform(obj)
         rot = rot.to_euler()
         rot.x, rot.y, rot.z = [math.degrees(v) for v in rot]
 
@@ -155,9 +167,9 @@ class MYADDON_OT_create_spawn_point(bpy.types.Operator):
             obj.game_obj_type = 'PLAYER'
             print("自機のスポーン地点を配置しました。")
         else:
-            obj.name = "EnemySpawn"
+            obj.name = "EnemyRespawn"
             obj.game_obj_type = 'ENEMY'
-            print("敵のスポーン地点を配置しました。")
+            print("敵のリスポーン地点を配置しました。")
 
         return {'FINISHED'}
 

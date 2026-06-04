@@ -13,6 +13,10 @@
 #include "engine/Utility/StageLoader.h"
 #include "Game/editor/EditorReceiver.h"
 
+namespace {
+	constexpr int kEnemyRespawnDelayFrames = 180;
+	constexpr int kNoRespawnTimer = -1;
+}
 
 
 void GamePlayScene::Initialize() {
@@ -208,10 +212,43 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 }
 
 void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
-	for (const Vector3 &spawnPoint : enemySpawnPoints_) {
-		auto enemy = std::make_unique<Enemy>();
-		enemy->Initialize(spawnPoint);
-		enemies_.push_back(std::move(enemy));
+	enemies_.clear();
+	enemyRespawnTimers_.assign(enemySpawnPoints_.size(), kNoRespawnTimer);
+
+	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawnPoints_.size(); ++spawnPointIndex) {
+		SpawnEnemyFromSpawnPoint(spawnPointIndex);
+	}
+}
+
+void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
+	if (spawnPointIndex >= enemySpawnPoints_.size()) {
+		return;
+	}
+
+	auto enemy = std::make_unique<Enemy>();
+	enemy->Initialize(enemySpawnPoints_[spawnPointIndex]);
+	enemy->SetSpawnPointIndex(spawnPointIndex);
+	enemies_.push_back(std::move(enemy));
+
+	if (spawnPointIndex < enemyRespawnTimers_.size()) {
+		enemyRespawnTimers_[spawnPointIndex] = kNoRespawnTimer;
+	}
+}
+
+void GamePlayScene::UpdateEnemyRespawns() {
+	for (size_t spawnPointIndex = 0; spawnPointIndex < enemyRespawnTimers_.size(); ++spawnPointIndex) {
+		int &timer = enemyRespawnTimers_[spawnPointIndex];
+		if (timer < 0) {
+			continue;
+		}
+
+		if (timer > 0) {
+			--timer;
+		}
+
+		if (timer == 0) {
+			SpawnEnemyFromSpawnPoint(spawnPointIndex);
+		}
 	}
 }
 
@@ -235,7 +272,9 @@ void GamePlayScene::Finalize() {
 void GamePlayScene::Update() {
 
 	// Blenderからデータが来ていたら敵をリアルタイム更新！
-	EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawnPoints_);
+	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawnPoints_)) {
+		SpawnEnemiesFromSpawnPoints();
+	}
 
 
 	// =========================================================
@@ -279,21 +318,21 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ゲームオーバー判定と演出進行
 	// ==========================================
-	if (!isGameOver_ && player_ && player_->IsDead()) {
-		isGameOver_ = true;
-		gameOverTimer_ = 0;
+	//if (!isGameOver_ && player_ && player_->IsDead()) {
+	//	isGameOver_ = true;
+	//	gameOverTimer_ = 0;
 
-		// 💥 自機がやられた時の大爆発パーティクルを生成！
-		std::vector<Vector3> playerHitPos = { player_->GetPosition() };
-		if (explosionManager_) {
-			explosionManager_->CreateExplosions(playerHitPos);
-		}
+	//	// 💥 自機がやられた時の大爆発パーティクルを生成！
+	//	std::vector<Vector3> playerHitPos = { player_->GetPosition() };
+	//	if (explosionManager_) {
+	//		explosionManager_->CreateExplosions(playerHitPos);
+	//	}
 
-		// 🎵 BGMを停止して絶望感を演出
-		if (pVoice2) {
-			pVoice2->Stop();
-		}
-	}
+	//	// 🎵 BGMを停止して絶望感を演出
+	//	if (pVoice2) {
+	//		pVoice2->Stop();
+	//	}
+	//}
 
 	bool shouldUpdateGame = true;
 
@@ -467,11 +506,17 @@ void GamePlayScene::Update() {
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
 			(*it)->Update(playerPos, enemyBulletManager_.get(), obstacles_);
 			if ((*it)->IsDead()) {
+				size_t spawnPointIndex = (*it)->GetSpawnPointIndex();
+				if (spawnPointIndex < enemyRespawnTimers_.size() &&
+					enemyRespawnTimers_[spawnPointIndex] == kNoRespawnTimer) {
+					enemyRespawnTimers_[spawnPointIndex] = kEnemyRespawnDelayFrames;
+				}
 				it = enemies_.erase(it); // 当たった敵はリストから消滅
 			} else {
 				++it;
 			}
 		}
+		UpdateEnemyRespawns();
 
 		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します）
 		for (auto &obstacle : obstacles_) {
@@ -743,8 +788,8 @@ void GamePlayScene::Update() {
 			if (!enemy->IsDead()) {
 				// AABB: Red, scaled from Blender object.
 				addAABB(enemy->GetPosition(), enemy->GetWorldHalfExtents(), { 1.0f, 0.0f, 0.0f, 1.0f });
-				// Sphere (対プレイヤーミサイル用当たり判定): Red/Orange (radius: 1.0f)
-				addSphere(enemy->GetPosition(), 1.0f, { 1.0f, 0.3f, 0.0f, 1.0f });
+				// Sphere (対プレイヤーミサイル用当たり判定): Red/Orange
+				addSphere(enemy->GetPosition(), enemy->GetCollisionRadius(), { 1.0f, 0.3f, 0.0f, 1.0f });
 			}
 		}
 
@@ -753,7 +798,7 @@ void GamePlayScene::Update() {
 			for (const auto& missile : missileManager_->GetMissiles()) {
 				if (!missile->IsDead()) {
 					// Sphere: Magenta (radius: 0.5f)
-					addSphere(missile->GetPosition(), 0.5f, { 1.0f, 0.0f, 1.0f, 1.0f });
+					addSphere(missile->GetPosition(), missile->GetCollisionRadius(), { 1.0f, 0.0f, 1.0f, 1.0f });
 				}
 			}
 		}

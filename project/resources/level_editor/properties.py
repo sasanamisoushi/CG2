@@ -16,7 +16,7 @@ def register():
         items=[
             ('NONE', "未設定", ""),
             ('PLAYER', "プレイヤー (Player)", ""),
-            ('ENEMY', "敵 (Enemy)", ""),
+            ('ENEMY', "敵リスポーン地点 (Enemy Respawn)", ""),
             ('OBSTACLE', "障害物 (Obstacle)", "")
         ],
         default='NONE'

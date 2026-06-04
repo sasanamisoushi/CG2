@@ -1,6 +1,7 @@
 #pragma once
 #include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
+#include <cstddef>
 #include <memory>
 #include <list>
 
@@ -18,6 +19,8 @@ enum class EnemyState {
 
 class Enemy {
 public:
+    static constexpr size_t kNoSpawnPoint = static_cast<size_t>(-1);
+
     // 初期化（発生位置を渡す）
     void Initialize(const Vector3 &position);
 
@@ -44,6 +47,14 @@ public:
         return absScale;
     }
 
+    float GetCollisionRadius() const {
+        Vector3 halfExtents = GetWorldHalfExtents();
+        float radius = halfExtents.x;
+        if (halfExtents.y > radius) radius = halfExtents.y;
+        if (halfExtents.z > radius) radius = halfExtents.z;
+        return radius;
+    }
+
     // ミサイルと衝突したときの処理
     void OnCollision();
 
@@ -55,6 +66,10 @@ public:
 
     // 回転
     void SetRotation(const Vector3 &rotation) { rotation_ = rotation; }
+
+    // Blenderで配置したリスポーン地点との対応
+    void SetSpawnPointIndex(size_t index) { spawnPointIndex_ = index; }
+    size_t GetSpawnPointIndex() const { return spawnPointIndex_; }
 
     // 思考・行動処理
     void UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager); 
@@ -77,5 +92,6 @@ private:
 
     // 死んだかどうかのフラグ
     bool isDead_ = false;
+    size_t spawnPointIndex_ = kNoSpawnPoint;
 };
 

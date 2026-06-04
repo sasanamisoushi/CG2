@@ -21,15 +21,29 @@ EditorReceiver *EditorReceiver::GetInstance() {
 }
 
 void EditorReceiver::Initialize() {
-	isRunning_ = true;
-	receiveThread_ = std::thread(&EditorReceiver::ReceiveLoop, this); // 裏で受信スタート！
+    {
+        std::lock_guard<std::mutex> lock(dataMutex_);
+        // 新しいGameplayでは、現在のBlenderデータを同じ内容でも再適用する。
+        latestJsonData_.clear();
+        lastAppliedJsonData_.clear();
+        hasNewData_ = false;
+    }
+
+    isRunning_ = true;
+    receiveThread_ = std::thread(&EditorReceiver::ReceiveLoop, this); // 裏で受信スタート！
 }
 
 void EditorReceiver::Finalize() {
 	isRunning_ = false;
-	if (receiveThread_.joinable()) {
-		receiveThread_.join(); // スレッドを安全に終了させる
-	}
+    if (receiveThread_.joinable()) {
+        receiveThread_.join(); // スレッドを安全に終了させる
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(dataMutex_);
+        latestJsonData_.clear();
+        hasNewData_ = false;
+    }
 }
 
 void EditorReceiver::ReceiveLoop() {
@@ -73,13 +87,17 @@ void EditorReceiver::ReceiveLoop() {
 	WSACleanup();
 }
 
-void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints) {
+bool EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints) {
 	std::string jsonStr;
 	{
 		std::lock_guard<std::mutex> lock(dataMutex_);
-		if (!hasNewData_) return; // 💡新しいデータが無ければ何もしない（一瞬で終わる）
+		if (!hasNewData_) return false; // 💡新しいデータが無ければ何もしない（一瞬で終わる）
 		jsonStr = latestJsonData_;
 		hasNewData_ = false;
+	}
+
+	if (jsonStr == lastAppliedJsonData_) {
+		return false;
 	}
 
 	// 新しいデータが届いていたら、ゲーム内の敵を一気に書き換える！
@@ -128,10 +146,6 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 						}
 					} else if (category == "ENEMY") {
 						enemySpawnPoints.push_back(position);
-						auto newEnemy = std::make_unique<Enemy>();
-						newEnemy->Initialize(position);
-						newEnemy->SetRotation(rotation);
-						enemies.push_back(std::move(newEnemy));
 					} else if (category == "OBSTACLE") {
 						// Blenderのオブジェクト名をモデル名として使う
 						std::string modelName = "ObstacleBox";
@@ -156,10 +170,6 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 				// 互換性用（Blenderで種類を設定し忘れた時のための予備）
 				else if (objData.contains("enemy")) {
 					enemySpawnPoints.push_back(position);
-					auto newEnemy = std::make_unique<Enemy>();
-					newEnemy->Initialize(position);
-					newEnemy->SetRotation(rotation);
-					enemies.push_back(std::move(newEnemy));
 				}
 				else if (objData.contains("type") && objData["type"].get<std::string>() == "MESH") {
 					std::string modelName = "ObstacleBox";
@@ -180,8 +190,11 @@ void EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 					obstacles.push_back(std::move(newObstacle));
 				}
 			}
+			lastAppliedJsonData_ = jsonStr;
+			return true;
 		}
 	} catch (...) {
 		// もし通信が途切れたり変なデータが来ても無視してゲームを落とさない
 	}
+	return false;
 }

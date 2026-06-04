@@ -46,6 +46,8 @@ public:
 private:
 	void SetDebugCameraActive(bool isActive);
 	void SpawnEnemiesFromSpawnPoints();
+	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
+	void UpdateEnemyRespawns();
 
 	//シーンリソース
 	std::unique_ptr<Camera> camera;
@@ -171,6 +173,7 @@ private:
 	std::list<std::unique_ptr<Enemy>> enemies_;
 	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
 	std::vector<Vector3> enemySpawnPoints_;
+	std::vector<int> enemyRespawnTimers_;
 
 
 	// 障害物
