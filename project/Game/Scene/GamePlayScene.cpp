@@ -862,6 +862,7 @@ void GamePlayScene::Draw() {
 	for (const auto &obstacle : obstacles_) {
 		obstacle->Draw();
 	}
+	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
 	//3Dオブジェクトの描画
 	if (showPlane) {
@@ -869,6 +870,7 @@ void GamePlayScene::Draw() {
 			object3d->Draw();
 		}
 	}
+	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
 	// アニメーションモデルの個別描画制御
 	if (showModel && myModelObject) {

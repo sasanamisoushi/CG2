@@ -3,12 +3,86 @@
 #include "engine/Math/MyMath.h"
 #include "Game/enemy/EnemyBulletManager.h"
 #include "Game/obstacle/Obstacle.h"
+#include <algorithm>
+#include <cmath>
 
 namespace {
-    constexpr float kAttackRadius = 120.0f;
-    constexpr int kAttackInterval = 300;
-    constexpr float kEnemyMoveSpeed = 0.2f;
-    constexpr float kEnemyBulletSpeed = 0.6f;
+    constexpr float kAttackRadius = 12.0f;
+    constexpr float kBreakAwayRadius = 1.2f;
+    constexpr float kRetreatStartRadius = 10.0f;
+    constexpr int kRetreatCycleFrames = 300;
+    constexpr int kRetreatStartFrame = 170;
+    constexpr int kRetreatDurationFrames = 90;
+    constexpr int kAttackInterval = 90;
+    constexpr float kEnemyCruiseSpeed = 0.05f;
+    constexpr float kEnemyBoostSpeed = 0.08f;
+    constexpr float kEnemyTurnBlend = 0.045f;
+    constexpr float kEnemyAttackTurnBlend = 0.065f;
+    constexpr float kEnemyRetreatTurnBlend = 0.085f;
+    constexpr float kEnemyAccelerationBlend = 0.035f;
+    constexpr float kEnemyBankResponse = 0.12f;
+    constexpr float kEnemyMaxBankAngle = 0.75f;
+    constexpr float kEnemyBulletSpeed = 0.18f;
+    constexpr float kPi = 3.1415926535f;
+
+    float LengthSq(const Vector3 &v) {
+        return v.x * v.x + v.y * v.y + v.z * v.z;
+    }
+
+    float Length(const Vector3 &v) {
+        return std::sqrt(LengthSq(v));
+    }
+
+    Vector3 Add(const Vector3 &a, const Vector3 &b) {
+        return { a.x + b.x, a.y + b.y, a.z + b.z };
+    }
+
+    Vector3 Subtract(const Vector3 &a, const Vector3 &b) {
+        return { a.x - b.x, a.y - b.y, a.z - b.z };
+    }
+
+    Vector3 Scale(const Vector3 &v, float scalar) {
+        return { v.x * scalar, v.y * scalar, v.z * scalar };
+    }
+
+    Vector3 NormalizeOr(const Vector3 &v, const Vector3 &fallback) {
+        float length = Length(v);
+        if (length <= 0.001f) {
+            return fallback;
+        }
+        return Scale(v, 1.0f / length);
+    }
+
+    Vector3 ForwardFromRotation(const Vector3 &rotation) {
+        Matrix4x4 rotMat = MyMath::Multiply(
+            MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation.x), MyMath::MakeRotateYMatrix(rotation.y)),
+            MyMath::MakeRotateZMatrix(rotation.z));
+        return NormalizeOr(MyMath::Transform({ 0.0f, 0.0f, 1.0f }, rotMat), { 0.0f, 0.0f, 1.0f });
+    }
+
+    Vector3 ToEulerRotation(const Vector3 &forward, float bankAngle) {
+        Vector3 normalizedForward = NormalizeOr(forward, { 0.0f, 0.0f, 1.0f });
+        float clampedY = std::clamp(normalizedForward.y, -1.0f, 1.0f);
+        return {
+            -std::asin(clampedY),
+            std::atan2(normalizedForward.x, normalizedForward.z),
+            bankAngle
+        };
+    }
+
+    int GetFlightSide(size_t spawnPointIndex, const Vector3 &position) {
+        if (spawnPointIndex != Enemy::kNoSpawnPoint) {
+            return (spawnPointIndex % 2 == 0) ? 1 : -1;
+        }
+        return (position.x >= 0.0f) ? 1 : -1;
+    }
+
+    int GetRetreatPhaseOffset(size_t spawnPointIndex, const Vector3 &position) {
+        if (spawnPointIndex != Enemy::kNoSpawnPoint) {
+            return static_cast<int>((spawnPointIndex * 73) % kRetreatCycleFrames);
+        }
+        return static_cast<int>(std::abs(position.x) * 37.0f) % kRetreatCycleFrames;
+    }
 }
 
 void Enemy::Initialize(const Vector3 &position) {
@@ -29,6 +103,11 @@ void Enemy::Initialize(const Vector3 &position) {
 
     position_ = position;
     rotation_ = { 0.0f, 0.0f, 0.0f };
+    forward_ = ForwardFromRotation(rotation_);
+    currentSpeed_ = kEnemyCruiseSpeed;
+    velocity_ = Scale(forward_, currentSpeed_);
+    bankAngle_ = 0.0f;
+    flightTimer_ = 0;
     isDead_ = false;
     state_ = EnemyState::Approach;
     attackTimer_ = kAttackInterval;
@@ -68,39 +147,99 @@ void Enemy::OnCollision() {
     isDead_ = true;
 }
 
+void Enemy::SetRotation(const Vector3 &rotation) {
+    rotation_ = rotation;
+    bankAngle_ = rotation.z;
+    forward_ = ForwardFromRotation(rotation_);
+    currentSpeed_ = (currentSpeed_ > 0.0f) ? currentSpeed_ : kEnemyCruiseSpeed;
+    velocity_ = Scale(forward_, currentSpeed_);
+
+    if (object_) {
+        object_->SetRotate(rotation_);
+    }
+}
+
 void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
-    Vector3 toPlayer = {
-        playerPos.x - position_.x,
-        playerPos.y - position_.y,
-        playerPos.z - position_.z
-    };
+    flightTimer_++;
 
-    float distSqToPlayer = toPlayer.x * toPlayer.x + toPlayer.y * toPlayer.y + toPlayer.z * toPlayer.z;
+    Vector3 toPlayer = Subtract(playerPos, position_);
+    float distSqToPlayer = LengthSq(toPlayer);
     float distToPlayer = std::sqrt(distSqToPlayer);
-    Vector3 directionToPlayer = { 0.0f, 0.0f, -1.0f };
-    if (distToPlayer > 0.001f) {
-        directionToPlayer.x = toPlayer.x / distToPlayer;
-        directionToPlayer.y = toPlayer.y / distToPlayer;
-        directionToPlayer.z = toPlayer.z / distToPlayer;
+    Vector3 directionToPlayer = NormalizeOr(toPlayer, forward_);
+
+    bool isInAttackRange = distSqToPlayer <= kAttackRadius * kAttackRadius;
+    state_ = isInAttackRange ? EnemyState::Attack : EnemyState::Approach;
+
+    int flightSide = GetFlightSide(spawnPointIndex_, position_);
+    Vector3 worldUp = { 0.0f, 1.0f, 0.0f };
+    Vector3 sideDirection = MyMath::Cross(worldUp, directionToPlayer);
+    if (LengthSq(sideDirection) <= 0.001f) {
+        sideDirection = { static_cast<float>(flightSide), 0.0f, 0.0f };
+    } else {
+        sideDirection = Scale(NormalizeOr(sideDirection, { 1.0f, 0.0f, 0.0f }), static_cast<float>(flightSide));
     }
 
-    if (distSqToPlayer > kAttackRadius * kAttackRadius) {
-        state_ = EnemyState::Approach;
-        position_.x += directionToPlayer.x * kEnemyMoveSpeed;
-        position_.y += directionToPlayer.y * kEnemyMoveSpeed;
-        position_.z += directionToPlayer.z * kEnemyMoveSpeed;
-        return;
+    int retreatPhase = (flightTimer_ + GetRetreatPhaseOffset(spawnPointIndex_, position_)) % kRetreatCycleFrames;
+    bool isRetreating = isInAttackRange &&
+        distSqToPlayer <= kRetreatStartRadius * kRetreatStartRadius &&
+        retreatPhase >= kRetreatStartFrame &&
+        retreatPhase < kRetreatStartFrame + kRetreatDurationFrames;
+
+    float wave = std::sin(static_cast<float>(flightTimer_) * 0.035f + static_cast<float>(flightSide) * kPi * 0.5f);
+    float desiredAltitude = playerPos.y + 7.0f + wave * 4.0f;
+    float altitudeCorrection = std::clamp((desiredAltitude - position_.y) / 45.0f, -0.35f, 0.35f);
+
+    Vector3 desiredDirection = directionToPlayer;
+    float desiredSpeed = kEnemyBoostSpeed;
+    float turnBlend = kEnemyTurnBlend;
+
+    if (isRetreating) {
+        desiredDirection = Add(
+            Scale(directionToPlayer, -1.0f),
+            Scale(sideDirection, 0.55f));
+        desiredDirection.y += altitudeCorrection * 0.8f;
+
+        desiredSpeed = kEnemyBoostSpeed;
+        turnBlend = kEnemyRetreatTurnBlend;
+    } else if (isInAttackRange) {
+        float tangentWeight = (distToPlayer < kBreakAwayRadius) ? 1.25f : 0.75f;
+        float noseWeight = (distToPlayer < kBreakAwayRadius) ? -0.15f : 0.65f;
+
+        desiredDirection = Add(
+            Scale(directionToPlayer, noseWeight),
+            Scale(sideDirection, tangentWeight));
+        desiredDirection.y += altitudeCorrection;
+
+        desiredSpeed = (distToPlayer < kBreakAwayRadius) ? kEnemyBoostSpeed : kEnemyCruiseSpeed;
+        turnBlend = kEnemyAttackTurnBlend;
+    } else {
+        desiredDirection.y += altitudeCorrection * 0.5f;
     }
 
-    state_ = EnemyState::Attack;
+    desiredDirection = NormalizeOr(desiredDirection, directionToPlayer);
+
+    Vector3 oldForward = forward_;
+    forward_ = NormalizeOr(Add(Scale(forward_, 1.0f - turnBlend), Scale(desiredDirection, turnBlend)), oldForward);
+
+    float targetSpeed = desiredSpeed;
+    currentSpeed_ += (targetSpeed - currentSpeed_) * kEnemyAccelerationBlend;
+    velocity_ = Scale(forward_, currentSpeed_);
+
+    position_.x += velocity_.x;
+    position_.y += velocity_.y;
+    position_.z += velocity_.z;
+
+    float yawTurn = MyMath::Dot(MyMath::Cross(oldForward, forward_), worldUp);
+    float targetBankAngle = std::clamp(-yawTurn * 18.0f, -kEnemyMaxBankAngle, kEnemyMaxBankAngle);
+    bankAngle_ += (targetBankAngle - bankAngle_) * kEnemyBankResponse;
+    rotation_ = ToEulerRotation(forward_, bankAngle_);
+
     attackTimer_++;
-    if (attackTimer_ >= kAttackInterval && bulletManager) {
-        Vector3 velocity = {
-            directionToPlayer.x * kEnemyBulletSpeed,
-            directionToPlayer.y * kEnemyBulletSpeed,
-            directionToPlayer.z * kEnemyBulletSpeed
-        };
-        bulletManager->Shoot(position_, velocity);
+    if (!isRetreating && isInAttackRange && attackTimer_ >= kAttackInterval && bulletManager) {
+        Vector3 shootDirection = NormalizeOr(Add(Scale(directionToPlayer, 0.9f), Scale(forward_, 0.1f)), directionToPlayer);
+        Vector3 bulletPosition = Add(position_, Scale(forward_, 1.2f));
+        Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);
+        bulletManager->Shoot(bulletPosition, bulletVelocity);
         attackTimer_ = 0;
     }
 }

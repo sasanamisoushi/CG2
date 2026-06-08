@@ -16,6 +16,7 @@ public:
 
 	//エフェクト用描画設定
 	void SetEffectDrawSettings();
+	void SetLineDrawSettings();
 
 	//シェーダーの読み込み
 	void LoadShaders();
@@ -49,6 +50,7 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> effectPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> linePipelineState_;
 
 	// Shader blobs
 	Microsoft::WRL::ComPtr<IDxcBlob> vertexShaderBlob;

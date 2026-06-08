@@ -65,7 +65,7 @@ public:
     void SetScale(const Vector3 &scale) { scale_ = scale; if (object_) object_->SetScale(scale_); }
 
     // 回転
-    void SetRotation(const Vector3 &rotation) { rotation_ = rotation; }
+    void SetRotation(const Vector3 &rotation);
 
     // Blenderで配置したリスポーン地点との対応
     void SetSpawnPointIndex(size_t index) { spawnPointIndex_ = index; }
@@ -89,6 +89,11 @@ private:
     // 回転を保持する変数
     Vector3 rotation_ = { 0.0f, 0.0f, 0.0f };
     Vector3 scale_ = { 1.0f, 1.0f, 1.0f };
+    Vector3 forward_ = { 0.0f, 0.0f, 1.0f };
+    Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
+    float currentSpeed_ = 0.0f;
+    float bankAngle_ = 0.0f;
+    int flightTimer_ = 0;
 
     // 死んだかどうかのフラグ
     bool isDead_ = false;

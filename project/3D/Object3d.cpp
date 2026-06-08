@@ -100,6 +100,10 @@ void Object3d::Draw() {
 		return;
 	}
 
+	if (model->GetModelData().isLine) {
+		object3dCommon->SetLineDrawSettings();
+	}
+
 	// スキニング実行
 	if (skinCluster.isValid) {
 		if (model->Skinning(skinCluster)) {
