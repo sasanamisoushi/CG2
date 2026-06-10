@@ -1,24 +1,163 @@
 #include "StageLoader.h"
+#include "StageValidation.h"
 #include "externals/json.hpp"
+#include "3D/ModelManager.h"
 #include "Game/enemy/Enemy.h" 
 #include "Game/obstacle/Obstacle.h"
 #include "Game/Player/Player.h"
 #include <Windows.h>
 #include <fstream>
+#include <unordered_map>
 
 using json = nlohmann::json;
+
+namespace {
+
+std::wstring Utf8ToWide(const std::string& text) {
+	if (text.empty()) {
+		return {};
+	}
+
+	int wideSize = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, nullptr, 0);
+	if (wideSize <= 0) {
+		return std::wstring(text.begin(), text.end());
+	}
+
+	std::wstring wideText(static_cast<size_t>(wideSize), L'\0');
+	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, wideText.data(), wideSize);
+	if (!wideText.empty() && wideText.back() == L'\0') {
+		wideText.pop_back();
+	}
+	return wideText;
+}
+
+Vector3 ToGamePosition(const json &point) {
+	return {
+		point[0].get<float>(),
+		point[2].get<float>(),
+		point[1].get<float>()
+	};
+}
+
+std::unordered_map<std::string, EnemyFlightPath> LoadFlightPaths(const json &root) {
+	std::unordered_map<std::string, EnemyFlightPath> paths;
+
+	if (!root.contains("paths") || !root["paths"].is_array()) {
+		return paths;
+	}
+
+	for (const auto &pathData : root["paths"]) {
+		if (!pathData.is_object() || !pathData.contains("id") || !pathData["id"].is_string()) {
+			continue;
+		}
+
+		EnemyFlightPath path;
+		path.loop = pathData.value("loop", false);
+		path.speed = pathData.value("speed", 0.05f);
+
+		if (pathData.contains("points") && pathData["points"].is_array()) {
+			for (const auto &point : pathData["points"]) {
+				if (point.is_array() && point.size() == 3) {
+					path.points.push_back(ToGamePosition(point));
+				}
+			}
+		}
+
+		paths[pathData["id"].get<std::string>()] = std::move(path);
+	}
+
+	return paths;
+}
+
+EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position, const Vector3 &rotation, const std::unordered_map<std::string, EnemyFlightPath> &paths) {
+	EnemySpawnData spawnData;
+	spawnData.position = position;
+	spawnData.rotation = rotation;
+
+	if (objData.contains("path_id") && objData["path_id"].is_string()) {
+		auto pathIt = paths.find(objData["path_id"].get<std::string>());
+		if (pathIt != paths.end()) {
+			spawnData.flightPath = pathIt->second;
+		}
+	}
+
+	return spawnData;
+}
+
+std::string GetObjectBaseName(const json& objData) {
+	if (!objData.contains("name") || !objData["name"].is_string()) {
+		return "ObstacleBox";
+	}
+
+	std::string objName = objData["name"].get<std::string>();
+	size_t dotPos = objName.find('.');
+	return (dotPos != std::string::npos) ? objName.substr(0, dotPos) : objName;
+}
+
+bool ResourceFileExists(const std::string& fileName) {
+	std::string filePath = "resources/" + fileName;
+	std::wstring widePath = Utf8ToWide(filePath);
+	DWORD attributes = GetFileAttributesW(widePath.c_str());
+	return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+bool TryLoadModelFile(const std::string& modelFile) {
+	if (modelFile.empty()) {
+		return false;
+	}
+
+	ModelManager* modelManager = ModelManager::GetInstance();
+	if (modelManager->FindModel(modelFile) != nullptr) {
+		return true;
+	}
+
+	if (!ResourceFileExists(modelFile)) {
+		OutputDebugStringA((" [StageLoader] Model file not found: resources/" + modelFile + "\n").c_str());
+		return false;
+	}
+
+	modelManager->LoadModel(modelFile);
+	return modelManager->FindModel(modelFile) != nullptr;
+}
+
+std::string ResolveObstacleModelName(const json& objData) {
+	std::string objectName = GetObjectBaseName(objData);
+	if (objectName.find("StageBounds") != std::string::npos) {
+		return objectName;
+	}
+
+	if (objData.contains("model") && objData["model"].is_string()) {
+		std::string modelFile = objData["model"].get<std::string>();
+		if (TryLoadModelFile(modelFile)) {
+			return modelFile;
+		}
+	}
+
+	return objectName;
+}
+
+void ApplyFlightPath(Enemy &enemy, const EnemySpawnData &spawnData) {
+	if (spawnData.flightPath.IsValid()) {
+		enemy.SetFlightPath(spawnData.flightPath.points, spawnData.flightPath.loop, spawnData.flightPath.speed);
+	}
+}
+
+}
 
 bool StageLoader::LoadSceneJson(
 	const std::string &filePath, 
 	std::list<std::unique_ptr<Enemy>> &enemies,
 	std::list<std::unique_ptr<Obstacle>> &obstacles,
 	Player *player,
-	std::vector<Vector3> *enemySpawnPoints) {
+	std::vector<EnemySpawnData> *enemySpawns) {
 	
 	// ファイルを開く
 	std::ifstream ifs(filePath);
 	if (!ifs.is_open()) {
 		OutputDebugStringA((" [StageLoader] File not found: " + filePath + "\n").c_str());
+#ifdef CG2_ENABLE_STAGE_VALIDATION
+		StageValidation::SetErrorReport(filePath, "scene.json が見つかりません: " + filePath);
+#endif
 		return false;
 	}
 
@@ -29,8 +168,20 @@ bool StageLoader::LoadSceneJson(
 	} catch (const json::parse_error &e) {
 		std::string errorMsg = " [StageLoader] Parse error: " + std::string(e.what()) + "\n";
 		OutputDebugStringA(errorMsg.c_str());
+#ifdef CG2_ENABLE_STAGE_VALIDATION
+		StageValidation::SetErrorReport(filePath, "JSON の解析に失敗しました: " + std::string(e.what()));
+#endif
 		return false;
 	}
+
+#ifdef CG2_ENABLE_STAGE_VALIDATION
+	const StageValidation::Report &validationReport = StageValidation::ValidateSceneJson(root, filePath);
+	if (validationReport.HasErrors()) {
+		return false;
+	}
+#endif
+
+	std::unordered_map<std::string, EnemyFlightPath> flightPaths = LoadFlightPaths(root);
 
 	// "objects" 配列をループで回す
 	if (root.contains("objects") && root["objects"].is_array()) {
@@ -57,16 +208,6 @@ bool StageLoader::LoadSceneJson(
 			}
 
 			// 2. 「敵」のデータなら、生成してリストに追加！
-			auto getModelName = [&]() {
-				std::string modelName = "ObstacleBox";
-				if (objData.contains("name")) {
-					std::string objName = objData["name"].get<std::string>();
-					size_t dotPos = objName.find('.');
-					modelName = (dotPos != std::string::npos) ? objName.substr(0, dotPos) : objName;
-				}
-				return modelName;
-			};
-
 			if (objData.contains("category")) {
 				std::string category = objData["category"].get<std::string>();
 
@@ -79,12 +220,14 @@ bool StageLoader::LoadSceneJson(
 				}
 
 				if (category == "ENEMY") {
-					if (enemySpawnPoints) {
-						enemySpawnPoints->push_back(position);
+					EnemySpawnData spawnData = BuildEnemySpawnData(objData, position, rotation, flightPaths);
+					if (enemySpawns) {
+						enemySpawns->push_back(spawnData);
 					} else {
 						auto newEnemy = std::make_unique<Enemy>();
-						newEnemy->Initialize(position);
-						newEnemy->SetRotation(rotation);
+						newEnemy->Initialize(spawnData.position);
+						newEnemy->SetRotation(spawnData.rotation);
+						ApplyFlightPath(*newEnemy, spawnData);
 						enemies.push_back(std::move(newEnemy));
 					}
 					continue;
@@ -92,7 +235,7 @@ bool StageLoader::LoadSceneJson(
 
 				if (category == "OBSTACLE") {
 					auto newObstacle = std::make_unique<Obstacle>();
-					std::string modelName = getModelName();
+					std::string modelName = ResolveObstacleModelName(objData);
 					newObstacle->Initialize(modelName, position, rotation, scale);
 					if (modelName.find("StageBounds") != std::string::npos) {
 						newObstacle->SetStageBounds(true);
@@ -107,12 +250,14 @@ bool StageLoader::LoadSceneJson(
 				std::string enemyType = objData["enemy"]["type"].get<std::string>();
 
 				// 敵を実体化！
-				if (enemySpawnPoints) {
-					enemySpawnPoints->push_back(position);
+				EnemySpawnData spawnData = BuildEnemySpawnData(objData, position, rotation, flightPaths);
+				if (enemySpawns) {
+					enemySpawns->push_back(spawnData);
 				} else {
 					auto newEnemy = std::make_unique<Enemy>();
-					newEnemy->Initialize(position);
-					newEnemy->SetRotation(rotation);
+					newEnemy->Initialize(spawnData.position);
+					newEnemy->SetRotation(spawnData.rotation);
+					ApplyFlightPath(*newEnemy, spawnData);
 					enemies.push_back(std::move(newEnemy));
 				}
 
@@ -120,18 +265,7 @@ bool StageLoader::LoadSceneJson(
 			}
 			// 3. 「障害物」のデータなら、生成してリストに追加！
 			else if (objData.contains("type") && objData["type"].get<std::string>() == "MESH") {
-				std::string modelName = "ObstacleBox"; // デフォルト
-				if (objData.contains("name")) {
-					std::string objName = objData["name"].get<std::string>();
-					
-					// Blenderで名前が重複した際につくサフィックス（.001など）を切り取る
-					size_t dotPos = objName.find('.');
-					if (dotPos != std::string::npos) {
-						modelName = objName.substr(0, dotPos);
-					} else {
-						modelName = objName;
-					}
-				}
+				std::string modelName = ResolveObstacleModelName(objData);
 
 				auto newObstacle = std::make_unique<Obstacle>();
 				newObstacle->Initialize(modelName, position, rotation, scale);

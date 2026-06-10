@@ -7,6 +7,7 @@
 #include "engine/Particle/ParticleEmitter.h"
 #include "engine/Particle/ExplosionManager.h"
 #include "engine/Audio/AudioManager.h"
+#include "engine/Utility/StageLoader.h"
 #include "Game/base/BaseScene.h"
 #include "Game/Player/Player.h"
 #include "3D/Skybox.h"
@@ -45,6 +46,8 @@ public:
 
 private:
 	void SetDebugCameraActive(bool isActive);
+	void ReloadSceneJson();
+	void ResetEditorPreview();
 	void SpawnEnemiesFromSpawnPoints();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
 	void UpdateEnemyRespawns();
@@ -139,11 +142,11 @@ private:
 
 	// =====================================================
 	// デバッグ用フリーカメラ
-	// F1 キーで自機追従 ⇔ フリー移動カメラを切り替え
 	// フリーカメラ中は WASD: 移動, 矢印: 回転, Q/E: ロール
 	// =====================================================
 	std::unique_ptr<FlyCamera> debugFlyCamera_;
 	bool isDebugCameraActive_ = false;
+	bool isEditorPreviewPlaying_ = true;
 
 	// UIと状態管理
 	bool showParticles = false;
@@ -172,7 +175,7 @@ private:
 	// 敵
 	std::list<std::unique_ptr<Enemy>> enemies_;
 	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
-	std::vector<Vector3> enemySpawnPoints_;
+	std::vector<EnemySpawnData> enemySpawns_;
 	std::vector<int> enemyRespawnTimers_;
 
 

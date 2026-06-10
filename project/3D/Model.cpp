@@ -3,6 +3,14 @@
 #include "ModelCommon.h"
 #include "engine/Resource/TextureManager.h"
 #include "engine/Graphics/SrvManager.h"
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -14,6 +22,32 @@
 
 
 using Microsoft::WRL::ComPtr;
+
+namespace {
+
+std::wstring Utf8ToWide(const std::string& text) {
+	if (text.empty()) {
+		return {};
+	}
+
+	int wideSize = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, nullptr, 0);
+	if (wideSize <= 0) {
+		return std::wstring(text.begin(), text.end());
+	}
+
+	std::wstring wideText(static_cast<size_t>(wideSize), L'\0');
+	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.c_str(), -1, wideText.data(), wideSize);
+	if (!wideText.empty() && wideText.back() == L'\0') {
+		wideText.pop_back();
+	}
+	return wideText;
+}
+
+std::ifstream OpenUtf8File(const std::string& filePath) {
+	return std::ifstream(std::filesystem::path(Utf8ToWide(filePath)));
+}
+
+}
 
 void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypath, const std::string &filename) {
 
@@ -33,6 +67,10 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 		v.position = { 0, 0, 0, 1 }; v.color = { 1, 0, 0, 1 }; modelData.vertices.push_back(v);
 		v.position = { 0, 1, 0, 1 }; v.color = { 0, 1, 0, 1 }; modelData.vertices.push_back(v);
 		v.position = { 1, 0, 0, 1 }; v.color = { 0, 0, 1, 1 }; modelData.vertices.push_back(v);
+	}
+
+	if (modelData.material.textureFilePath.empty()) {
+		modelData.material.textureFilePath = "resources/uvChecker.png";
 	}
 
 
@@ -171,7 +209,7 @@ MaterialData Model::LoadMaterialTemplateFile(const std::string &directoryPath, c
 	//ファイルから読んだ1行を格納するもの
 	std::string line;
 	//ファイルを開く
-	std::ifstream file(directoryPath + "/" + filename);
+	std::ifstream file = OpenUtf8File(directoryPath + "/" + filename);
 	//とりあえず開けなかったら止める
 	assert(file.is_open());
 
@@ -199,7 +237,7 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 	std::string line;  //ファイルから読んだ1行を格納するもの
 	std::map<std::string, uint32_t> vertexMap; // 頂点データの重複を防ぐためのマップ
 
-	std::ifstream file(directoryPath + "/" + filename);  //ファイルを開く
+	std::ifstream file = OpenUtf8File(directoryPath + "/" + filename);  //ファイルを開く
 	assert(file.is_open()); //とりあえず開けなかったら止める
 
 	while (std::getline(file, line)) {

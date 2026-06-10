@@ -2,15 +2,20 @@ import bpy
 import json
 import math
 import socket
-from mathutils import Vector
+from mathutils import Vector, geometry
+
+import validation
 
 
 UDP_IP = "127.0.0.1"
 UDP_PORT = 50000
 TIMER_INTERVAL = 0.25
+MAX_UDP_PAYLOAD = 60000
+INVALID_FILENAME_CHARS = '<>:"/\\|?*'
 
 sock = None
 last_sent_json = None
+last_validation_error_print = None
 
 _HANDLER_KEY = "cg2_level_editor_realtime_handler"
 _TIMER_KEY = "cg2_level_editor_realtime_timer"
@@ -28,10 +33,125 @@ def get_world_transform(obj):
     return trans, rot, scale
 
 
-def build_scene_data(scene):
-    scene_data = {"objects": []}
+def is_enemy_path_object(obj):
+    if obj.type != "CURVE":
+        return False
+    path_id = getattr(obj, "enemy_path_id", "None")
+    return path_id != "None" or obj.name.startswith("EnemyPath")
+
+
+def is_model_export_target(obj):
+    if obj.type != "MESH":
+        return False
+    if obj.name.startswith("StageBounds"):
+        return False
+
+    category = getattr(obj, "game_obj_type", "NONE")
+    return category not in {"PLAYER", "ENEMY"}
+
+
+def safe_filename_stem(name):
+    stem = name.strip()
+    for char in INVALID_FILENAME_CHARS:
+        stem = stem.replace(char, "_")
+    stem = "".join("_" if ord(char) < 32 else char for char in stem)
+    stem = stem.strip(" .")
+    return stem or "Mesh"
+
+
+def build_model_filename_map(scene):
+    model_filenames = {}
+    used_filenames = set()
 
     for obj in scene.objects:
+        if not is_model_export_target(obj):
+            continue
+
+        stem = safe_filename_stem(obj.name)
+        filename = f"{stem}.obj"
+        index = 2
+        while filename.lower() in used_filenames:
+            filename = f"{stem}_{index}.obj"
+            index += 1
+
+        used_filenames.add(filename.lower())
+        model_filenames[obj.name] = filename
+
+    return model_filenames
+
+
+def get_enemy_path_id(obj):
+    path_id = getattr(obj, "enemy_path_id", "None")
+    if path_id != "None":
+        return path_id
+    return obj.name.split(".", 1)[0]
+
+
+def get_curve_world_points(obj):
+    points = []
+
+    def append_world_point(local_point):
+        world_point = obj.matrix_world @ local_point
+        if points:
+            previous = Vector(points[-1])
+            if (world_point - previous).length <= 0.0001:
+                return
+        points.append([world_point.x, world_point.y, world_point.z])
+
+    for spline in obj.data.splines:
+        if spline.type == "BEZIER":
+            bezier_points = spline.bezier_points
+            segment_count = len(bezier_points)
+            if segment_count < 2:
+                continue
+            if not spline.use_cyclic_u:
+                segment_count -= 1
+
+            for index in range(segment_count):
+                current = bezier_points[index]
+                next_point = bezier_points[(index + 1) % len(bezier_points)]
+                samples = geometry.interpolate_bezier(
+                    current.co,
+                    current.handle_right,
+                    next_point.handle_left,
+                    next_point.co,
+                    max(2, obj.data.resolution_u),
+                )
+                for sample in samples:
+                    append_world_point(sample)
+        else:
+            for point in spline.points:
+                w = point.co.w if point.co.w != 0.0 else 1.0
+                append_world_point(Vector((point.co.x / w, point.co.y / w, point.co.z / w)))
+
+    return points
+
+
+def build_scene_data(scene):
+    errors, warnings = validation.validate_scene(scene)
+    scene_data = {
+        "objects": [],
+        "paths": [],
+        "validation": {
+            "status": make_validation_status(errors, warnings),
+            "errors": errors,
+            "warnings": warnings,
+            "checks": validation.build_check_report_text(errors, warnings),
+        },
+    }
+    model_filenames = build_model_filename_map(scene)
+
+    for obj in scene.objects:
+        if is_enemy_path_object(obj):
+            scene_data["paths"].append({
+                "id": get_enemy_path_id(obj),
+                "name": obj.name,
+                "loop": bool(getattr(obj, "enemy_path_loop", False)),
+                "speed": float(getattr(obj, "enemy_path_speed", 0.05)),
+                "points": get_curve_world_points(obj),
+            })
+            continue
+
         if obj.type not in ["MESH", "EMPTY"]:
             continue
 
@@ -53,28 +173,60 @@ def build_scene_data(scene):
         if hasattr(obj, "game_obj_type") and obj.game_obj_type != "NONE":
             obj_data["category"] = obj.game_obj_type
 
+        if obj.type == "MESH" and obj.name in model_filenames:
+            obj_data["model"] = model_filenames[obj.name]
+
         if hasattr(obj, "enemy_type") and obj.enemy_type != "None":
             obj_data["enemy"] = {"type": obj.enemy_type}
+
+        if getattr(obj, "game_obj_type", "NONE") == "ENEMY":
+            path_id = getattr(obj, "enemy_path_id", "None")
+            if path_id != "None":
+                obj_data["path_id"] = path_id
 
         scene_data["objects"].append(obj_data)
 
     return scene_data
 
 
+def make_validation_status(errors, warnings):
+    if errors:
+        return f"エラー {len(errors)}件 / 警告 {len(warnings)}件"
+    if warnings:
+        return f"警告 {len(warnings)}件"
+    return "OK"
+
+
 def send_scene_realtime(*_):
-    global sock, last_sent_json
+    global sock, last_sent_json, last_validation_error_print
     if sock is None:
         return
 
     try:
-        json_str = json.dumps(build_scene_data(bpy.context.scene))
+        errors, _ = validation.validate_and_store(bpy.context.scene)
+        if errors:
+            error_text = "\n".join(errors)
+            if error_text != last_validation_error_print:
+                print("リアルタイム送信をスキップしました。バリデーションエラーがあります:")
+                for message in errors:
+                    print(f"  - {message}")
+                last_validation_error_print = error_text
+            return
+        last_validation_error_print = None
+
+        json_str = json.dumps(build_scene_data(bpy.context.scene), ensure_ascii=False, separators=(",", ":"))
         if json_str == last_sent_json:
             return
 
-        sock.sendto(json_str.encode("utf-8"), (UDP_IP, UDP_PORT))
+        payload = json_str.encode("utf-8")
+        if len(payload) > MAX_UDP_PAYLOAD:
+            print(f"リアルタイム送信をスキップしました。データが大きすぎます: {len(payload)} bytes")
+            return
+
+        sock.sendto(payload, (UDP_IP, UDP_PORT))
         last_sent_json = json_str
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"リアルタイム送信に失敗しました: {exc}")
 
 
 def send_scene_timer():
@@ -120,7 +272,7 @@ def unregister_realtime_sync():
 
 
 def register():
-    global sock, last_sent_json
+    global sock, last_sent_json, last_validation_error_print
     unregister_realtime_sync()
 
     previous_socket = bpy.app.driver_namespace.pop(_SOCKET_KEY, None)
@@ -129,12 +281,13 @@ def register():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     last_sent_json = None
+    last_validation_error_print = None
     bpy.app.driver_namespace[_SOCKET_KEY] = sock
     register_realtime_sync()
 
 
 def unregister():
-    global sock, last_sent_json
+    global sock, last_sent_json, last_validation_error_print
     unregister_realtime_sync()
     active_socket = bpy.app.driver_namespace.pop(_SOCKET_KEY, None)
     if active_socket:
@@ -143,3 +296,4 @@ def unregister():
         sock.close()
     sock = None
     last_sent_json = None
+    last_validation_error_print = None

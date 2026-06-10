@@ -56,6 +56,7 @@ void Obstacle::Initialize(const std::string& modelName, const Vector3& position,
     object_->SetTranslate(position_);
     object_->SetRotate(rotation_);
     object_->SetScale(scale_);
+    object_->Update();
 }
 
 void Obstacle::Update() {

@@ -25,6 +25,7 @@ public:
 
     static void SetGameViewHovered(bool isHovered) { sGameViewHovered_ = isHovered; }
     static void SetGameViewBounds(float minX, float minY, float maxX, float maxY);
+    static bool GetGameViewBounds(float &minX, float &minY, float &maxX, float &maxY);
     static void SubmitGameViewMouseInput(
         bool isHovered,
         bool isRightClicked,

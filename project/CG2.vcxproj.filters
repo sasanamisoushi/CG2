@@ -374,6 +374,9 @@
     <ClInclude Include="engine\Utility\StageLoader.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="engine\Utility\StageValidation.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Game\editor\EditorReceiver.h">
       <Filter>ヘッダー ファイル\Game\editor</Filter>
     </ClInclude>

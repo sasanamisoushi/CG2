@@ -47,6 +47,59 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         # 敵が選ばれた時だけ、敵のタイプを入力させる！
         if obj.game_obj_type == 'ENEMY':
             game_box.prop(obj, "enemy_type", text="敵のタイプ")
+            game_box.prop(obj, "enemy_path_id", text="飛行パスID")
+
+        if obj.type == 'CURVE' and (obj.name.startswith("EnemyPath") or getattr(obj, "enemy_path_id", "None") != "None"):
+            path_box = layout.box()
+            path_box.label(text="Enemy Flight Path")
+            path_box.prop(obj, "enemy_path_id", text="パスID")
+            path_box.prop(obj, "enemy_path_loop", text="ループ")
+            path_box.prop(obj, "enemy_path_speed", text="速度")
+
+        validation_box = layout.box()
+        validation_box.label(text="Auto Validation")
+        validation_box.prop(context.scene, "myaddon_auto_validation", text="自動チェック")
+        validation_box.operator(operators.MYADDON_OT_validate_scene.bl_idname, text="今すぐチェック", icon='FILE_REFRESH')
+
+        validation_status = getattr(context.scene, "myaddon_validation_status", "未チェック")
+        validation_errors = getattr(context.scene, "myaddon_validation_errors", "").strip()
+        validation_warnings = getattr(context.scene, "myaddon_validation_warnings", "").strip()
+        validation_checks = getattr(context.scene, "myaddon_validation_checks", "").strip()
+        status_icon = 'CHECKBOX_HLT'
+        if validation_errors:
+            status_icon = 'ERROR'
+        elif validation_warnings:
+            status_icon = 'INFO'
+
+        validation_box.label(text=validation_status, icon=status_icon)
+
+        if validation_checks:
+            validation_box.separator()
+            validation_box.label(text="Check Items")
+            for line in validation_checks.splitlines():
+                parts = line.split("\t", 2)
+                if len(parts) < 3:
+                    continue
+
+                level, label, detail = parts
+                icon = 'CHECKBOX_HLT'
+                status_text = "OK"
+                if level == "ERROR":
+                    icon = 'ERROR'
+                    status_text = "エラー"
+                elif level == "WARNING":
+                    icon = 'INFO'
+                    status_text = "警告"
+
+                validation_box.label(text=f"{status_text}: {label}", icon=icon)
+                if detail:
+                    validation_box.label(text=f"  {detail}")
+        else:
+            for message in validation_errors.splitlines():
+                validation_box.label(text=message, icon='ERROR')
+
+            for message in validation_warnings.splitlines():
+                validation_box.label(text=message, icon='INFO')
 
         # ★修正1：区切り線のインデント（字下げ）を左に戻しました！
         layout.separator()
@@ -63,9 +116,14 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         op_enemy = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="敵リスポーン地点", icon='OUTLINER_OB_ARMATURE')
         op_enemy.spawn_type = "ENEMY"   # 引数として ENEMY を渡す
 
+        path_row = layout.row()
+        path_row.operator(operators.MYADDON_OT_create_enemy_path.bl_idname, text="敵飛行パスを配置", icon='CURVE_BEZCURVE')
+        path_row.operator(operators.MYADDON_OT_assign_selected_enemy_path.bl_idname, text="選択パスを敵に割り当て", icon='LINKED')
+
         # エクスポート用の区切り線、ラベル、実行ボタン
         layout.separator()
         layout.label(text="Export")
+        layout.label(text="Blender保存時にscene.json / 個別OBJ / MTLが自動出力されます", icon='INFO')
         layout.operator(operators.MYADDON_OT_export_scene.bl_idname, text="Scene Export")
 
 

@@ -33,7 +33,7 @@ if script_dir not in sys.path:
 #  再ロード処理（ファイルを書き換えた時に最新にするため）
 # =========================================================
 # 既にキャッシュされている場合は強制リロードするためにキャッシュを削除
-for mod in ["properties", "operators", "ui", "draw", "network"]:
+for mod in ["properties", "validation", "operators", "ui", "draw", "network"]:
     if mod in sys.modules:
         del sys.modules[mod]
 
@@ -41,6 +41,7 @@ for mod in ["properties", "operators", "ui", "draw", "network"]:
 #  分割したファイルの読み込み
 # =========================================================
 import properties
+import validation
 import operators
 import ui
 import draw
@@ -48,6 +49,7 @@ import network
 
 def register():
     properties.register()
+    validation.register()
     operators.register()
     ui.register()
     draw.register()
@@ -59,6 +61,7 @@ def unregister():
     draw.unregister()
     ui.unregister()
     operators.unregister()
+    validation.unregister()
     properties.unregister()
     print("レベルエディタが無効化されました。")
 

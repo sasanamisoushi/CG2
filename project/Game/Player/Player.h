@@ -30,7 +30,13 @@ public:
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
     //セッター
-    void SetPosition(const Vector3 &position) { position_ = position; }
+    void SetPosition(const Vector3 &position) {
+        position_ = position;
+        if (object_) {
+            object_->SetTranslate(position_);
+            object_->Update();
+        }
+    }
     void SetScale(const Vector3 &scale) { if (object_) object_->SetScale(scale); }
     void SetRotation(const Vector3 &eulerRotation);
 

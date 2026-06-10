@@ -70,6 +70,48 @@ namespace {
         };
     }
 
+    size_t ResolvePathIndex(int index, size_t pointCount, bool loop) {
+        if (pointCount == 0) {
+            return 0;
+        }
+
+        if (loop) {
+            int count = static_cast<int>(pointCount);
+            int wrapped = index % count;
+            if (wrapped < 0) {
+                wrapped += count;
+            }
+            return static_cast<size_t>(wrapped);
+        }
+
+        int last = static_cast<int>(pointCount - 1);
+        return static_cast<size_t>(std::clamp(index, 0, last));
+    }
+
+    Vector3 CatmullRom(const Vector3 &p0, const Vector3 &p1, const Vector3 &p2, const Vector3 &p3, float t) {
+        float t2 = t * t;
+        float t3 = t2 * t;
+
+        Vector3 result = Add(
+            Add(
+                Scale(p1, 2.0f),
+                Scale(Subtract(p2, p0), t)),
+            Add(
+                Scale(Add(Scale(p0, 2.0f), Add(Scale(p1, -5.0f), Add(Scale(p2, 4.0f), Scale(p3, -1.0f)))), t2),
+                Scale(Add(Scale(p0, -1.0f), Add(Scale(p1, 3.0f), Add(Scale(p2, -3.0f), p3))), t3)));
+
+        return Scale(result, 0.5f);
+    }
+
+    Vector3 EvaluateFlightPath(const std::vector<Vector3> &points, size_t segmentIndex, float t, bool loop) {
+        int baseIndex = static_cast<int>(segmentIndex);
+        const Vector3 &p0 = points[ResolvePathIndex(baseIndex - 1, points.size(), loop)];
+        const Vector3 &p1 = points[ResolvePathIndex(baseIndex, points.size(), loop)];
+        const Vector3 &p2 = points[ResolvePathIndex(baseIndex + 1, points.size(), loop)];
+        const Vector3 &p3 = points[ResolvePathIndex(baseIndex + 2, points.size(), loop)];
+        return CatmullRom(p0, p1, p2, p3, t);
+    }
+
     int GetFlightSide(size_t spawnPointIndex, const Vector3 &position) {
         if (spawnPointIndex != Enemy::kNoSpawnPoint) {
             return (spawnPointIndex % 2 == 0) ? 1 : -1;
@@ -111,6 +153,12 @@ void Enemy::Initialize(const Vector3 &position) {
     isDead_ = false;
     state_ = EnemyState::Approach;
     attackTimer_ = kAttackInterval;
+    flightPathPoints_.clear();
+    hasFlightPath_ = false;
+    flightPathLoop_ = false;
+    flightPathSpeed_ = kEnemyCruiseSpeed;
+    flightPathSegmentIndex_ = 0;
+    flightPathSegmentT_ = 0.0f;
 
     // リスポーン直後の描画でもBlenderで設定した地点に表示されるように同期する。
     object_->SetTranslate(position_);
@@ -156,11 +204,43 @@ void Enemy::SetRotation(const Vector3 &rotation) {
 
     if (object_) {
         object_->SetRotate(rotation_);
+        object_->Update();
+    }
+}
+
+void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float speed) {
+    flightPathPoints_ = points;
+    hasFlightPath_ = flightPathPoints_.size() >= 2;
+    flightPathLoop_ = loop;
+    flightPathSpeed_ = (std::isfinite(speed) && speed > 0.0f) ? speed : kEnemyCruiseSpeed;
+    flightPathSegmentIndex_ = 0;
+    flightPathSegmentT_ = 0.0f;
+
+    if (!hasFlightPath_) {
+        return;
+    }
+
+    position_ = flightPathPoints_[0];
+    forward_ = NormalizeOr(Subtract(flightPathPoints_[1], flightPathPoints_[0]), forward_);
+    currentSpeed_ = flightPathSpeed_;
+    velocity_ = Scale(forward_, currentSpeed_);
+    bankAngle_ = 0.0f;
+    rotation_ = ToEulerRotation(forward_, bankAngle_);
+
+    if (object_) {
+        object_->SetTranslate(position_);
+        object_->SetRotate(rotation_);
+        object_->Update();
     }
 }
 
 void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
     flightTimer_++;
+
+    if (hasFlightPath_) {
+        UpdateFlightPathAI(playerPos, bulletManager);
+        return;
+    }
 
     Vector3 toPlayer = Subtract(playerPos, position_);
     float distSqToPlayer = LengthSq(toPlayer);
@@ -236,6 +316,71 @@ void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager
 
     attackTimer_++;
     if (!isRetreating && isInAttackRange && attackTimer_ >= kAttackInterval && bulletManager) {
+        Vector3 shootDirection = NormalizeOr(Add(Scale(directionToPlayer, 0.9f), Scale(forward_, 0.1f)), directionToPlayer);
+        Vector3 bulletPosition = Add(position_, Scale(forward_, 1.2f));
+        Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);
+        bulletManager->Shoot(bulletPosition, bulletVelocity);
+        attackTimer_ = 0;
+    }
+}
+
+void Enemy::UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
+    if (flightPathPoints_.size() < 2) {
+        hasFlightPath_ = false;
+        return;
+    }
+
+    const size_t segmentCount = flightPathLoop_ ? flightPathPoints_.size() : flightPathPoints_.size() - 1;
+    if (segmentCount == 0) {
+        return;
+    }
+
+    Vector3 oldPosition = position_;
+    Vector3 oldForward = forward_;
+
+    size_t nextIndex = ResolvePathIndex(static_cast<int>(flightPathSegmentIndex_ + 1), flightPathPoints_.size(), flightPathLoop_);
+    Vector3 segmentVector = Subtract(flightPathPoints_[nextIndex], flightPathPoints_[flightPathSegmentIndex_]);
+    float segmentLength = Length(segmentVector);
+    if (segmentLength < 0.001f) {
+        segmentLength = 0.001f;
+    }
+    flightPathSegmentT_ += flightPathSpeed_ / segmentLength;
+
+    while (flightPathSegmentT_ >= 1.0f) {
+        flightPathSegmentT_ -= 1.0f;
+        ++flightPathSegmentIndex_;
+
+        if (flightPathSegmentIndex_ >= segmentCount) {
+            if (flightPathLoop_) {
+                flightPathSegmentIndex_ = 0;
+            } else {
+                flightPathSegmentIndex_ = segmentCount - 1;
+                flightPathSegmentT_ = 1.0f;
+                break;
+            }
+        }
+    }
+
+    position_ = EvaluateFlightPath(flightPathPoints_, flightPathSegmentIndex_, flightPathSegmentT_, flightPathLoop_);
+    Vector3 pathForward = NormalizeOr(Subtract(position_, oldPosition), NormalizeOr(segmentVector, oldForward));
+    forward_ = pathForward;
+    currentSpeed_ = flightPathSpeed_;
+    velocity_ = Scale(forward_, currentSpeed_);
+
+    Vector3 worldUp = { 0.0f, 1.0f, 0.0f };
+    float yawTurn = MyMath::Dot(MyMath::Cross(oldForward, forward_), worldUp);
+    float targetBankAngle = std::clamp(-yawTurn * 18.0f, -kEnemyMaxBankAngle, kEnemyMaxBankAngle);
+    bankAngle_ += (targetBankAngle - bankAngle_) * kEnemyBankResponse;
+    rotation_ = ToEulerRotation(forward_, bankAngle_);
+
+    Vector3 toPlayer = Subtract(playerPos, position_);
+    float distSqToPlayer = LengthSq(toPlayer);
+    Vector3 directionToPlayer = NormalizeOr(toPlayer, forward_);
+    bool isInAttackRange = distSqToPlayer <= kAttackRadius * kAttackRadius;
+    state_ = isInAttackRange ? EnemyState::Attack : EnemyState::Approach;
+
+    attackTimer_++;
+    if (isInAttackRange && attackTimer_ >= kAttackInterval && bulletManager) {
         Vector3 shootDirection = NormalizeOr(Add(Scale(directionToPlayer, 0.9f), Scale(forward_, 0.1f)), directionToPlayer);
         Vector3 bulletPosition = Add(position_, Scale(forward_, 1.2f));
         Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);

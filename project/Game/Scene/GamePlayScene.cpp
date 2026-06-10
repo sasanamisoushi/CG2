@@ -11,11 +11,207 @@
 #include "engine/Graphics/PostEffect.h"
 #include "engine/Scene/SceneManager.h"
 #include "engine/Utility/StageLoader.h"
+#include "engine/Utility/StageValidation.h"
 #include "Game/editor/EditorReceiver.h"
 
 namespace {
 	constexpr int kEnemyRespawnDelayFrames = 180;
 	constexpr int kNoRespawnTimer = -1;
+
+#if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
+	bool gShowStageValidationWindow = true;
+	bool gShowStageValidationLabels = true;
+
+	ImVec4 ValidationLevelColor(const std::string &level) {
+		if (level == "ERROR") {
+			return ImVec4(1.0f, 0.25f, 0.2f, 1.0f);
+		}
+		if (level == "WARNING") {
+			return ImVec4(1.0f, 0.75f, 0.2f, 1.0f);
+		}
+		return ImVec4(0.35f, 1.0f, 0.45f, 1.0f);
+	}
+
+	const char *ValidationLevelText(const std::string &level) {
+		if (level == "ERROR") {
+			return "ERROR";
+		}
+		if (level == "WARNING") {
+			return "WARNING";
+		}
+		return "OK";
+	}
+
+	void DrawValidationMessages(const char *title, const std::vector<std::string> &messages, const ImVec4 &color) {
+		ImGui::TextColored(color, "%s: %d", title, static_cast<int>(messages.size()));
+		for (const std::string &message : messages) {
+			ImGui::BulletText("%s", message.c_str());
+		}
+	}
+
+	void DrawStageValidationWindow(const StageValidation::Report &report) {
+		ImGui::Begin("Level Validation");
+		ImGui::Text("Source: %s", report.source.c_str());
+
+		DrawValidationMessages("Errors", report.errors, ValidationLevelColor("ERROR"));
+		DrawValidationMessages("Warnings", report.warnings, ValidationLevelColor("WARNING"));
+
+		ImGui::Separator();
+		ImGui::Text("Check Items");
+		for (const StageValidation::CheckItemResult &item : report.checkItems) {
+			ImGui::TextColored(ValidationLevelColor(item.level), "%s", ValidationLevelText(item.level));
+			ImGui::SameLine(90.0f);
+			if (item.detail.empty()) {
+				ImGui::TextWrapped("%s", item.label.c_str());
+			} else {
+				ImGui::TextWrapped("%s: %s", item.label.c_str(), item.detail.c_str());
+			}
+		}
+
+		ImGui::End();
+	}
+
+	struct ValidationLabelRect {
+		ImVec2 min;
+		ImVec2 max;
+	};
+
+	float ClampValidationFloat(float value, float minValue, float maxValue) {
+		if (maxValue < minValue) {
+			return minValue;
+		}
+		if (value < minValue) {
+			return minValue;
+		}
+		if (value > maxValue) {
+			return maxValue;
+		}
+		return value;
+	}
+
+	ValidationLabelRect MakeValidationLabelRect(const ImVec2 &textPos, const ImVec2 &textSize, float padding) {
+		return {
+			ImVec2(textPos.x - padding, textPos.y - padding),
+			ImVec2(textPos.x + textSize.x + padding, textPos.y + textSize.y + padding),
+		};
+	}
+
+	bool ValidationRectsOverlap(const ValidationLabelRect &lhs, const ValidationLabelRect &rhs) {
+		return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
+			lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y;
+	}
+
+	bool ValidationRectOverlapsAny(const ValidationLabelRect &rect, const std::vector<ValidationLabelRect> &usedRects) {
+		for (const ValidationLabelRect &usedRect : usedRects) {
+			if (ValidationRectsOverlap(rect, usedRect)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	void ClampValidationLabelToGameView(
+		ImVec2 &textPos,
+		const ImVec2 &textSize,
+		float padding,
+		float minX,
+		float minY,
+		float maxX,
+		float maxY) {
+
+		textPos.x = ClampValidationFloat(textPos.x, minX + padding, maxX - textSize.x - padding);
+		textPos.y = ClampValidationFloat(textPos.y, minY + padding, maxY - textSize.y - padding);
+	}
+
+	ImVec2 ResolveValidationLabelPosition(
+		const ImVec2 &anchor,
+		const ImVec2 &textSize,
+		float padding,
+		float minX,
+		float minY,
+		float maxX,
+		float maxY,
+		std::vector<ValidationLabelRect> &usedRects) {
+
+		const float rectWidth = textSize.x + padding * 2.0f;
+		const float rectHeight = textSize.y + padding * 2.0f;
+		const float verticalStep = rectHeight + 4.0f;
+		const float horizontalStep = rectWidth * 0.55f;
+		const int horizontalSlots[] = { 0, -1, 1, -2, 2 };
+
+		for (int stackIndex = 0; stackIndex < 10; ++stackIndex) {
+			for (int side = 0; side < 2; ++side) {
+				for (int horizontalSlot : horizontalSlots) {
+					const float x = anchor.x - textSize.x * 0.5f + horizontalStep * static_cast<float>(horizontalSlot);
+					const float y = (side == 0)
+						? anchor.y - textSize.y - 22.0f - verticalStep * static_cast<float>(stackIndex)
+						: anchor.y + 16.0f + verticalStep * static_cast<float>(stackIndex);
+					ImVec2 candidate(x, y);
+					ClampValidationLabelToGameView(candidate, textSize, padding, minX, minY, maxX, maxY);
+
+					const ValidationLabelRect rect = MakeValidationLabelRect(candidate, textSize, padding);
+					if (!ValidationRectOverlapsAny(rect, usedRects)) {
+						usedRects.push_back(rect);
+						return candidate;
+					}
+				}
+			}
+		}
+
+		ImVec2 fallback(anchor.x - textSize.x * 0.5f, anchor.y - textSize.y - 22.0f);
+		ClampValidationLabelToGameView(fallback, textSize, padding, minX, minY, maxX, maxY);
+		usedRects.push_back(MakeValidationLabelRect(fallback, textSize, padding));
+		return fallback;
+	}
+
+	void DrawStageValidationOverlay(const StageValidation::Report &report, const Matrix4x4 &viewProjectionMatrix) {
+		if (!report.HasMarkers()) {
+			return;
+		}
+
+		float minX = 0.0f;
+		float minY = 0.0f;
+		float maxX = 0.0f;
+		float maxY = 0.0f;
+		if (!FlyCamera::GetGameViewBounds(minX, minY, maxX, maxY)) {
+			return;
+		}
+
+		const float width = maxX - minX;
+		const float height = maxY - minY;
+		ImDrawList *drawList = ImGui::GetForegroundDrawList();
+		std::vector<ValidationLabelRect> usedRects;
+
+		for (const StageValidation::ValidationMarker &marker : report.markers) {
+			Vector3 worldPosition = {
+				static_cast<float>(marker.x),
+				static_cast<float>(marker.y) + 1.2f,
+				static_cast<float>(marker.z),
+			};
+			Vector3 screenPosition = MyMath::WorldToScreen(worldPosition, viewProjectionMatrix, width, height);
+			if (screenPosition.z < 0.0f || screenPosition.z > 1.0f) {
+				continue;
+			}
+			if (screenPosition.x < 0.0f || screenPosition.x > width || screenPosition.y < 0.0f || screenPosition.y > height) {
+				continue;
+			}
+
+			const bool isError = marker.level == "ERROR";
+			const std::string text = std::string(isError ? "ERROR: " : "WARNING: ") + marker.message;
+			const ImVec2 textSize = ImGui::CalcTextSize(text.c_str());
+			const float padding = 4.0f;
+			const ImVec2 anchor(minX + screenPosition.x, minY + screenPosition.y);
+			const ImVec2 textPos = ResolveValidationLabelPosition(anchor, textSize, padding, minX, minY, maxX, maxY, usedRects);
+			const ValidationLabelRect rect = MakeValidationLabelRect(textPos, textSize, padding);
+
+			const ImU32 fillColor = isError ? IM_COL32(90, 16, 16, 220) : IM_COL32(92, 63, 0, 220);
+			const ImU32 borderColor = isError ? IM_COL32(255, 75, 55, 255) : IM_COL32(255, 200, 45, 255);
+			drawList->AddRectFilled(rect.min, rect.max, fillColor, 3.0f);
+			drawList->AddRect(rect.min, rect.max, borderColor, 3.0f);
+			drawList->AddText(textPos, IM_COL32(255, 255, 255, 255), text.c_str());
+		}
+	}
+#endif
 }
 
 
@@ -175,21 +371,7 @@ void GamePlayScene::Initialize() {
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
 
-	// 敵と障害物のリストを一旦空にする
-	enemies_.clear();
-	obstacles_.clear();
-	enemySpawnPoints_.clear();
-
-	// Blenderから出力したJSONを読み込んで、敵と障害物を一発配置！！！
-	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawnPoints_);
-	SpawnEnemiesFromSpawnPoints();
-
-	// 最初のファイル更新日時を記録しておく
-	try {
-		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
-	} catch (...) {
-		// ※万が一ファイルが見つからない時のためのエラー回避
-	}
+	ReloadSceneJson();
 
 	// エディターレシーバーの初期化
 	EditorReceiver::GetInstance()->Initialize();
@@ -211,22 +393,73 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 	}
 }
 
+void GamePlayScene::ReloadSceneJson() {
+	enemies_.clear();
+	obstacles_.clear();
+	enemySpawns_.clear();
+
+	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawns_);
+	SpawnEnemiesFromSpawnPoints();
+
+	try {
+		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
+	} catch (...) {
+		// JSONがまだ存在しない場合でも、エディタ操作を続けられるようにする。
+	}
+}
+
+void GamePlayScene::ResetEditorPreview() {
+	isEditorPreviewPlaying_ = false;
+	isGameOver_ = false;
+	gameOverTimer_ = 0;
+
+	if (PostEffect::GetInstance()) {
+		PostEffect::GetInstance()->SetEffectType(0);
+	}
+
+	if (player_) {
+		player_->Initialize("PlayerBox");
+	}
+	if (missileManager_) {
+		missileManager_->Initialize();
+	}
+	if (enemyBulletManager_) {
+		enemyBulletManager_->Initialize();
+	}
+	if (explosionManager_) {
+		explosionManager_->Initialize(particleManager.get());
+	}
+
+	ReloadSceneJson();
+
+	if (!isDebugCameraActive_ && player_) {
+		player_->UpdateCamera(camera.get());
+	}
+
+	OutputDebugStringA("[EditorPreview] Reset scene and paused.\n");
+}
+
 void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
 	enemies_.clear();
-	enemyRespawnTimers_.assign(enemySpawnPoints_.size(), kNoRespawnTimer);
+	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoRespawnTimer);
 
-	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawnPoints_.size(); ++spawnPointIndex) {
+	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
 		SpawnEnemyFromSpawnPoint(spawnPointIndex);
 	}
 }
 
 void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
-	if (spawnPointIndex >= enemySpawnPoints_.size()) {
+	if (spawnPointIndex >= enemySpawns_.size()) {
 		return;
 	}
 
+	const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
 	auto enemy = std::make_unique<Enemy>();
-	enemy->Initialize(enemySpawnPoints_[spawnPointIndex]);
+	enemy->Initialize(spawnData.position);
+	enemy->SetRotation(spawnData.rotation);
+	if (spawnData.flightPath.IsValid()) {
+		enemy->SetFlightPath(spawnData.flightPath.points, spawnData.flightPath.loop, spawnData.flightPath.speed);
+	}
 	enemy->SetSpawnPointIndex(spawnPointIndex);
 	enemies_.push_back(std::move(enemy));
 
@@ -272,7 +505,7 @@ void GamePlayScene::Finalize() {
 void GamePlayScene::Update() {
 
 	// Blenderからデータが来ていたら敵をリアルタイム更新！
-	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawnPoints_)) {
+	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawns_)) {
 		SpawnEnemiesFromSpawnPoints();
 	}
 
@@ -286,16 +519,7 @@ void GamePlayScene::Update() {
 
 		// もし記憶している日時よりも新しければ（＝Blenderで上書き保存されたら！）
 		if (currentTime > lastJsonWriteTime_) {
-			lastJsonWriteTime_ = currentTime; // 新しい日時で上書き
-
-			// 画面上の敵と障害物を一旦すべて消す
-			enemies_.clear();
-			obstacles_.clear();
-			enemySpawnPoints_.clear();
-
-			// 最新のJSONをもう一度読み込み直す！
-			StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawnPoints_);
-			SpawnEnemiesFromSpawnPoints();
+			ReloadSceneJson();
 
 			// デバッグウィンドウにお知らせを出す
 			OutputDebugStringA("Hot Reloaded: scene.json を再読み込みしました！\n");
@@ -363,6 +587,7 @@ void GamePlayScene::Update() {
 			PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
 		}
 	}
+	shouldUpdateGame = shouldUpdateGame && isEditorPreviewPlaying_;
 
 	if (myBox && animationData.duration > 0.0f) {
 		if (playAnimation) {
@@ -456,21 +681,9 @@ void GamePlayScene::Update() {
 		myModelObject->Update();
 	}
 
-	// =====================================================
-	// F1 キー: デバッグフリーカメラ ON/OFF
-	// =====================================================
-	// Debug camera switching is handled by the ImGui button in UpdateUI().
+	// Debug camera switching is handled by ImGui buttons in UpdateUI().
 	if (false && Input::GetInstance()->TriggerKey(DIK_F1)) {
-		isDebugCameraActive_ = !isDebugCameraActive_;
-		if (isDebugCameraActive_) {
-			// 自機追従カメラの現在位置をフリーカメラの初期座標として引き継ぐ
-			debugFlyCamera_->SetTranslate(camera->GetTranslate());
-			Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
-			OutputDebugStringA("[DebugCamera] ON: FlyCamera\n");
-		} else {
-			Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
-			OutputDebugStringA("[DebugCamera] OFF: Player Camera\n");
-		}
+		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
 	// プレイヤーの更新と、カメラの追従
@@ -620,7 +833,7 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ミサイルの発射処理
 	// ==========================================
-	if (player_ && !isGameOver_) {
+	if (shouldUpdateGame && player_ && !isGameOver_) {
 		Vector3 playerPos = player_->GetPosition();
 		Vector3 forward = player_->GetForwardVector();
 
@@ -1091,11 +1304,10 @@ void GamePlayScene::UpdateUI() {
 		if (isDebugCameraActive_) {
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[FREE CAM ACTIVE]");
 			ImGui::Text("WASD: 移動  /  矢印キー: 回転  /  Q,E: ロール");
-			ImGui::Text("F1 を押すと自機追従カメラに戻ります");
+			ImGui::Text("Game View上で右ドラッグやWASDを使って確認できます");
 
-			if (ImGui::Button("自機追従カメラに戻る (F1)")) {
-				isDebugCameraActive_ = false;
-				Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
+			if (ImGui::Button("自機追従カメラに戻る")) {
+				SetDebugCameraActive(false);
 			}
 
 			ImGui::Separator();
@@ -1140,12 +1352,10 @@ void GamePlayScene::UpdateUI() {
 
 		} else {
 			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[PLAYER FOLLOW CAM]");
-			ImGui::Text("F1 を押すとフリーカメラに切り替わります");
+			ImGui::Text("ボタンを押すとフリーカメラに切り替わります");
 
-			if (ImGui::Button("フリーカメラに切り替え (F1)")) {
-				isDebugCameraActive_ = true;
-				debugFlyCamera_->SetTranslate(camera->GetTranslate());
-				Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
+			if (ImGui::Button("フリーカメラに切り替え")) {
+				SetDebugCameraActive(true);
 			}
 
 			ImGui::Separator();
@@ -1221,13 +1431,59 @@ void GamePlayScene::UpdateUI() {
 		}
 		ImGui::End();
 
+#if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
+		const StageValidation::Report &stageValidationReport = StageValidation::GetLastReport();
+		if (stageValidationReport.HasMessages() || stageValidationReport.HasCheckItems()) {
+			if (gShowStageValidationWindow) {
+				DrawStageValidationWindow(stageValidationReport);
+			}
+
+			if (gShowStageValidationLabels) {
+				Camera *validationCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+				if (validationCamera) {
+					DrawStageValidationOverlay(stageValidationReport, validationCamera->GetViewProjectionMatrix());
+				}
+			}
+		}
+#endif
+
 		ImGui::Begin("Level Editor Tools"); // 新しいウィンドウを作る場合
+
+#if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
+		ImGui::Text("レベル検査表示");
+		ImGui::Checkbox("検査一覧を表示", &gShowStageValidationWindow);
+		ImGui::Checkbox("警告ラベルを表示", &gShowStageValidationLabels);
+		ImGui::Separator();
+#endif
 
 		// もしボタンが押されたら { } の中が実行される
 		if (ImGui::Button("Open Blender")) {
 			// ここでBlenderを起動！
 			ShellExecuteA(nullptr, "open", "resources\\stage.blend", nullptr, nullptr, SW_SHOW);
 		}
+
+		ImGui::Separator();
+		ImGui::Text("敵機ルート確認");
+		if (ImGui::Button("リセット")) {
+			ResetEditorPreview();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("再生")) {
+			isEditorPreviewPlaying_ = true;
+			OutputDebugStringA("[EditorPreview] Play.\n");
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("ストップ")) {
+			isEditorPreviewPlaying_ = false;
+			OutputDebugStringA("[EditorPreview] Stop.\n");
+		}
+
+		ImGui::TextColored(
+			isEditorPreviewPlaying_ ? ImVec4(0.0f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.65f, 0.0f, 1.0f),
+			"状態: %s",
+			isEditorPreviewPlaying_ ? "再生中" : "停止中");
+
+		ImGui::TextWrapped("リセットでscene.jsonを読み直して初期状態に戻し、停止状態にします。再生で敵機ルートなどのゲーム更新が進み、ストップでその場に止まります。");
 
 		ImGui::End();
 	}

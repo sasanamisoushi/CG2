@@ -80,6 +80,11 @@ void Player::SetRotation(const Vector3 &eulerRotation) {
 	quaternion_ = MyMath::Multiply(quaternion_, qYaw);
 	quaternion_ = MyMath::Multiply(quaternion_, qRoll);
 	quaternion_ = MyMath::Normalize(quaternion_);
+
+	if (object_) {
+		object_->SetQuaternionRotate(quaternion_);
+		object_->Update();
+	}
 }
 
 void Player::OnCollision() {

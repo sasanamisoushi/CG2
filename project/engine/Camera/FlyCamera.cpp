@@ -29,6 +29,18 @@ void FlyCamera::SetGameViewBounds(float minX, float minY, float maxX, float maxY
     sGameViewBoundsValid_ = true;
 }
 
+bool FlyCamera::GetGameViewBounds(float &minX, float &minY, float &maxX, float &maxY) {
+    if (!sGameViewBoundsValid_) {
+        return false;
+    }
+
+    minX = sGameViewMinX_;
+    minY = sGameViewMinY_;
+    maxX = sGameViewMaxX_;
+    maxY = sGameViewMaxY_;
+    return maxX > minX && maxY > minY;
+}
+
 void FlyCamera::SubmitGameViewMouseInput(
     bool isHovered,
     bool isRightClicked,

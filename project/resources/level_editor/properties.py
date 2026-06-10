@@ -9,6 +9,9 @@ def register():
     bpy.types.Object.collider_center = bpy.props.FloatVectorProperty(name="中心", size=3, default=(0.0, 0.0, 0.0))
     bpy.types.Object.collider_size = bpy.props.FloatVectorProperty(name="サイズ", size=3, default=(2.0, 2.0, 2.0))
     bpy.types.Object.enemy_type = bpy.props.StringProperty(name="敵タイプ", default="None")
+    bpy.types.Object.enemy_path_id = bpy.props.StringProperty(name="飛行パスID", default="None")
+    bpy.types.Object.enemy_path_loop = bpy.props.BoolProperty(name="ループ", default=False)
+    bpy.types.Object.enemy_path_speed = bpy.props.FloatProperty(name="速度", default=0.05, min=0.001)
 
     # 何用なのかを選ぶプルダウンメニュー！
     bpy.types.Object.game_obj_type = bpy.props.EnumProperty(
@@ -32,4 +35,7 @@ def unregister():
     del bpy.types.Object.collider_center
     del bpy.types.Object.collider_size
     del bpy.types.Object.enemy_type
+    del bpy.types.Object.enemy_path_id
+    del bpy.types.Object.enemy_path_loop
+    del bpy.types.Object.enemy_path_speed
     del bpy.types.Object.game_obj_type

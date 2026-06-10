@@ -1,5 +1,6 @@
 #pragma once
 #include "engine/math/MyMath.h"
+#include "engine/Utility/StageLoader.h"
 #include <string>
 #include <list>
 #include <memory>
@@ -22,7 +23,7 @@ public:
 	void Finalize();
 
 	// 毎フレーム呼んで、Blenderから最新のデータが届いていたら敵を更新する
-	bool Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &enemySpawnPoints);
+	bool Update(Player *player, std::list<std::unique_ptr<Enemy>> &enemies, std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<EnemySpawnData> &enemySpawns);
 
 private:
 	EditorReceiver() = default;

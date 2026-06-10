@@ -9,6 +9,20 @@ class Enemy;
 class Obstacle;
 class Player;
 
+struct EnemyFlightPath {
+	std::vector<Vector3> points;
+	bool loop = false;
+	float speed = 0.05f;
+
+	bool IsValid() const { return points.size() >= 2; }
+};
+
+struct EnemySpawnData {
+	Vector3 position = { 0.0f, 0.0f, 0.0f };
+	Vector3 rotation = { 0.0f, 0.0f, 0.0f };
+	EnemyFlightPath flightPath;
+};
+
 class StageLoader {
 public:
 	// Blenderから出力したJSONを読み込み、敵・障害物リストに追加する
@@ -17,5 +31,5 @@ public:
 		std::list<std::unique_ptr<Enemy>> &enemies,
 		std::list<std::unique_ptr<Obstacle>> &obstacles,
 		Player *player = nullptr,
-		std::vector<Vector3> *enemySpawnPoints = nullptr);
+		std::vector<EnemySpawnData> *enemySpawns = nullptr);
 };
