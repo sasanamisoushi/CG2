@@ -3,6 +3,16 @@ import bpy
 def register():
     # プロパティ登録
     bpy.types.Scene.myaddon_custom_string = bpy.props.StringProperty(name="カスタム文字列")
+    bpy.types.Scene.myaddon_game_exe_path = bpy.props.StringProperty(
+        name="ゲームEXE",
+        description="空欄なら generated/outputs/Development/CG2.exe を起動します",
+        default="",
+        subtype='FILE_PATH',
+    )
+    bpy.types.Scene.myaddon_show_spawn_forward = bpy.props.BoolProperty(
+        name="スポーン向き表示",
+        default=True,
+    )
     bpy.types.Object.base_name = bpy.props.StringProperty(name="ベース名", default="None")
 
     bpy.types.Object.collider = bpy.props.StringProperty(name="タイプ", default="None")
@@ -30,6 +40,8 @@ def register():
 def unregister():
     # プロパティ削除
     del bpy.types.Scene.myaddon_custom_string
+    del bpy.types.Scene.myaddon_game_exe_path
+    del bpy.types.Scene.myaddon_show_spawn_forward
     del bpy.types.Object.base_name
     del bpy.types.Object.collider
     del bpy.types.Object.collider_center

@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import subprocess
 
 import bpy
 import bpy_extras
@@ -24,6 +25,28 @@ def _default_scene_obj_path():
     if not bpy.data.filepath:
         return "scene.obj"
     return os.path.splitext(bpy.data.filepath)[0] + ".obj"
+
+
+def _workspace_root_from_blend():
+    if bpy.data.filepath:
+        return os.path.abspath(os.path.join(os.path.dirname(bpy.data.filepath), "..", ".."))
+    return os.path.abspath(os.path.join(os.getcwd(), ".."))
+
+
+def _default_game_exe_path():
+    workspace_root = _workspace_root_from_blend()
+    return os.path.join(workspace_root, "generated", "outputs", "Development", "CG2.exe")
+
+
+def _default_game_working_dir():
+    return os.path.join(_workspace_root_from_blend(), "project")
+
+
+def _resolve_game_exe_path(scene):
+    configured_path = getattr(scene, "myaddon_game_exe_path", "").strip()
+    if configured_path:
+        return os.path.abspath(bpy.path.abspath(configured_path))
+    return _default_game_exe_path()
 
 
 def _is_obj_export_target(obj):
@@ -554,6 +577,100 @@ class MYADDON_OT_validate_scene(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class MYADDON_OT_playtest_game(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_playtest_game"
+    bl_label = "ゲームをプレイ"
+    bl_description = "現在の配置を出力してゲームを起動します"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+        scene = context.scene
+        errors, warnings = validation.validate_and_store(scene)
+        if errors:
+            self.report({'ERROR'}, "バリデーションエラーがあります。修正してからPlaytestしてください。")
+            return {'CANCELLED'}
+
+        model_filenames = _build_model_filename_map(scene)
+        _export_scene_to_path(scene, _default_scene_json_path(), model_filenames)
+        if bpy.data.filepath:
+            _export_individual_meshes_to_obj(scene, model_filenames)
+
+        exe_path = _resolve_game_exe_path(scene)
+        if not os.path.isfile(exe_path):
+            self.report({'ERROR'}, f"ゲームEXEが見つかりません: {exe_path}")
+            return {'CANCELLED'}
+
+        working_dir = _default_game_working_dir()
+        if not os.path.isdir(working_dir):
+            working_dir = os.path.dirname(exe_path)
+
+        try:
+            subprocess.Popen([exe_path], cwd=working_dir)
+        except Exception as exc:
+            self.report({'ERROR'}, f"ゲーム起動に失敗しました: {exc}")
+            return {'CANCELLED'}
+
+        if warnings:
+            self.report({'WARNING'}, f"警告 {len(warnings)}件がありますが、ゲームを起動しました。")
+        else:
+            self.report({'INFO'}, "ゲームを起動しました。")
+        return {'FINISHED'}
+
+
+class MYADDON_OT_apply_active_properties_to_selection(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_apply_active_properties_to_selection"
+    bl_label = "選択中へ一括適用"
+    bl_description = "アクティブオブジェクトのゲーム用設定を、選択中の他オブジェクトへコピーします"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    copy_collider: bpy.props.BoolProperty(name="コライダーもコピー", default=True)
+
+    def execute(self, context):
+        active = context.active_object
+        if not active:
+            self.report({'ERROR'}, "コピー元にするオブジェクトをアクティブにしてください。")
+            return {'CANCELLED'}
+
+        targets = [obj for obj in context.selected_objects if obj != active]
+        if not targets:
+            self.report({'ERROR'}, "コピー先にするオブジェクトも一緒に選択してください。")
+            return {'CANCELLED'}
+
+        property_names = [
+            "game_obj_type",
+            "enemy_type",
+            "enemy_path_id",
+        ]
+
+        if self.copy_collider:
+            property_names.extend([
+                "collider",
+                "collider_center",
+                "collider_size",
+            ])
+
+        if _is_enemy_path_object(active):
+            property_names.extend([
+                "enemy_path_loop",
+                "enemy_path_speed",
+            ])
+
+        copied_count = 0
+        for target in targets:
+            for property_name in property_names:
+                if not hasattr(active, property_name) or not hasattr(target, property_name):
+                    continue
+                value = getattr(active, property_name)
+                if hasattr(value, "__len__") and not isinstance(value, str):
+                    value = tuple(value)
+                setattr(target, property_name, value)
+            copied_count += 1
+
+        validation.validate_and_store(context.scene)
+        self.report({'INFO'}, f"{copied_count}個のオブジェクトへ設定を一括適用しました。")
+        return {'FINISHED'}
+
+
 class MYADDON_OT_create_enemy_path(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_create_enemy_path"
     bl_label = "敵飛行パスを配置"
@@ -674,6 +791,8 @@ classes = (
     MYADDON_OT_create_ico_sphere,
     MYADDON_OT_export_scene,
     MYADDON_OT_validate_scene,
+    MYADDON_OT_playtest_game,
+    MYADDON_OT_apply_active_properties_to_selection,
     MYADDON_OT_create_enemy_path,
     MYADDON_OT_assign_selected_enemy_path,
     MYADDON_OT_create_stage_bounds,

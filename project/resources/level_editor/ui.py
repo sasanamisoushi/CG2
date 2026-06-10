@@ -1,6 +1,35 @@
 import bpy
 import operators
 
+_MENU_HANDLER_KEY = "cg2_level_editor_topbar_menu_handler"
+
+
+def _is_my_topbar_handler(draw_func):
+    qualname = getattr(draw_func, "__qualname__", "")
+    return qualname.endswith("TOPBAR_MT_my_menu.submenu")
+
+
+def _remove_topbar_menu_handler(draw_func):
+    try:
+        bpy.types.TOPBAR_MT_editor_menus.remove(draw_func)
+    except Exception:
+        pass
+
+
+def _cleanup_old_topbar_menu_handlers():
+    previous_handler = bpy.app.driver_namespace.pop(_MENU_HANDLER_KEY, None)
+    if previous_handler:
+        _remove_topbar_menu_handler(previous_handler)
+
+    draw_funcs = getattr(bpy.types.TOPBAR_MT_editor_menus, "_draw_funcs", None)
+    if not draw_funcs:
+        return
+
+    for draw_func in list(draw_funcs):
+        if _is_my_topbar_handler(draw_func):
+            _remove_topbar_menu_handler(draw_func)
+
+
 class TOPBAR_MT_my_menu(bpy.types.Menu):
     bl_idname = "myaddon.topbar_mt_my_menu"
     bl_label = "MyMenu"
@@ -48,6 +77,13 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         if obj.game_obj_type == 'ENEMY':
             game_box.prop(obj, "enemy_type", text="敵のタイプ")
             game_box.prop(obj, "enemy_path_id", text="飛行パスID")
+
+        batch_row = game_box.row()
+        batch_row.operator(
+            operators.MYADDON_OT_apply_active_properties_to_selection.bl_idname,
+            text="選択中へ一括適用",
+            icon='COPYDOWN',
+        )
 
         if obj.type == 'CURVE' and (obj.name.startswith("EnemyPath") or getattr(obj, "enemy_path_id", "None") != "None"):
             path_box = layout.box()
@@ -107,6 +143,7 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         
         # ★修正2：アイコンを 'WIRE' から 'SHADING_WIRE' に直しました！
         layout.operator(operators.MYADDON_OT_create_stage_bounds.bl_idname, text="ステージ範囲 (ワイヤーフレーム) を配置", icon='SHADING_WIRE')
+        layout.prop(context.scene, "myaddon_show_spawn_forward", text="スポーン向き表示")
 
         # スポーン地点配置ボタン（横に2つ並べる）
         row = layout.row()
@@ -124,7 +161,10 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         layout.separator()
         layout.label(text="Export")
         layout.label(text="Blender保存時にscene.json / 個別OBJ / MTLが自動出力されます", icon='INFO')
-        layout.operator(operators.MYADDON_OT_export_scene.bl_idname, text="Scene Export")
+        export_row = layout.row()
+        export_row.operator(operators.MYADDON_OT_export_scene.bl_idname, text="Scene Export", icon='EXPORT')
+        export_row.operator(operators.MYADDON_OT_playtest_game.bl_idname, text="ゲームをプレイ", icon='PLAY')
+        layout.prop(context.scene, "myaddon_game_exe_path", text="ゲームEXE")
 
 
 classes = (
@@ -135,9 +175,11 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
+    _cleanup_old_topbar_menu_handlers()
     bpy.types.TOPBAR_MT_editor_menus.append(TOPBAR_MT_my_menu.submenu)
+    bpy.app.driver_namespace[_MENU_HANDLER_KEY] = TOPBAR_MT_my_menu.submenu
 
 def unregister():
-    bpy.types.TOPBAR_MT_editor_menus.remove(TOPBAR_MT_my_menu.submenu)
+    _cleanup_old_topbar_menu_handlers()
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

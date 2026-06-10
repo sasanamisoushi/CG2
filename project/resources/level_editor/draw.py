@@ -10,10 +10,67 @@ class DrawCollider:
     handle = None
 
     @staticmethod
+    def spawn_origin(object):
+        if object.type == "MESH" and getattr(object, "game_obj_type", "NONE") == "ENEMY":
+            local_center = sum((mathutils.Vector(corner) for corner in object.bound_box), mathutils.Vector()) / 8.0
+            return object.matrix_world @ local_center
+        return object.matrix_world.translation.copy()
+
+    @staticmethod
+    def spawn_forward(object):
+        # ゲーム側の前方は +Z。Blender座標では +Y がそれに対応する。
+        forward = object.matrix_world.to_quaternion() @ mathutils.Vector((0.0, 1.0, 0.0))
+        if forward.length <= 0.0001:
+            return mathutils.Vector((0.0, 1.0, 0.0))
+        return forward.normalized()
+
+    @staticmethod
+    def append_spawn_forward_arrow(vertices, indices, object):
+        origin = DrawCollider.spawn_origin(object)
+        forward = DrawCollider.spawn_forward(object)
+        arrow_length = 3.0
+        head_length = 0.6
+        head_width = 0.35
+
+        start = origin + forward * 0.25
+        end = origin + forward * arrow_length
+
+        side = forward.cross(mathutils.Vector((0.0, 0.0, 1.0)))
+        if side.length <= 0.0001:
+            side = forward.cross(mathutils.Vector((1.0, 0.0, 0.0)))
+        side.normalize()
+        up = side.cross(forward)
+        if up.length <= 0.0001:
+            up = mathutils.Vector((0.0, 0.0, 1.0))
+        else:
+            up.normalize()
+
+        head_base = end - forward * head_length
+        start_index = len(vertices["pos"])
+        vertices["pos"].extend([
+            start,
+            end,
+            head_base + side * head_width,
+            head_base - side * head_width,
+            head_base + up * head_width,
+            head_base - up * head_width,
+        ])
+
+        indices.extend([
+            [start_index + 0, start_index + 1],
+            [start_index + 1, start_index + 2],
+            [start_index + 1, start_index + 3],
+            [start_index + 1, start_index + 4],
+            [start_index + 1, start_index + 5],
+        ])
+
+    @staticmethod
     def draw_collider():
         # --- 資料スライド1：頂点データの初期化（空にしておく） ---
         vertices = {"pos": []}
         indices = []
+        forward_vertices = {"pos": []}
+        forward_indices = []
         
         # --- 資料スライド2：頂点オフセットとサイズの用意 ---
         offsets = [
@@ -72,22 +129,31 @@ class DrawCollider:
                 indices.append([start+1, start+5])
                 indices.append([start+2, start+6])
                 indices.append([start+3, start+7])
+
+            if getattr(bpy.context.scene, "myaddon_show_spawn_forward", True) and getattr(object, "game_obj_type", "NONE") in {"PLAYER", "ENEMY"}:
+                DrawCollider.append_spawn_forward_arrow(forward_vertices, forward_indices, object)
         
         # 万が一、描画するBoxが一つもなかったらここで処理を終わる（エラー防止）
-        if len(vertices["pos"]) == 0:
+        if len(vertices["pos"]) == 0 and len(forward_vertices["pos"]) == 0:
             return
 
         # --- 最後に1回だけ描画処理を行う（for文の外に出す） ---
         shader = gpu.shader.from_builtin('UNIFORM_COLOR')
-        # verticesは既に辞書型 {"pos": [...]} になっているのでそのまま渡す
-        batch = batch_for_shader(shader, 'LINES', vertices, indices=indices)
         
         gpu.state.depth_test_set('ALWAYS') 
         gpu.state.line_width_set(2.0)
         
         shader.bind()
-        shader.uniform_float("color", (0.0, 1.0, 1.0, 1.0)) # 水色
-        batch.draw(shader)
+        if vertices["pos"]:
+            # verticesは既に辞書型 {"pos": [...]} になっているのでそのまま渡す
+            batch = batch_for_shader(shader, 'LINES', vertices, indices=indices)
+            shader.uniform_float("color", (0.0, 1.0, 1.0, 1.0)) # 水色
+            batch.draw(shader)
+
+        if forward_vertices["pos"]:
+            forward_batch = batch_for_shader(shader, 'LINES', forward_vertices, indices=forward_indices)
+            shader.uniform_float("color", (1.0, 0.85, 0.0, 1.0)) # 黄色
+            forward_batch.draw(shader)
         
         # 設定を元に戻す
         gpu.state.depth_test_set('LESS')
