@@ -24,6 +24,7 @@ namespace {
     constexpr float kEnemyMaxBankAngle = 0.75f;
     constexpr float kEnemyBulletSpeed = 0.18f;
     constexpr float kPi = 3.1415926535f;
+    constexpr int kEnemyMaxHp = 2;
 
     float LengthSq(const Vector3 &v) {
         return v.x * v.x + v.y * v.y + v.z * v.z;
@@ -159,6 +160,8 @@ void Enemy::Initialize(const Vector3 &position) {
     flightPathSpeed_ = kEnemyCruiseSpeed;
     flightPathSegmentIndex_ = 0;
     flightPathSegmentT_ = 0.0f;
+    isChasingPlayer_ = false;
+    hp_ = kEnemyMaxHp;
 
     // リスポーン直後の描画でもBlenderで設定した地点に表示されるように同期する。
     object_->SetTranslate(position_);
@@ -195,6 +198,30 @@ void Enemy::OnCollision() {
     isDead_ = true;
 }
 
+void Enemy::TakeDamage(int damage) {
+    if (isDead_ || damage <= 0) {
+        return;
+    }
+
+    StartChasingPlayer();
+    hp_ -= damage;
+    if (hp_ <= 0) {
+        hp_ = 0;
+        OnCollision();
+    }
+}
+
+void Enemy::StartChasingPlayer() {
+    if (isDead_) {
+        return;
+    }
+
+    isChasingPlayer_ = true;
+    state_ = EnemyState::Approach;
+    currentSpeed_ = (currentSpeed_ > 0.0f) ? currentSpeed_ : kEnemyCruiseSpeed;
+    velocity_ = Scale(forward_, currentSpeed_);
+}
+
 void Enemy::SetRotation(const Vector3 &rotation) {
     rotation_ = rotation;
     bankAngle_ = rotation.z;
@@ -215,6 +242,7 @@ void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float s
     flightPathSpeed_ = (std::isfinite(speed) && speed > 0.0f) ? speed : kEnemyCruiseSpeed;
     flightPathSegmentIndex_ = 0;
     flightPathSegmentT_ = 0.0f;
+    isChasingPlayer_ = false;
 
     if (!hasFlightPath_) {
         return;
@@ -237,7 +265,7 @@ void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float s
 void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
     flightTimer_++;
 
-    if (hasFlightPath_) {
+    if (hasFlightPath_ && !isChasingPlayer_) {
         UpdateFlightPathAI(playerPos, bulletManager);
         return;
     }

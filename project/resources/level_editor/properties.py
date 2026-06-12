@@ -22,6 +22,17 @@ def register():
     bpy.types.Object.enemy_path_id = bpy.props.StringProperty(name="飛行パスID", default="None")
     bpy.types.Object.enemy_path_loop = bpy.props.BoolProperty(name="ループ", default=False)
     bpy.types.Object.enemy_path_speed = bpy.props.FloatProperty(name="速度", default=0.05, min=0.001)
+    bpy.types.Object.enemy_reinforcement_trigger_name = bpy.props.StringProperty(
+        name="増援トリガー",
+        description="この敵を出現させるきっかけになる敵リスポーン地点名",
+        default="",
+    )
+    bpy.types.Object.enemy_reinforcement_delay_frames = bpy.props.IntProperty(
+        name="増援ディレイ",
+        description="トリガー敵が倒されてから出現するまでのフレーム数",
+        default=60,
+        min=0,
+    )
 
     # 何用なのかを選ぶプルダウンメニュー！
     bpy.types.Object.game_obj_type = bpy.props.EnumProperty(
@@ -50,4 +61,6 @@ def unregister():
     del bpy.types.Object.enemy_path_id
     del bpy.types.Object.enemy_path_loop
     del bpy.types.Object.enemy_path_speed
+    del bpy.types.Object.enemy_reinforcement_trigger_name
+    del bpy.types.Object.enemy_reinforcement_delay_frames
     del bpy.types.Object.game_obj_type

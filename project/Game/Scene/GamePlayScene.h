@@ -18,10 +18,12 @@
 #include "Game/bullet/MissileManager.h"
 #include "Game/enemy/Enemy.h"
 #include "Game/enemy/EnemyBulletManager.h"
+#include "Game/enemy/EnemyEventManager.h"
 #include "Game/obstacle/Obstacle.h"
 #include <memory>
 #include <vector>
 #include <list>
+#include <string>
 #include <filesystem>
 
 
@@ -45,12 +47,21 @@ public:
 	void UpdateUI();
 
 private:
+	void DrawOverlay();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
 	void SpawnEnemiesFromSpawnPoints();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
+	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
+	void TriggerEnemyReinforcements(const std::string &deadEnemyName);
 	void UpdateEnemyRespawns();
+	bool IsEnemySpawnPointActive(size_t spawnPointIndex) const;
+	void UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame);
+	Enemy *FindLockOnTarget(Camera *activeCamera) const;
+	bool IsLockedEnemyAlive() const;
+	void UpdateGameplayCamera();
+	void UpdateCinematicLockOnCamera();
 
 	//シーンリソース
 	std::unique_ptr<Camera> camera;
@@ -147,6 +158,14 @@ private:
 	std::unique_ptr<FlyCamera> debugFlyCamera_;
 	bool isDebugCameraActive_ = false;
 	bool isEditorPreviewPlaying_ = true;
+	bool isCinematicLockOnCameraEnabled_ = true;
+	bool isCinematicLockOnCameraInitialized_ = false;
+	Vector3 cinematicLockOnCameraPosition_ = { 0.0f, 0.0f, 0.0f };
+	Quaternion cinematicLockOnCameraRotation_ = { 0.0f, 0.0f, 0.0f, 1.0f };
+	Vector3 cinematicLockOnCameraFocus_ = { 0.0f, 0.0f, 0.0f };
+	Vector3 cinematicLockOnCameraBackDirection_ = { 0.0f, 0.0f, 1.0f };
+	float cinematicLockOnCameraSideSign_ = 1.0f;
+	float cinematicLockOnCameraSeparation_ = 0.0f;
 
 	// UIと状態管理
 	bool showParticles = false;
@@ -177,6 +196,8 @@ private:
 	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
 	std::vector<EnemySpawnData> enemySpawns_;
 	std::vector<int> enemyRespawnTimers_;
+	EnemyEventManager enemyEventManager_;
+	Enemy *lockedEnemy_ = nullptr;
 
 
 	// 障害物
@@ -196,4 +217,3 @@ private:
 	// JSONファイルが最後に更新された日時を記録する変数
 	std::filesystem::file_time_type lastJsonWriteTime_;
 };
-

@@ -51,6 +51,7 @@ private:
     // 寿命（画面外に飛び去った弾をメモリから消すため）
     int lifeTimer_ = 0;
     static const int kLifeTime = 120; // 120フレーム（約2秒）で消滅
+    static const int kHomingLifeTime = 240;
     bool isDead_ = false;
 };
 

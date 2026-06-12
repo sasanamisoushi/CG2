@@ -77,6 +77,15 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         if obj.game_obj_type == 'ENEMY':
             game_box.prop(obj, "enemy_type", text="敵のタイプ")
             game_box.prop(obj, "enemy_path_id", text="飛行パスID")
+            game_box.separator()
+            game_box.label(text="Reinforcement")
+            game_box.prop_search(obj, "enemy_reinforcement_trigger_name", context.scene, "objects", text="倒されたら出現")
+            game_box.prop(obj, "enemy_reinforcement_delay_frames", text="ディレイ(F)")
+            game_box.operator(
+                operators.MYADDON_OT_assign_selected_reinforcement_trigger.bl_idname,
+                text="選択敵をトリガーに設定",
+                icon='LINKED',
+            )
 
         batch_row = game_box.row()
         batch_row.operator(

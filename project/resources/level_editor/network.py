@@ -87,6 +87,10 @@ def get_enemy_path_id(obj):
     return obj.name.split(".", 1)[0]
 
 
+def is_unset_text(value):
+    return value is None or str(value).strip() in {"", "None"}
+
+
 def get_curve_world_points(obj):
     points = []
 
@@ -183,6 +187,13 @@ def build_scene_data(scene):
             path_id = getattr(obj, "enemy_path_id", "None")
             if path_id != "None":
                 obj_data["path_id"] = path_id
+
+            trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
+            if not is_unset_text(trigger_name):
+                obj_data["reinforcement"] = {
+                    "trigger": str(trigger_name).strip(),
+                    "delay": max(0, int(getattr(obj, "enemy_reinforcement_delay_frames", 0))),
+                }
 
         scene_data["objects"].append(obj_data)
 

@@ -1,6 +1,42 @@
 #include "Player.h"
 #include "3D/Object3dCommon.h"
 #include "Game/obstacle/Obstacle.h"
+#include <algorithm>
+#include <cmath>
+
+namespace {
+	float LengthSq(const Vector3 &value) {
+		return value.x * value.x + value.y * value.y + value.z * value.z;
+	}
+
+	float Length(const Vector3 &value) {
+		return std::sqrt(LengthSq(value));
+	}
+
+	Vector3 Add(const Vector3 &a, const Vector3 &b) {
+		return { a.x + b.x, a.y + b.y, a.z + b.z };
+	}
+
+	Vector3 Scale(const Vector3 &value, float scalar) {
+		return { value.x * scalar, value.y * scalar, value.z * scalar };
+	}
+
+	Vector3 NormalizeOrZero(const Vector3 &value) {
+		const float length = Length(value);
+		if (length <= 0.0001f) {
+			return { 0.0f, 0.0f, 0.0f };
+		}
+		return Scale(value, 1.0f / length);
+	}
+
+	Vector3 ClampLength(const Vector3 &value, float maxLength) {
+		const float length = Length(value);
+		if (length <= maxLength || length <= 0.0001f) {
+			return value;
+		}
+		return Scale(value, maxLength / length);
+	}
+}
 
 void Player::Initialize(const std::string &modelName) {
 	object_ = std::make_unique<Object3d>();
@@ -15,6 +51,7 @@ void Player::Initialize(const std::string &modelName) {
 	object_->SetScale({ 0.2f, 0.2f, 0.2f });
 
 	position_ = { 0.0f, 0.0f, 0.0f };
+	velocity_ = { 0.0f, 0.0f, 0.0f };
 	quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
 	hp_ = 3;
 	isDead_ = false;
@@ -44,8 +81,8 @@ void Player::Draw() {
 }
 
 void Player::UpdateCamera(Camera *camera) {
-	// 機体から見たカメラの相対位置（真後ろに10m、上に3m）
-	Vector3 offset = { 0.0f, 0.0f, -10.0f };
+	// 機体から見たカメラの相対位置（真後ろ、少し上）
+	Vector3 offset = { 0.0f, 2.0f, -12.0f };
 
 	// このオフセットを、機体の傾きに合わせて回転させる
 	Vector3 rotatedOffset = MyMath::RotateVector(offset, quaternion_);
@@ -113,19 +150,52 @@ void Player::TakeDamage(int damage) {
 void Player::Move() {
 	auto input = Input::GetInstance();
 
+	const bool moveForward = input->PushKey(DIK_W);
+	const bool moveBackward = input->PushKey(DIK_S);
+	const bool moveRight = input->PushKey(DIK_D);
+	const bool moveLeft = input->PushKey(DIK_A);
+	const bool moveUp = input->PushKey(DIK_SPACE);
+	const bool moveDown = input->PushKey(DIK_LSHIFT);
+
 	// ==========================================
-	// 1. 回転の処理 (矢印キーと Q/E)
+	// 1. 向き調整。移動とは分けて、スクランブル系の自由移動に寄せる。
 	// ==========================================
 	float pitch = 0.0f;
 	float yaw = 0.0f;
 	float roll = 0.0f;
 
-	if (input->PushKey(DIK_UP))    pitch -= rotSpeed_; // 機首下げ
-	if (input->PushKey(DIK_DOWN))  pitch += rotSpeed_; // 機首上げ
-	if (input->PushKey(DIK_RIGHT)) yaw += rotSpeed_; // 右旋回
-	if (input->PushKey(DIK_LEFT))  yaw -= rotSpeed_; // 左旋回
-	if (input->PushKey(DIK_E))     roll -= rotSpeed_; // 右ロール
-	if (input->PushKey(DIK_Q))     roll += rotSpeed_; // 左ロール
+	if (input->PushKey(DIK_UP)) {
+		pitch -= pitchSpeed_; // 機首下げ
+	}
+	if (input->PushKey(DIK_DOWN)) {
+		pitch += pitchSpeed_; // 機首上げ
+	}
+	if (input->PushKey(DIK_RIGHT)) {
+		yaw += yawSpeed_;
+	}
+	if (input->PushKey(DIK_LEFT)) {
+		yaw -= yawSpeed_;
+	}
+	if (moveRight && !moveLeft) {
+		yaw += yawSpeed_ * 0.75f;
+		roll -= rollSpeed_ * 0.35f;
+	}
+	if (moveLeft && !moveRight) {
+		yaw -= yawSpeed_ * 0.75f;
+		roll += rollSpeed_ * 0.35f;
+	}
+	if (moveUp && !moveDown) {
+		pitch += pitchSpeed_ * 0.75f;
+	}
+	if (moveDown && !moveUp) {
+		pitch -= pitchSpeed_ * 0.75f;
+	}
+	if (input->PushKey(DIK_E)) {
+		roll -= rollSpeed_; // 右ロール
+	}
+	if (input->PushKey(DIK_Q)) {
+		roll += rollSpeed_; // 左ロール
+	}
 
 
 	// 各軸ごとの回転クォータニオンを作成して合成
@@ -139,30 +209,70 @@ void Player::Move() {
 	quaternion_ = MyMath::Normalize(quaternion_);
 
 	// ==========================================
-	// 2. 移動の処理 (Wキーで前進、Sキーでブレーキ/後退)
+	// 2. 3Dアクション寄りの慣性移動。押した方向へ動き、離すと減速して止まる。
 	// ==========================================
-	Vector3 moveInput = { 0.0f, 0.0f, 0.0f };
-
-	// ① どのキーが押されているかチェック
-	if (input->PushKey(DIK_W)) moveInput.z += 1.0f;
-	if (input->PushKey(DIK_S)) moveInput.z -= 1.0f;
-	if (input->PushKey(DIK_D)) moveInput.x += 1.0f;
-	if (input->PushKey(DIK_A)) moveInput.x -= 1.0f;
-	if (input->PushKey(DIK_SPACE)) moveInput.y += 1.0f;    // 上昇 (Spaceに変更)
-	if (input->PushKey(DIK_LSHIFT)) moveInput.y -= 1.0f;   // 下降 (LShiftに変更)
-
-	// ② 斜め移動の加速を防ぐ（長さを1にする）
-	if (moveInput.x != 0.0f || moveInput.y != 0.0f || moveInput.z != 0.0f) {
-		moveInput = MyMath::Normalize(moveInput);
+	Vector3 localMove = { 0.0f, 0.0f, 0.0f };
+	if (moveForward) {
+		localMove.z += 1.0f;
+	}
+	if (moveBackward) {
+		localMove.z -= 1.0f;
+	}
+	if (moveRight) {
+		localMove.x += 1.0f;
+	}
+	if (moveLeft) {
+		localMove.x -= 1.0f;
+	}
+	if (moveUp) {
+		localMove.y += 1.0f;
+	}
+	if (moveDown) {
+		localMove.y -= 1.0f;
 	}
 
-	// ③ 入力方向を、自機の向いている方向に合わせて曲げる
-	Vector3 velocity = MyMath::RotateVector(moveInput, quaternion_);
+	if (LengthSq(localMove) > 0.0001f) {
+		localMove = NormalizeOrZero(localMove);
+		Vector3 worldMove = MyMath::RotateVector(localMove, quaternion_);
+		velocity_ = Add(velocity_, Scale(worldMove, moveAcceleration_));
+		velocity_ = ClampLength(velocity_, maxMoveSpeed_);
+	} else {
+		velocity_ = Scale(velocity_, moveDamping_);
+		if (LengthSq(velocity_) <= 0.00001f) {
+			velocity_ = { 0.0f, 0.0f, 0.0f };
+		}
+	}
 
-	// ④ スピードを掛けて足し込む
-	position_.x += velocity.x * speed_;
-	position_.y += velocity.y * speed_;
-	position_.z += velocity.z * speed_;
+	position_ = Add(position_, velocity_);
+}
+
+void Player::UpdateLockOnRotation(const Vector3& targetPos) {
+	Vector3 toTarget = { targetPos.x - position_.x, targetPos.y - position_.y, targetPos.z - position_.z };
+	if (LengthSq(toTarget) < 0.0001f) return;
+
+	Vector3 targetForward = NormalizeOrZero(toTarget);
+	Vector3 currentForward = GetForwardVector();
+
+	float dot = MyMath::Dot(currentForward, targetForward);
+	dot = std::clamp(dot, -1.0f, 1.0f);
+
+	if (dot < 0.999f) {
+		Vector3 axis = MyMath::Cross(currentForward, targetForward);
+		if (LengthSq(axis) > 0.000001f) {
+			axis = NormalizeOrZero(axis);
+			float angle = std::acos(dot);
+			
+			// ロックオン対象へ強制的に向かせる (1フレームあたり20%の補間)
+			Quaternion qDiff = MyMath::MakeAxisAngle(axis, angle * 0.20f);
+			quaternion_ = MyMath::Multiply(quaternion_, qDiff);
+			quaternion_ = MyMath::Normalize(quaternion_);
+			
+			if (object_) {
+				object_->SetQuaternionRotate(quaternion_);
+				object_->Update();
+			}
+		}
+	}
 }
 
 void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {

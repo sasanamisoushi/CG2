@@ -182,6 +182,10 @@ def _unique_enemy_path_id(scene):
         index += 1
 
 
+def _is_unset_text(value):
+    return value is None or str(value).strip() in {"", "None"}
+
+
 def _build_object_data(obj, model_filenames=None):
     trans, rot, scale = _get_world_transform(obj)
     rot = rot.to_euler()
@@ -231,6 +235,13 @@ def _build_object_data(obj, model_filenames=None):
         path_id = getattr(obj, "enemy_path_id", "None")
         if path_id != "None":
             obj_data["path_id"] = path_id
+
+        trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
+        if not _is_unset_text(trigger_name):
+            obj_data["reinforcement"] = {
+                "trigger": str(trigger_name).strip(),
+                "delay": max(0, int(getattr(obj, "enemy_reinforcement_delay_frames", 0))),
+            }
 
     if obj.type == 'MESH':
         mesh = obj.to_mesh()
@@ -747,6 +758,36 @@ class MYADDON_OT_assign_selected_enemy_path(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class MYADDON_OT_assign_selected_reinforcement_trigger(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_assign_selected_reinforcement_trigger"
+    bl_label = "選択敵を増援トリガーに設定"
+    bl_description = "アクティブな敵リスポーン地点を、同時選択した別の敵が倒された後に出現させます"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        active = context.active_object
+        if not active or getattr(active, "game_obj_type", "NONE") != "ENEMY":
+            self.report({'ERROR'}, "増援として出現させる敵リスポーン地点をアクティブにしてください。")
+            return {'CANCELLED'}
+
+        selected_triggers = [
+            obj for obj in context.selected_objects
+            if obj != active and getattr(obj, "game_obj_type", "NONE") == "ENEMY"
+        ]
+
+        if not selected_triggers:
+            self.report({'ERROR'}, "撃破トリガーにする別の敵リスポーン地点も一緒に選択してください。")
+            return {'CANCELLED'}
+
+        active.enemy_reinforcement_trigger_name = selected_triggers[0].name
+        if getattr(active, "enemy_reinforcement_delay_frames", 0) < 0:
+            active.enemy_reinforcement_delay_frames = 0
+
+        validation.validate_and_store(context.scene)
+        self.report({'INFO'}, f"{selected_triggers[0].name} が倒されたら {active.name} が出現します。")
+        return {'FINISHED'}
+
+
 class MYADDON_OT_create_stage_bounds(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_create_stage_bounds"
     bl_label = "ステージ範囲を配置"
@@ -795,6 +836,7 @@ classes = (
     MYADDON_OT_apply_active_properties_to_selection,
     MYADDON_OT_create_enemy_path,
     MYADDON_OT_assign_selected_enemy_path,
+    MYADDON_OT_assign_selected_reinforcement_trigger,
     MYADDON_OT_create_stage_bounds,
     MYADDON_OT_create_spawn_point,
 )

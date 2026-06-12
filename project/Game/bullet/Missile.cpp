@@ -1,6 +1,41 @@
 #include "Missile.h"
 #include "3D/Object3dCommon.h"
 #include "Game/enemy/Enemy.h"
+#include <cmath>
+
+namespace {
+	float LengthSq(const Vector3 &value) {
+		return value.x * value.x + value.y * value.y + value.z * value.z;
+	}
+
+	float Length(const Vector3 &value) {
+		return std::sqrt(LengthSq(value));
+	}
+
+	Vector3 Add(const Vector3 &a, const Vector3 &b) {
+		return { a.x + b.x, a.y + b.y, a.z + b.z };
+	}
+
+	Vector3 Subtract(const Vector3 &a, const Vector3 &b) {
+		return { a.x - b.x, a.y - b.y, a.z - b.z };
+	}
+
+	Vector3 Scale(const Vector3 &value, float scalar) {
+		return { value.x * scalar, value.y * scalar, value.z * scalar };
+	}
+
+	Vector3 NormalizeOr(const Vector3 &value, const Vector3 &fallback) {
+		const float length = Length(value);
+		if (length <= 0.0001f) {
+			return fallback;
+		}
+		return Scale(value, 1.0f / length);
+	}
+
+	Vector3 BlendDirection(const Vector3 &from, const Vector3 &to, float blend) {
+		return NormalizeOr(Add(Scale(from, 1.0f - blend), Scale(to, blend)), to);
+	}
+}
 
 void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type) {
 	type_ = type; // タイプを保存
@@ -26,7 +61,7 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	position_ = position;
 	velocity_ = velocity;
 
-	lifeTimer_ = kLifeTime;
+	lifeTimer_ = (type_ == MissileType::MissileWithTrail) ? kHomingLifeTime : kLifeTime;
 	isDead_ = false;
 
 	// ミサイルタイプのみトレイルを準備
@@ -45,43 +80,20 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 
 	// ホーミング（追尾）処理
 	if (type_ == MissileType::MissileWithTrail && enemy) {
-		Vector3 targetPos = enemy->GetPosition();
-
-		// 敵への方向ベクトルを計算（ターゲット座標 － 今の座標）
-		Vector3 toTarget = {
-			targetPos.x - position_.x,
-			targetPos.y - position_.y,
-			targetPos.z - position_.z
-		};
-
-		// ベクトルを正規化（長さを1にして「純粋な方向」だけのデータにする）
-		toTarget = MyMath::Normalize(toTarget);
-
-		// 今の速度ベクトルに、敵への方向を少しだけ足す（引っ張る）
-		float turnRate = 0.05f; // 旋回力（大きいほど急カーブする）
-		velocity_.x += toTarget.x * turnRate;
-		velocity_.y += toTarget.y * turnRate;
-		velocity_.z += toTarget.z * turnRate;
-
-		// 速度を足したままだと加速し続けてしまうので、長さを1に戻してスピードを掛け直す
-		velocity_ = MyMath::Normalize(velocity_);
-		float speed = 1.0f; // B弾のスピード
-		velocity_.x *= speed;
-		velocity_.y *= speed;
-		velocity_.z *= speed;
+		const Vector3 targetPos = enemy->GetPosition();
+		const Vector3 desiredDirection = NormalizeOr(Subtract(targetPos, position_), NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }));
+		const Vector3 currentDirection = NormalizeOr(velocity_, desiredDirection);
+		const Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, 0.085f);
+		const float homingSpeed = 0.75f;
+		velocity_ = Scale(homingDirection, homingSpeed);
+	} else if (type_ == MissileType::MissileWithTrail) {
+		velocity_ = Scale(NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }), 0.75f);
 	}
 
 	// 基本の移動処理
 	position_.x += velocity_.x;
 	position_.y += velocity_.y;
 	position_.z += velocity_.z;
-
-	// 螺旋軌道（ぐねぐね）の処理
-	if (type_ == MissileType::MissileWithTrail) {
-		float time = 120.0f - lifeTimer_;
-		position_.x += std::cos(time * 0.3f) * 0.2f;
-		position_.y += std::sin(time * 0.3f) * 0.2f;
-	}
 
 	// 寿命の処理
 	lifeTimer_--;

@@ -58,6 +58,8 @@ public:
 
     // ミサイルと衝突したときの処理
     void OnCollision();
+    void TakeDamage(int damage);
+    void StartChasingPlayer();
 
     // 死んだかどうかのゲッター
     bool IsDead() const { return isDead_; }
@@ -104,6 +106,8 @@ private:
     float flightPathSpeed_ = 0.05f;
     size_t flightPathSegmentIndex_ = 0;
     float flightPathSegmentT_ = 0.0f;
+    bool isChasingPlayer_ = false;
+    int hp_ = 2;
 
     // 死んだかどうかのフラグ
     bool isDead_ = false;

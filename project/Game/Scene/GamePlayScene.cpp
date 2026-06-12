@@ -13,10 +13,156 @@
 #include "engine/Utility/StageLoader.h"
 #include "engine/Utility/StageValidation.h"
 #include "Game/editor/EditorReceiver.h"
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace {
 	constexpr int kEnemyRespawnDelayFrames = 180;
 	constexpr int kNoRespawnTimer = -1;
+	constexpr float kNormalCameraFovY = 0.45f;
+	constexpr float kNormalCameraFarClip = 100.0f;
+	constexpr float kCinematicCameraFovY = 0.70f;
+	constexpr float kCinematicCameraFarClip = 250.0f;
+	constexpr float kCinematicCameraFocusBlend = 0.18f;
+	constexpr float kCinematicCameraDirectionBlend = 0.10f;
+	constexpr float kCinematicCameraPositionBlend = 0.10f;
+	constexpr float kCinematicCameraRotationBlend = 0.12f;
+
+	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
+		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
+	}
+
+	Vector3 AddVector3(const Vector3 &lhs, const Vector3 &rhs) {
+		return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+	}
+
+	Vector3 ScaleVector3(const Vector3 &value, float scale) {
+		return { value.x * scale, value.y * scale, value.z * scale };
+	}
+
+	Vector3 FlattenYVector3(const Vector3 &value) {
+		return { value.x, 0.0f, value.z };
+	}
+
+	float LengthSqVector3(const Vector3 &value) {
+		return value.x * value.x + value.y * value.y + value.z * value.z;
+	}
+
+	float LengthVector3(const Vector3 &value) {
+		return std::sqrt(LengthSqVector3(value));
+	}
+
+	Vector3 NormalizeOrVector3(const Vector3 &value, const Vector3 &fallback) {
+		const float length = LengthVector3(value);
+		if (length <= 0.0001f) {
+			return fallback;
+		}
+		return ScaleVector3(value, 1.0f / length);
+	}
+
+	Vector3 LerpVector3(const Vector3 &from, const Vector3 &to, float t) {
+		return {
+			from.x + (to.x - from.x) * t,
+			from.y + (to.y - from.y) * t,
+			from.z + (to.z - from.z) * t
+		};
+	}
+
+	Quaternion MakeLookQuaternion(const Vector3 &forward) {
+		const Vector3 normalizedForward = NormalizeOrVector3(forward, { 0.0f, 0.0f, 1.0f });
+		const float clampedY = std::clamp(normalizedForward.y, -1.0f, 1.0f);
+		const float pitch = -std::asin(clampedY);
+		const float yaw = std::atan2(normalizedForward.x, normalizedForward.z);
+
+		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+		return MyMath::Normalize(MyMath::Multiply(qPitch, qYaw));
+	}
+
+	bool GetOverlayBounds(float &minX, float &minY, float &maxX, float &maxY) {
+		if (FlyCamera::GetGameViewBounds(minX, minY, maxX, maxY) && maxX > minX && maxY > minY) {
+			return true;
+		}
+
+		minX = 0.0f;
+		minY = 0.0f;
+		maxX = static_cast<float>(WinApp::GetClientWidth());
+		maxY = static_cast<float>(WinApp::GetClientHeight());
+		return maxX > minX && maxY > minY;
+	}
+
+#ifdef ENABLE_IMGUI
+	void DrawLockOnOverlay(const Enemy *target, const Matrix4x4 &viewProjectionMatrix) {
+		if (!target) {
+			return;
+		}
+		
+		try {
+			if (target->IsDead()) {
+				return;
+			}
+		} catch(...) {
+			return;
+		}
+
+		Vector3 worldPosition = target->GetPosition();
+		float collisionRadius = 1.0f;
+		try {
+			collisionRadius = target->GetCollisionRadius();
+		} catch(...) {}
+		worldPosition.y += collisionRadius * 0.3f;
+		float minX = 0.0f;
+		float minY = 0.0f;
+		float maxX = 0.0f;
+		float maxY = 0.0f;
+		if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+			return;
+		}
+
+		const float width = maxX - minX;
+		const float height = maxY - minY;
+
+		Vector3 screenPosition = MyMath::WorldToScreen(worldPosition, viewProjectionMatrix, width, height);
+		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f) {
+			return;
+		}
+		if (screenPosition.x < 0.0f || screenPosition.x > width ||
+			screenPosition.y < 0.0f || screenPosition.y > height) {
+			return;
+		}
+
+		ImDrawList *drawList = ImGui::GetForegroundDrawList();
+		const ImVec2 center(minX + screenPosition.x, minY + screenPosition.y);
+		const float radius = 24.0f;
+		const float corner = 10.0f;
+		const ImU32 lockColor = IM_COL32(255, 230, 40, 255);
+		const ImU32 shadowColor = IM_COL32(0, 0, 0, 190);
+
+		auto addCorner = [&](float sx, float sy, ImU32 color, float thickness) {
+			const ImVec2 outer(center.x + sx * radius, center.y + sy * radius);
+			drawList->AddLine(outer, ImVec2(outer.x - sx * corner, outer.y), color, thickness);
+			drawList->AddLine(outer, ImVec2(outer.x, outer.y - sy * corner), color, thickness);
+		};
+
+		drawList->AddCircle(center, radius + 2.0f, shadowColor, 48, 4.0f);
+		drawList->AddCircle(center, radius, lockColor, 48, 2.0f);
+		addCorner(-1.0f, -1.0f, shadowColor, 5.0f);
+		addCorner(1.0f, -1.0f, shadowColor, 5.0f);
+		addCorner(-1.0f, 1.0f, shadowColor, 5.0f);
+		addCorner(1.0f, 1.0f, shadowColor, 5.0f);
+		addCorner(-1.0f, -1.0f, lockColor, 2.0f);
+		addCorner(1.0f, -1.0f, lockColor, 2.0f);
+		addCorner(-1.0f, 1.0f, lockColor, 2.0f);
+		addCorner(1.0f, 1.0f, lockColor, 2.0f);
+
+		const char *text = "LOCK ON";
+		const ImVec2 textSize = ImGui::CalcTextSize(text);
+		const ImVec2 textPos(center.x - textSize.x * 0.5f, center.y + radius + 8.0f);
+		drawList->AddText(ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), shadowColor, text);
+		drawList->AddText(textPos, lockColor, text);
+	}
+#endif
 
 #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
 	bool gShowStageValidationWindow = true;
@@ -383,6 +529,7 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 	}
 
 	isDebugCameraActive_ = isActive;
+	isCinematicLockOnCameraInitialized_ = false;
 	if (isDebugCameraActive_) {
 		debugFlyCamera_->SetTranslate(camera->GetTranslate());
 		Object3dCommon::GetInstance()->SetDefaultCamera(debugFlyCamera_.get());
@@ -394,11 +541,22 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 }
 
 void GamePlayScene::ReloadSceneJson() {
+	lockedEnemy_ = nullptr;
+	isCinematicLockOnCameraInitialized_ = false;
 	enemies_.clear();
 	obstacles_.clear();
 	enemySpawns_.clear();
 
 	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawns_);
+
+	// イベントデータを再読み込み
+	enemyEventManager_.LoadEvents("resources/enemy_events.json");
+	for (auto& spawnData : enemySpawns_) {
+		if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
+			spawnData.isInitialSpawn = false;
+		}
+	}
+
 	SpawnEnemiesFromSpawnPoints();
 
 	try {
@@ -412,6 +570,8 @@ void GamePlayScene::ResetEditorPreview() {
 	isEditorPreviewPlaying_ = false;
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
+	lockedEnemy_ = nullptr;
+	isCinematicLockOnCameraInitialized_ = false;
 
 	if (PostEffect::GetInstance()) {
 		PostEffect::GetInstance()->SetEffectType(0);
@@ -433,18 +593,21 @@ void GamePlayScene::ResetEditorPreview() {
 	ReloadSceneJson();
 
 	if (!isDebugCameraActive_ && player_) {
-		player_->UpdateCamera(camera.get());
+		UpdateGameplayCamera();
 	}
 
 	OutputDebugStringA("[EditorPreview] Reset scene and paused.\n");
 }
 
 void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
+	lockedEnemy_ = nullptr;
 	enemies_.clear();
 	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoRespawnTimer);
 
 	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-		SpawnEnemyFromSpawnPoint(spawnPointIndex);
+		if (enemySpawns_[spawnPointIndex].isInitialSpawn) {
+			SpawnEnemyFromSpawnPoint(spawnPointIndex);
+		}
 	}
 }
 
@@ -468,6 +631,61 @@ void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 	}
 }
 
+bool GamePlayScene::IsEnemySpawnPointActive(size_t spawnPointIndex) const {
+	for (const auto &enemy : enemies_) {
+		if (!enemy || enemy->GetSpawnPointIndex() != spawnPointIndex) {
+			continue;
+		}
+
+		try {
+			if (!enemy->IsDead()) {
+				return true;
+			}
+		} catch (...) {
+			continue;
+		}
+	}
+
+	return false;
+}
+
+void GamePlayScene::ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames) {
+	if (spawnPointIndex >= enemySpawns_.size() || spawnPointIndex >= enemyRespawnTimers_.size()) {
+		return;
+	}
+	if (enemyRespawnTimers_[spawnPointIndex] != kNoRespawnTimer) {
+		return;
+	}
+	if (IsEnemySpawnPointActive(spawnPointIndex)) {
+		return;
+	}
+
+	enemyRespawnTimers_[spawnPointIndex] = delayFrames > 0 ? delayFrames : 1;
+}
+
+void GamePlayScene::TriggerEnemyReinforcements(const std::string &deadEnemyName) {
+	if (deadEnemyName.empty()) {
+		return;
+	}
+
+	std::vector<EnemyEvent> triggeredEvents = enemyEventManager_.GetEventsForTrigger(deadEnemyName);
+	for (const auto &ev : triggeredEvents) {
+		for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
+			if (enemySpawns_[spawnPointIndex].name == ev.targetEnemyName) {
+				ScheduleEnemySpawn(spawnPointIndex, ev.delayFrames);
+				break;
+			}
+		}
+	}
+
+	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
+		const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
+		if (spawnData.reinforcementTriggerName == deadEnemyName) {
+			ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
+		}
+	}
+}
+
 void GamePlayScene::UpdateEnemyRespawns() {
 	for (size_t spawnPointIndex = 0; spawnPointIndex < enemyRespawnTimers_.size(); ++spawnPointIndex) {
 		int &timer = enemyRespawnTimers_[spawnPointIndex];
@@ -483,6 +701,248 @@ void GamePlayScene::UpdateEnemyRespawns() {
 			SpawnEnemyFromSpawnPoint(spawnPointIndex);
 		}
 	}
+}
+
+bool GamePlayScene::IsLockedEnemyAlive() const {
+	if (!lockedEnemy_) {
+		return false;
+	}
+
+	for (const auto &enemy : enemies_) {
+		if (enemy.get() == lockedEnemy_) {
+			try {
+				if (!enemy->IsDead()) {
+					return true;
+				}
+			} catch (...) {
+				return false;
+			}
+		}
+	}
+
+	return false;
+}
+
+Enemy *GamePlayScene::FindLockOnTarget(Camera *activeCamera) const {
+	if (!player_ || !activeCamera || player_->IsDead()) {
+		return nullptr;
+	}
+
+	const Vector3 playerPosition = player_->GetPosition();
+	const Vector3 playerForward = MyMath::Normalize(player_->GetForwardVector());
+	Enemy *nearestAliveEnemy = nullptr;
+	float nearestAliveDistSq = (std::numeric_limits<float>::max)();
+	Enemy *bestFrontEnemy = nullptr;
+	float bestFrontScore = (std::numeric_limits<float>::max)();
+	Enemy *bestScreenEnemy = nullptr;
+	float bestScreenScore = (std::numeric_limits<float>::max)();
+
+	float minX = 0.0f;
+	float minY = 0.0f;
+	float maxX = 0.0f;
+	float maxY = 0.0f;
+	const bool hasOverlayBounds = activeCamera && GetOverlayBounds(minX, minY, maxX, maxY);
+	const float screenWidth = maxX - minX;
+	const float screenHeight = maxY - minY;
+
+	for (const auto &enemy : enemies_) {
+		if (!enemy.get()) continue;
+		try {
+			if (enemy->IsDead()) continue;
+		} catch (...) { continue; }
+
+		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
+		const float distSq = LengthSqVector3(toEnemy);
+		if (distSq < nearestAliveDistSq) {
+			nearestAliveDistSq = distSq;
+			nearestAliveEnemy = enemy.get();
+		}
+
+		const Vector3 direction = MyMath::Normalize(toEnemy);
+		const float forwardDot = MyMath::Dot(playerForward, direction);
+		if (forwardDot > 0.1f) {
+			const float frontScore = distSq * 0.01f - forwardDot * 1000.0f;
+			if (frontScore < bestFrontScore) {
+				bestFrontScore = frontScore;
+				bestFrontEnemy = enemy.get();
+			}
+		}
+
+		if (hasOverlayBounds && screenWidth > 0.0f && screenHeight > 0.0f && forwardDot > -0.1f) {
+			Vector3 targetPosition = enemy->GetPosition();
+			float collisionRadius = 1.0f;
+			try {
+				collisionRadius = enemy->GetCollisionRadius();
+			} catch (...) {}
+			targetPosition.y += collisionRadius * 0.3f;
+			Vector3 screenPosition = MyMath::WorldToScreen(
+				targetPosition,
+				activeCamera->GetViewProjectionMatrix(),
+				screenWidth,
+				screenHeight);
+
+			if (screenPosition.z >= 0.0f && screenPosition.z <= 1.0f &&
+				screenPosition.x >= 0.0f && screenPosition.x <= screenWidth &&
+				screenPosition.y >= 0.0f && screenPosition.y <= screenHeight) {
+				const float normalizedX = (screenPosition.x - screenWidth * 0.5f) / (screenWidth * 0.5f);
+				const float normalizedY = (screenPosition.y - screenHeight * 0.5f) / (screenHeight * 0.5f);
+				const float centerScore = normalizedX * normalizedX + normalizedY * normalizedY;
+				const float screenScore = centerScore * 10000.0f + distSq * 0.002f - forwardDot * 150.0f;
+				if (screenScore < bestScreenScore) {
+					bestScreenScore = screenScore;
+					bestScreenEnemy = enemy.get();
+				}
+			}
+		}
+	}
+
+	if (bestScreenEnemy) {
+		return bestScreenEnemy;
+	}
+	if (bestFrontEnemy) {
+		return bestFrontEnemy;
+	}
+	return nearestAliveEnemy;
+}
+
+void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
+	Input *input = Input::GetInstance();
+	if (!input) return;
+
+	if (input->TriggerKey(DIK_TAB)) {
+		lockedEnemy_ = FindLockOnTarget(activeCamera);
+		isCinematicLockOnCameraInitialized_ = false;
+	}
+
+	if (!IsLockedEnemyAlive()) {
+		lockedEnemy_ = nullptr;
+		isCinematicLockOnCameraInitialized_ = false;
+	}
+
+	if (!shouldUpdateGame) {
+		return;
+	}
+
+	if (input->TriggerKey(DIK_X)) {
+		lockedEnemy_ = nullptr;
+		isCinematicLockOnCameraInitialized_ = false;
+		return;
+	}
+
+	if (lockedEnemy_) {
+		lockedEnemy_->StartChasingPlayer();
+	}
+}
+
+void GamePlayScene::UpdateGameplayCamera() {
+	if (!player_ || !camera) {
+		return;
+	}
+
+	const bool canUseCinematicCamera =
+		isCinematicLockOnCameraEnabled_ &&
+		lockedEnemy_ &&
+		!lockedEnemy_->IsDead();
+
+	if (canUseCinematicCamera) {
+		UpdateCinematicLockOnCamera();
+		return;
+	}
+
+	isCinematicLockOnCameraInitialized_ = false;
+	camera->SetFovY(kNormalCameraFovY);
+	camera->SetFarClip(kNormalCameraFarClip);
+	player_->UpdateCamera(camera.get());
+}
+
+void GamePlayScene::UpdateCinematicLockOnCamera() {
+	if (!player_ || !camera || !lockedEnemy_) {
+		return;
+	}
+
+	const Vector3 playerPosition = player_->GetPosition();
+	const Vector3 enemyPosition = lockedEnemy_->GetPosition();
+	const float enemyRadius = lockedEnemy_->GetCollisionRadius();
+
+	Vector3 playerFocus = playerPosition;
+	playerFocus.y += 1.0f;
+
+	Vector3 enemyFocus = enemyPosition;
+	enemyFocus.y += enemyRadius * 0.35f;
+
+	Vector3 rawFocus = ScaleVector3(AddVector3(playerFocus, enemyFocus), 0.5f);
+	const Vector3 toEnemy = SubtractVector3(enemyFocus, playerFocus);
+	const float separation = LengthVector3(toEnemy);
+	const Vector3 playerForward = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+	const Vector3 enemyDirection = NormalizeOrVector3(toEnemy, playerForward);
+	const Vector3 flatPlayerForward = NormalizeOrVector3(FlattenYVector3(playerForward), { 0.0f, 0.0f, 1.0f });
+	const Vector3 flatEnemyDirection = NormalizeOrVector3(FlattenYVector3(enemyDirection), flatPlayerForward);
+
+	Vector3 rawCameraBackDirection = NormalizeOrVector3(
+		AddVector3(
+			ScaleVector3(flatPlayerForward, 0.65f),
+			ScaleVector3(flatEnemyDirection, 0.35f)),
+		flatEnemyDirection);
+
+	const Vector3 worldUp = { 0.0f, 1.0f, 0.0f };
+	Vector3 rawSideDirection = MyMath::Cross(worldUp, rawCameraBackDirection);
+	rawSideDirection = NormalizeOrVector3(rawSideDirection, { 1.0f, 0.0f, 0.0f });
+
+	if (!isCinematicLockOnCameraInitialized_) {
+		cinematicLockOnCameraPosition_ = camera->GetTranslate();
+		cinematicLockOnCameraRotation_ = player_->GetQuaternion();
+		cinematicLockOnCameraFocus_ = rawFocus;
+		cinematicLockOnCameraBackDirection_ = rawCameraBackDirection;
+		cinematicLockOnCameraSeparation_ = separation;
+		cinematicLockOnCameraSideSign_ =
+			(MyMath::Dot(SubtractVector3(camera->GetTranslate(), rawFocus), rawSideDirection) < 0.0f) ? -1.0f : 1.0f;
+		isCinematicLockOnCameraInitialized_ = true;
+	} else {
+		cinematicLockOnCameraFocus_ = LerpVector3(cinematicLockOnCameraFocus_, rawFocus, kCinematicCameraFocusBlend);
+		cinematicLockOnCameraBackDirection_ = NormalizeOrVector3(
+			LerpVector3(cinematicLockOnCameraBackDirection_, rawCameraBackDirection, kCinematicCameraDirectionBlend),
+			rawCameraBackDirection);
+		cinematicLockOnCameraSeparation_ += (separation - cinematicLockOnCameraSeparation_) * kCinematicCameraFocusBlend;
+	}
+
+	const Vector3 focus = cinematicLockOnCameraFocus_;
+	const Vector3 cameraBackDirection = cinematicLockOnCameraBackDirection_;
+	const float cameraSeparation = cinematicLockOnCameraSeparation_;
+	Vector3 sideDirection = MyMath::Cross(worldUp, cameraBackDirection);
+	sideDirection = NormalizeOrVector3(sideDirection, rawSideDirection);
+	sideDirection = ScaleVector3(sideDirection, cinematicLockOnCameraSideSign_);
+
+	const int32_t clientWidth = WinApp::GetClientWidth();
+	const int32_t clientHeight = WinApp::GetClientHeight();
+	const float aspectRatio = (clientWidth > 0 && clientHeight > 0)
+		? static_cast<float>(clientWidth) / static_cast<float>(clientHeight)
+		: 16.0f / 9.0f;
+	const float horizontalFov = 2.0f * std::atan(std::tan(kCinematicCameraFovY * 0.5f) * aspectRatio);
+	const float fitDistance = (cameraSeparation * 0.55f + 4.0f) / std::tan(horizontalFov * 0.5f);
+	const float distanceBase = 16.0f + cameraSeparation * 0.45f;
+	const float fitBackDistance = fitDistance + 8.0f;
+	const float desiredBackDistance = (distanceBase > fitBackDistance) ? distanceBase : fitBackDistance;
+	const float backDistance = std::clamp(desiredBackDistance, 16.0f, 75.0f);
+	const float sideOffset = std::clamp(cameraSeparation * 0.22f, 2.0f, 10.0f);
+	const float heightOffset = std::clamp(4.0f + cameraSeparation * 0.18f, 5.0f, 16.0f);
+
+	Vector3 desiredPosition = focus;
+	desiredPosition = AddVector3(desiredPosition, ScaleVector3(cameraBackDirection, -backDistance));
+	desiredPosition = AddVector3(desiredPosition, ScaleVector3(sideDirection, sideOffset));
+	desiredPosition.y += heightOffset;
+
+	Vector3 lookTarget = focus;
+	lookTarget.y += std::clamp(cameraSeparation * 0.04f, 0.5f, 2.5f);
+	const Vector3 lookForward = NormalizeOrVector3(SubtractVector3(lookTarget, desiredPosition), cameraBackDirection);
+	const Quaternion desiredRotation = MakeLookQuaternion(lookForward);
+
+	cinematicLockOnCameraPosition_ = LerpVector3(cinematicLockOnCameraPosition_, desiredPosition, kCinematicCameraPositionBlend);
+	cinematicLockOnCameraRotation_ = MyMath::Slerp(cinematicLockOnCameraRotation_, desiredRotation, kCinematicCameraRotationBlend);
+
+	camera->SetFovY(kCinematicCameraFovY);
+	camera->SetFarClip(kCinematicCameraFarClip);
+	camera->SetTranslate(cinematicLockOnCameraPosition_);
+	camera->SetQuaternion(cinematicLockOnCameraRotation_);
 }
 
 void GamePlayScene::Finalize() {
@@ -506,6 +966,11 @@ void GamePlayScene::Update() {
 
 	// Blenderからデータが来ていたら敵をリアルタイム更新！
 	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawns_)) {
+		for (auto &spawnData : enemySpawns_) {
+			if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
+				spawnData.isInitialSpawn = false;
+			}
+		}
 		SpawnEnemiesFromSpawnPoints();
 	}
 
@@ -689,13 +1154,12 @@ void GamePlayScene::Update() {
 	// プレイヤーの更新と、カメラの追従
 	if (player_) {
 		if (shouldUpdateGame) {
+			if (lockedEnemy_) {
+				player_->UpdateLockOnRotation(lockedEnemy_->GetPosition());
+			}
 			player_->Update(obstacles_);
 		}
 
-		// デバッグカメラが OFFのときのみ、自機追従カメラを適用
-		if (!isDebugCameraActive_) {
-			player_->UpdateCamera(camera.get());
-		}
 	}
 
 	// ==========================================
@@ -719,10 +1183,19 @@ void GamePlayScene::Update() {
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
 			(*it)->Update(playerPos, enemyBulletManager_.get(), obstacles_);
 			if ((*it)->IsDead()) {
+				if (lockedEnemy_ == it->get()) {
+					lockedEnemy_ = nullptr;
+					isCinematicLockOnCameraInitialized_ = false;
+				}
 				size_t spawnPointIndex = (*it)->GetSpawnPointIndex();
-				if (spawnPointIndex < enemyRespawnTimers_.size() &&
-					enemyRespawnTimers_[spawnPointIndex] == kNoRespawnTimer) {
-					enemyRespawnTimers_[spawnPointIndex] = kEnemyRespawnDelayFrames;
+				
+				if (spawnPointIndex < enemySpawns_.size()) {
+					const std::string& deadName = enemySpawns_[spawnPointIndex].name;
+					TriggerEnemyReinforcements(deadName);
+				}
+
+				if (spawnPointIndex < enemySpawns_.size() && enemySpawns_[spawnPointIndex].isInitialSpawn) {
+					ScheduleEnemySpawn(spawnPointIndex, kEnemyRespawnDelayFrames);
 				}
 				it = enemies_.erase(it); // 当たった敵はリストから消滅
 			} else {
@@ -742,6 +1215,7 @@ void GamePlayScene::Update() {
 		debugFlyCamera_->Update(); // FlyCameraが自分で入力を消化して自分を更新する
 		skybox->Update(debugFlyCamera_.get());
 	} else {
+		UpdateGameplayCamera();
 		camera->Update();
 		skybox->Update(camera.get());
 	}
@@ -824,6 +1298,7 @@ void GamePlayScene::Update() {
 	sprite->SetSize(size);
 
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+	UpdateLockOn(activeCamera, shouldUpdateGame && !isGameOver_);
 
 	if (showParticles) {
 		particleEmitter->Update();
@@ -836,17 +1311,22 @@ void GamePlayScene::Update() {
 	if (shouldUpdateGame && player_ && !isGameOver_) {
 		Vector3 playerPos = player_->GetPosition();
 		Vector3 forward = player_->GetForwardVector();
+		Vector3 muzzlePos = {
+			playerPos.x + forward.x * 0.8f,
+			playerPos.y + forward.y * 0.8f,
+			playerPos.z + forward.z * 0.8f,
+		};
 
 		// 左クリック：速くて煙が出ない通常弾
 		if (Input::GetInstance()->TriggerMouseButton(0)) {
-			Vector3 vel = { forward.x * 2.0f, forward.y * 2.0f, forward.z * 2.0f };
-			missileManager_->Shoot(playerPos, vel, MissileType::Normal);
+			Vector3 vel = { forward.x * 1.5f, forward.y * 1.5f, forward.z * 1.5f };
+			missileManager_->Shoot(muzzlePos, vel, MissileType::Normal);
 		}
 
-		// 右クリック：少し遅くて煙を引くミサイル
+		// 右クリック：煙を引きながら敵へ曲がるホーミング弾
 		if (Input::GetInstance()->TriggerMouseButton(1)) {
-			Vector3 vel = { forward.x * 1.0f, forward.y * 1.0f, forward.z * 1.0f };
-			missileManager_->Shoot(playerPos, vel, MissileType::MissileWithTrail);
+			Vector3 vel = { forward.x * 0.75f, forward.y * 0.75f, forward.z * 0.75f };
+			missileManager_->Shoot(muzzlePos, vel, MissileType::MissileWithTrail);
 		}
 	}
 
@@ -856,7 +1336,7 @@ void GamePlayScene::Update() {
 	std::vector<Vector3> hitPositions;
 	if (shouldUpdateGame) {
 		if (missileManager_) {
-			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions);
+			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, lockedEnemy_);
 		}
 
 		// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
@@ -1006,6 +1486,10 @@ void GamePlayScene::Update() {
 			}
 		}
 
+		if (lockedEnemy_ && !lockedEnemy_->IsDead()) {
+			addSphere(lockedEnemy_->GetPosition(), lockedEnemy_->GetCollisionRadius() + 0.35f, { 1.0f, 0.95f, 0.0f, 1.0f });
+		}
+
 		// 4. 自機ミサイル（Player Bullets）
 		if (missileManager_) {
 			for (const auto& missile : missileManager_->GetMissiles()) {
@@ -1127,7 +1611,21 @@ void GamePlayScene::Draw() {
 		sprite->Draw();
 	}
 
+	DrawOverlay();
+
 	particleManager->Draw();
+}
+
+void GamePlayScene::DrawOverlay() {
+	if (isDebugCameraActive_ && !debugFlyCamera_) return;
+	if (!isDebugCameraActive_ && !camera) return;
+
+	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+	if (!activeCamera) return;
+
+#ifdef ENABLE_IMGUI
+	DrawLockOnOverlay(lockedEnemy_, activeCamera->GetViewProjectionMatrix());
+#endif
 }
 
 void GamePlayScene::UpdateUI() {
@@ -1135,7 +1633,6 @@ void GamePlayScene::UpdateUI() {
 	if (ImGuiManager::IsVisible()) {
 		//開発用UIの処理
 		ImGui::ShowDemoWindow();
-
 		//ウィンドウのサイズを設定
 		ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
 
@@ -1294,12 +1791,53 @@ void GamePlayScene::UpdateUI() {
 		//スライダーで変更された座標をスプライトに反映
 		sprite->SetPosition({ pos[0],pos[1] });
 
+		ImGui::Separator();
+		ImGui::Text("イベントツール（増援設定）");
+        
+		static int selectedTrigger = 0;
+		static int selectedTarget = 0;
+		static int eventDelay = 60;
+
+		std::vector<const char*> enemyNames;
+		for (const auto& sp : enemySpawns_) {
+			enemyNames.push_back(sp.name.c_str());
+		}
+
+		if (!enemyNames.empty()) {
+			if (selectedTrigger >= enemyNames.size()) selectedTrigger = 0;
+			if (selectedTarget >= enemyNames.size()) selectedTarget = 0;
+
+			ImGui::Combo("トリガーとなる敵", &selectedTrigger, enemyNames.data(), static_cast<int>(enemyNames.size()));
+			ImGui::Combo("出現する敵(ターゲット)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
+			ImGui::DragInt("出現までのディレイ(フレーム)", &eventDelay, 1, 0, 600);
+
+			if (ImGui::Button("イベントを追加")) {
+				enemyEventManager_.AddEvent(enemyNames[selectedTrigger], enemyNames[selectedTarget], eventDelay);
+				enemySpawns_[selectedTarget].isInitialSpawn = false;
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("イベントを保存")) {
+				enemyEventManager_.SaveEvents("resources/enemy_events.json");
+			}
+
+			ImGui::Separator();
+			ImGui::Text("設定済みのイベント一覧");
+			for (size_t i = 0; i < enemyEventManager_.GetEvents().size(); ++i) {
+				const auto& ev = enemyEventManager_.GetEvents()[i];
+				ImGui::Text("[%d] %s が死んだら %d F後に %s が出現", (int)i, ev.triggerEnemyName.c_str(), ev.delayFrames, ev.targetEnemyName.c_str());
+				ImGui::SameLine();
+				if (ImGui::Button(("削除##" + std::to_string(i)).c_str())) {
+					enemyEventManager_.RemoveEvent(i);
+					break; 
+				}
+			}
+		}
+
 		ImGui::End();
 
 		ImGui::Begin("Camera Settings");
 
-		// =====================================================
-		// デバッグカメラ 切り替え
 		// =====================================================
 		if (isDebugCameraActive_) {
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[FREE CAM ACTIVE]");
@@ -1360,6 +1898,12 @@ void GamePlayScene::UpdateUI() {
 
 			ImGui::Separator();
 			// 自機追従カメラの現在位置表示（参考用）
+			if (ImGui::Checkbox("Cinematic lock-on camera", &isCinematicLockOnCameraEnabled_)) {
+				isCinematicLockOnCameraInitialized_ = false;
+			}
+			ImGui::Text("Cinematic: %s", (isCinematicLockOnCameraEnabled_ && lockedEnemy_) ? "ACTIVE" : "OFF");
+			ImGui::Separator();
+
 			Vector3 camPos = camera->GetTranslate();
 			float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
 			if (ImGui::DragFloat3("カメラ位置 (参考)##follow", camPosArr, 0.1f)) {
@@ -1373,6 +1917,8 @@ void GamePlayScene::UpdateUI() {
 
 		ImGui::Begin("敵 & 障害物");
 		ImGui::Text("=== ターゲット配置 ===");
+		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
+		ImGui::Text("Tab: lock target / X: unlock");
 		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
 
 		// ボタンを押した瞬間に、新しい敵をリストに追加！

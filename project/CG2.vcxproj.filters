@@ -204,6 +204,9 @@
     <ClCompile Include="Game\enemy\EnemyBulletManager.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="Game\enemy\EnemyEventManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="engine\Utility\JsonHelper.cpp">
       <Filter>ソース ファイル\Utility</Filter>
     </ClCompile>
@@ -366,6 +369,9 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Game\enemy\EnemyBulletManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\enemy\EnemyEventManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="engine\Utility\JsonHelper.h">

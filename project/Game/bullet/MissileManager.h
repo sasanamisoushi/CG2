@@ -15,7 +15,7 @@ public:
     void Initialize();
 
     // 全ミサイルの更新と、死んだミサイルの削除
-    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, const std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &hitPositions);
+    void Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, const std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &hitPositions, Enemy *preferredTarget = nullptr);
 
     // 全ミサイルの描画
     void Draw();

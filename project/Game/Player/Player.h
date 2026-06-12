@@ -47,15 +47,21 @@ public:
 
     void Move(); // 移動と回転の処理
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
+    void UpdateLockOnRotation(const Vector3& targetPos); // ロックオン時の強制回転
 
 private:
     std::unique_ptr<Object3d> object_;
 
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
+    Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
 
-    float speed_ = 0.02f;       // 前進スピード
-    float rotSpeed_ = 0.05f;   // 旋回スピード
+    float maxMoveSpeed_ = 0.22f;
+    float moveAcceleration_ = 0.018f;
+    float moveDamping_ = 0.90f;
+    float pitchSpeed_ = 0.015f;
+    float yawSpeed_ = 0.014f;
+    float rollSpeed_ = 0.025f;
 
     bool isDead_ = false;
     int hp_ = 3;

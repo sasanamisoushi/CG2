@@ -6,29 +6,31 @@ void MissileManager::Initialize() {
 	missiles_.clear();
 }
 
-void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, const std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &hitPositions) {
+void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &enemies, const std::list<std::unique_ptr<Obstacle>> &obstacles, std::vector<Vector3> &hitPositions, Enemy *preferredTarget) {
     for (auto it = missiles_.begin(); it != missiles_.end(); ) {
         Missile *missile = it->get();
 
         // ==========================================
-        // 1. 最も近い敵をサーチ（索敵）
+        // 1. ロック対象がいれば優先し、なければ最も近い敵をサーチ（索敵）
         // ==========================================
-        Enemy *targetEnemy = nullptr;
+        Enemy *targetEnemy = (preferredTarget && !preferredTarget->IsDead()) ? preferredTarget : nullptr;
         float minDistSq = 99999999.0f; // 最小距離を保存する変数（最初は凄く大きな数）
         Vector3 mPos = missile->GetPosition();
 
-        for (auto &enemy : enemies) {
-            if (!enemy->IsDead()) {
-                Vector3 ePos = enemy->GetPosition();
-                float dx = ePos.x - mPos.x;
-                float dy = ePos.y - mPos.y;
-                float dz = ePos.z - mPos.z;
-                float distSq = dx * dx + dy * dy + dz * dz;
+        if (!targetEnemy) {
+            for (auto &enemy : enemies) {
+                if (!enemy->IsDead()) {
+                    Vector3 ePos = enemy->GetPosition();
+                    float dx = ePos.x - mPos.x;
+                    float dy = ePos.y - mPos.y;
+                    float dz = ePos.z - mPos.z;
+                    float distSq = dx * dx + dy * dy + dz * dz;
 
-                // 今までの敵より近かったらターゲットを更新
-                if (distSq < minDistSq) {
-                    minDistSq = distSq;
-                    targetEnemy = enemy.get();
+                    // 今までの敵より近かったらターゲットを更新
+                    if (distSq < minDistSq) {
+                        minDistSq = distSq;
+                        targetEnemy = enemy.get();
+                    }
                 }
             }
         }
@@ -47,7 +49,7 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
         bool hitObstacle = false;
         Sphere bulletSphere;
         bulletSphere.center = mPos;
-        bulletSphere.radius = 0.5f;
+        bulletSphere.radius = missile->GetCollisionRadius();
 
         for (const auto& obstacle : obstacles) {
             if (obstacle->IsStageBounds()) {
@@ -76,7 +78,7 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                     float radius = missile->GetCollisionRadius() + enemy->GetCollisionRadius();
                     if (distSq <= radius * radius) {
                         missile->OnCollision();
-                        enemy->OnCollision();
+                        enemy->TakeDamage(1);
 
                         // 当たった場所（敵の中心）を爆発リストに報告！
                         hitPositions.push_back(ePos);

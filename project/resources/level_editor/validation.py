@@ -69,6 +69,7 @@ _CHECK_ITEMS = (
     ("obstacle_type", "障害物メッシュ設定"),
     ("obstacle_collider", "障害物コライダー設定"),
     ("enemy_type", "敵タイプ設定"),
+    ("reinforcement_trigger", "増援トリガー設定"),
     ("scale_zero", "0に近いスケール"),
     ("stage_bounds_category", "StageBounds種類設定"),
     ("other", "その他"),
@@ -494,6 +495,8 @@ def _classify_validation_message(message):
         return "obstacle_collider"
     if "enemy_type" in message:
         return "enemy_type"
+    if "増援トリガー" in message:
+        return "reinforcement_trigger"
     if "スケールに 0 に近い軸" in message or "StageBounds のサイズ" in message:
         return "scale_zero"
     if "StageBounds は種類" in message:
@@ -556,6 +559,7 @@ def validate_scene(scene):
 
     players = [obj for obj in objects if getattr(obj, "game_obj_type", "NONE") == "PLAYER"]
     enemies = [obj for obj in objects if getattr(obj, "game_obj_type", "NONE") == "ENEMY"]
+    enemies_by_name = {obj.name: obj for obj in enemies}
     obstacles = [obj for obj in objects if getattr(obj, "game_obj_type", "NONE") == "OBSTACLE"]
     stage_bounds = [obj for obj in objects if _is_stage_bounds_object(obj)]
     paths = [obj for obj in scene.objects if _is_enemy_path_object(obj)]
@@ -668,6 +672,15 @@ def validate_scene(scene):
 
         if category == "ENEMY" and _is_unset_text(getattr(obj, "enemy_type", "None")):
             errors.append(f"{obj.name}: enemy_type が未設定です。")
+
+        if category == "ENEMY":
+            trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
+            if not _is_unset_text(trigger_name):
+                trigger_name = str(trigger_name).strip()
+                if trigger_name == obj.name:
+                    errors.append(f"{obj.name}: 増援トリガーに自分自身は指定できません。")
+                elif trigger_name not in enemies_by_name:
+                    errors.append(f"{obj.name}: 増援トリガー '{trigger_name}' が見つかりません。")
 
         if obj.type == "MESH":
             if obj.name.startswith("StageBounds"):

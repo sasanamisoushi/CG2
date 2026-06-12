@@ -18,9 +18,15 @@ struct EnemyFlightPath {
 };
 
 struct EnemySpawnData {
+	std::string name; // Blenderでのオブジェクト名
+	bool isInitialSpawn = true; // 最初から出現するかどうか
 	Vector3 position = { 0.0f, 0.0f, 0.0f };
 	Vector3 rotation = { 0.0f, 0.0f, 0.0f };
 	EnemyFlightPath flightPath;
+	std::string reinforcementTriggerName;
+	int reinforcementDelayFrames = 0;
+
+	bool HasReinforcementTrigger() const { return !reinforcementTriggerName.empty(); }
 };
 
 class StageLoader {

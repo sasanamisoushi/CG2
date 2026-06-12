@@ -71,6 +71,7 @@ std::unordered_map<std::string, EnemyFlightPath> LoadFlightPaths(const json &roo
 
 EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position, const Vector3 &rotation, const std::unordered_map<std::string, EnemyFlightPath> &paths) {
 	EnemySpawnData spawnData;
+	spawnData.name = objData.value("name", "UnknownEnemy");
 	spawnData.position = position;
 	spawnData.rotation = rotation;
 
@@ -79,6 +80,16 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		if (pathIt != paths.end()) {
 			spawnData.flightPath = pathIt->second;
 		}
+	}
+
+	if (objData.contains("reinforcement") && objData["reinforcement"].is_object()) {
+		const auto &reinforcement = objData["reinforcement"];
+		spawnData.reinforcementTriggerName = reinforcement.value("trigger", "");
+		spawnData.reinforcementDelayFrames = reinforcement.value("delay", 0);
+		if (spawnData.reinforcementDelayFrames < 0) {
+			spawnData.reinforcementDelayFrames = 0;
+		}
+		spawnData.isInitialSpawn = !spawnData.HasReinforcementTrigger();
 	}
 
 	return spawnData;
