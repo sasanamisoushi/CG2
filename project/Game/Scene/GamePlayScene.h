@@ -30,6 +30,12 @@
 
 class GamePlayScene :public BaseScene {
 public:
+	enum class Mode {
+		Gameplay,
+		Simulation
+	};
+
+	explicit GamePlayScene(Mode mode = Mode::Gameplay);
 
 	//初期化
 	void Initialize() override;
@@ -47,7 +53,9 @@ public:
 	void UpdateUI();
 
 private:
+	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
+	void DrawSimulationScreenUI();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
@@ -62,6 +70,7 @@ private:
 	bool IsLockedEnemyAlive() const;
 	void UpdateGameplayCamera();
 	void UpdateCinematicLockOnCamera();
+	Mode mode_ = Mode::Gameplay;
 
 	//シーンリソース
 	std::unique_ptr<Camera> camera;

@@ -1,0 +1,9 @@
+{
+    "events": [
+        {
+            "delay": 60,
+            "target": "EnemyV",
+            "trigger": "立方体.003"
+        }
+    ]
+}

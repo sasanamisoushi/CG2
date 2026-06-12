@@ -15,7 +15,9 @@
 #include "Game/editor/EditorReceiver.h"
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <limits>
+#include <shellapi.h>
 
 namespace {
 	constexpr int kEnemyRespawnDelayFrames = 180;
@@ -43,6 +45,36 @@ namespace {
 
 	Vector3 FlattenYVector3(const Vector3 &value) {
 		return { value.x, 0.0f, value.z };
+	}
+
+	std::filesystem::path GetCurrentExecutablePath() {
+		wchar_t modulePath[MAX_PATH] = {};
+		const DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+		if (length == 0) {
+			return {};
+		}
+		return std::filesystem::path(modulePath);
+	}
+
+	bool LaunchSimulationExecutable() {
+		const std::filesystem::path currentExe = GetCurrentExecutablePath();
+		if (currentExe.empty()) {
+			return false;
+		}
+
+		const std::filesystem::path simulationExe = currentExe.parent_path() / L"CG2Simulation.exe";
+		const std::filesystem::path launchExe = std::filesystem::exists(simulationExe) ? simulationExe : currentExe;
+		const wchar_t *parameters = (launchExe == currentExe) ? L"--simulation" : nullptr;
+		const std::filesystem::path workDir = std::filesystem::current_path();
+
+		HINSTANCE result = ShellExecuteW(
+			nullptr,
+			L"open",
+			launchExe.c_str(),
+			parameters,
+			workDir.c_str(),
+			SW_SHOWNORMAL);
+		return reinterpret_cast<intptr_t>(result) > 32;
 	}
 
 	float LengthSqVector3(const Vector3 &value) {
@@ -360,6 +392,10 @@ namespace {
 #endif
 }
 
+GamePlayScene::GamePlayScene(Mode mode)
+	: mode_(mode) {
+}
+
 
 void GamePlayScene::Initialize() {
 
@@ -518,6 +554,13 @@ void GamePlayScene::Initialize() {
 	gameOverTimer_ = 0;
 
 	ReloadSceneJson();
+
+	if (IsSimulationMode()) {
+		isEditorPreviewPlaying_ = false;
+		currentSimulationTarget_ = 2;
+		showSimulationWindow_ = true;
+		SetDebugCameraActive(true);
+	}
 
 	// エディターレシーバーの初期化
 	EditorReceiver::GetInstance()->Initialize();
@@ -998,9 +1041,18 @@ void GamePlayScene::Update() {
 		OutputDebugStringA("HIt 0\n");
 	}
 
+	if (Input::GetInstance()->TriggerKey(DIK_F2)) {
+		if (IsSimulationMode()) {
+			PostQuitMessage(0);
+		} else {
+			LaunchSimulationExecutable();
+		}
+		return;
+	}
+
 	// Rキーでシーンを最初からやり直す
 	if (Input::GetInstance()->TriggerKey(DIK_R)) {
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+		SceneManager::GetInstance()->ChangeScene(IsSimulationMode() ? "SIMULATION" : "GAMEPLAY");
 		return;
 	}
 
@@ -1628,10 +1680,245 @@ void GamePlayScene::DrawOverlay() {
 #endif
 }
 
+void GamePlayScene::DrawSimulationScreenUI() {
+#ifdef ENABLE_IMGUI
+	const ImVec2 windowSize(
+		static_cast<float>(WinApp::GetClientWidth()),
+		static_cast<float>(WinApp::GetClientHeight()));
+	float panelWidth = (windowSize.x > 560.0f) ? 520.0f : windowSize.x - 40.0f;
+	if (panelWidth < 320.0f) {
+		panelWidth = 320.0f;
+	}
+	float panelHeight = windowSize.y - 40.0f;
+	if (panelHeight < 360.0f) {
+		panelHeight = 360.0f;
+	}
+	float panelX = windowSize.x - panelWidth - 20.0f;
+	if (panelX < 20.0f) {
+		panelX = 20.0f;
+	}
+	ImGui::SetNextWindowPos(ImVec2(panelX, 20.0f), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(panelWidth, panelHeight), ImGuiCond_Always);
+
+	const ImGuiWindowFlags windowFlags =
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoCollapse;
+
+	if (!ImGui::Begin("シミュレーション画面", nullptr, windowFlags)) {
+		ImGui::End();
+		return;
+	}
+
+	ImGui::Text("シミュレーション画面");
+	ImGui::SameLine();
+	if (ImGui::Button("シミュレーションを閉じる (F2)")) {
+		PostQuitMessage(0);
+		ImGui::End();
+		return;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("リセット")) {
+		ResetEditorPreview();
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("再生")) {
+		isEditorPreviewPlaying_ = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("停止")) {
+		isEditorPreviewPlaying_ = false;
+	}
+	ImGui::SameLine();
+	ImGui::TextColored(
+		isEditorPreviewPlaying_ ? ImVec4(0.0f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.65f, 0.0f, 1.0f),
+		"状態: %s",
+		isEditorPreviewPlaying_ ? "再生中" : "停止中");
+
+	ImGui::Separator();
+	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
+	ImGui::Combo("カテゴリ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
+	ImGui::Separator();
+
+	if (currentSimulationTarget_ == 0) {
+		ImGui::Text("プレイヤー移動設定");
+		if (player_) {
+			ImGui::SliderFloat("最大移動速度", &player_->GetMaxMoveSpeedRef(), 0.01f, 1.0f);
+			ImGui::SliderFloat("移動加速度", &player_->GetMoveAccelerationRef(), 0.001f, 0.1f);
+			ImGui::SliderFloat("移動減衰", &player_->GetMoveDampingRef(), 0.1f, 1.0f);
+			ImGui::SliderFloat("ピッチ回転速度", &player_->GetPitchSpeedRef(), 0.001f, 0.1f);
+			ImGui::SliderFloat("ヨー回転速度", &player_->GetYawSpeedRef(), 0.001f, 0.1f);
+			ImGui::SliderFloat("ロール回転速度", &player_->GetRollSpeedRef(), 0.001f, 0.1f);
+		} else {
+			ImGui::Text("プレイヤーが初期化されていません。");
+		}
+	} else if (currentSimulationTarget_ == 1) {
+		ImGui::Text("ミサイル軌道設定");
+		ImGui::SliderFloat("速度", &missileSpeed, 0.01f, 0.2f);
+		ImGui::SliderFloat("X軸の旋回半径", &missileAmpX, 0.0f, 50.0f);
+		ImGui::SliderFloat("Z軸の旋回半径", &missileAmpZ, 0.0f, 50.0f);
+		ImGui::SliderFloat("上下の波打ち幅", &missileAmpY, 0.0f, 20.0f);
+		ImGui::SliderFloat("波打ちの細かさ", &missileFreqY, 0.1f, 20.0f);
+		ImGui::SliderFloat("基準高度", &missileBaseY, 0.0f, 20.0f);
+	} else if (currentSimulationTarget_ == 2) {
+		ImGui::Text("=== 敵の出現とルート ===");
+		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
+		ImGui::Text("Tab: ターゲットロック / X: ロック解除 / F2: シミュレーションを閉じる");
+		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
+
+		if (ImGui::Button("敵を生成する！")) {
+			auto newEnemy = std::make_unique<Enemy>();
+			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
+			enemies_.push_back(std::move(newEnemy));
+		}
+
+		ImGui::Separator();
+		ImGui::Text("敵のリスト (総数: %d)", static_cast<int>(enemies_.size()));
+		int index = 0;
+		for (const auto &enemy : enemies_) {
+			Vector3 pos = enemy->GetPosition();
+			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", index, pos.x, pos.y, pos.z);
+			++index;
+		}
+
+		ImGui::Separator();
+		ImGui::Text("イベントツール（増援設定）");
+		static int selectedTrigger = 0;
+		static int selectedTarget = 0;
+		static int eventDelay = 60;
+		std::vector<const char *> enemyNames;
+		for (const auto &spawn : enemySpawns_) {
+			enemyNames.push_back(spawn.name.c_str());
+		}
+
+		if (!enemyNames.empty()) {
+			if (selectedTrigger >= static_cast<int>(enemyNames.size())) {
+				selectedTrigger = 0;
+			}
+			if (selectedTarget >= static_cast<int>(enemyNames.size())) {
+				selectedTarget = 0;
+			}
+
+			ImGui::Combo("トリガーとなる敵", &selectedTrigger, enemyNames.data(), static_cast<int>(enemyNames.size()));
+			ImGui::Combo("出現する敵(ターゲット)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
+			ImGui::DragInt("出現までのディレイ(フレーム)", &eventDelay, 1, 0, 600);
+			if (ImGui::Button("イベントを追加")) {
+				enemyEventManager_.AddEvent(enemyNames[selectedTrigger], enemyNames[selectedTarget], eventDelay);
+				enemySpawns_[selectedTarget].isInitialSpawn = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("イベントを保存")) {
+				enemyEventManager_.SaveEvents("resources/enemy_events.json");
+			}
+
+			for (size_t i = 0; i < enemyEventManager_.GetEvents().size(); ++i) {
+				const auto &event = enemyEventManager_.GetEvents()[i];
+				ImGui::Text("[%d] %s が死んだら %d F後に %s が出現",
+					static_cast<int>(i),
+					event.triggerEnemyName.c_str(),
+					event.delayFrames,
+					event.targetEnemyName.c_str());
+				ImGui::SameLine();
+				if (ImGui::Button(("削除##event" + std::to_string(i)).c_str())) {
+					enemyEventManager_.RemoveEvent(i);
+					break;
+				}
+			}
+		} else {
+			ImGui::Text("敵の出現データがありません。");
+		}
+	} else if (currentSimulationTarget_ == 3) {
+		ImGui::Text("=== GPUパーティクル ===");
+		bool gpuChanged = false;
+		if (particleManager) {
+			if (auto *emitter = particleManager->GetEmitterSphere()) {
+				if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
+				if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
+				if (ImGui::DragInt("射出数", reinterpret_cast<int *>(&emitter->count), 1, 0, 1000)) gpuChanged = true;
+				if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
+			}
+			if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
+				particleManager->RequestGpuInitialize();
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::Text("=== 爆発パーティクル ===");
+		if (explosionManager_) {
+			auto &config = explosionManager_->GetConfig();
+			ImGui::DragInt("発生数", &config.count, 1, 0, 1000);
+			ImGui::ColorEdit4("カラー", config.color);
+			ImGui::DragFloat("速度", &config.speed, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("速度ばらつき", &config.speedVariance, 0.01f, 0.0f, 5.0f);
+			ImGui::DragFloat("スケール", &config.scale, 0.001f, 0.0f, 5.0f);
+			ImGui::DragFloat("スケールばらつき", &config.scaleVariance, 0.001f, 0.0f, 2.0f);
+			ImGui::DragFloat("最小寿命", &config.lifeTimeMin, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("最大寿命", &config.lifeTimeMax, 0.01f, 0.0f, 10.0f);
+			ImGui::DragFloat("位置ばらつき", &config.posVariance, 0.01f, 0.0f, 5.0f);
+			if (ImGui::Button("設定をJSONに保存")) {
+				explosionManager_->SaveToJson("resources/explosionConfig.json");
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("設定をJSONから読込")) {
+				explosionManager_->LoadFromJson("resources/explosionConfig.json");
+			}
+		}
+	} else if (currentSimulationTarget_ == 4) {
+		ImGui::Text("カメラ設定");
+		if (isDebugCameraActive_) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[フリーカメラ アクティブ]");
+			if (ImGui::Button("自機追従カメラに戻る")) {
+				SetDebugCameraActive(false);
+			}
+			float moveSpeed = debugFlyCamera_->GetMoveSpeed();
+			float rotateSpeed = debugFlyCamera_->GetRotateSpeed();
+			float sensitivity = debugFlyCamera_->GetMouseSensitivity();
+			float scrollSpeed = debugFlyCamera_->GetScrollSpeed();
+			float panSpeed = debugFlyCamera_->GetPanSpeed();
+			if (ImGui::DragFloat("移動速度 (WASD)##fly", &moveSpeed, 0.01f, 0.01f, 20.0f)) debugFlyCamera_->SetMoveSpeed(moveSpeed);
+			if (ImGui::DragFloat("回転感度 (マウス右)##fly", &sensitivity, 0.0001f, 0.0001f, 0.05f, "%.4f")) debugFlyCamera_->SetMouseSensitivity(sensitivity);
+			if (ImGui::DragFloat("スクロール速度##fly", &scrollSpeed, 0.1f, 0.1f, 20.0f)) debugFlyCamera_->SetScrollSpeed(scrollSpeed);
+			if (ImGui::DragFloat("パン速度 (中ボタン)##fly", &panSpeed, 0.001f, 0.001f, 1.0f)) debugFlyCamera_->SetPanSpeed(panSpeed);
+			if (ImGui::DragFloat("回転速度 (キーボード)##fly", &rotateSpeed, 0.001f, 0.001f, 0.5f)) debugFlyCamera_->SetRotateSpeed(rotateSpeed);
+
+			Vector3 flyPos = debugFlyCamera_->GetTranslate();
+			float flyPosArr[3] = { flyPos.x, flyPos.y, flyPos.z };
+			if (ImGui::DragFloat3("カメラ位置##fly", flyPosArr, 0.1f)) {
+				debugFlyCamera_->SetTranslate({ flyPosArr[0], flyPosArr[1], flyPosArr[2] });
+			}
+		} else {
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[自機追従カメラ アクティブ]");
+			if (ImGui::Button("フリーカメラに切り替え")) {
+				SetDebugCameraActive(true);
+			}
+			if (ImGui::Checkbox("Cinematic lock-on camera", &isCinematicLockOnCameraEnabled_)) {
+				isCinematicLockOnCameraInitialized_ = false;
+			}
+			ImGui::Text("Cinematic: %s", (isCinematicLockOnCameraEnabled_ && lockedEnemy_) ? "ACTIVE" : "OFF");
+		}
+	}
+
+	ImGui::End();
+#endif
+}
+
 
 void GamePlayScene::UpdateUI() {
 #ifdef ENABLE_IMGUI
 	if (ImGuiManager::IsVisible()) {
+		if (IsSimulationMode()) {
+			DrawSimulationScreenUI();
+			return;
+		}
+
+		ImGui::Begin("Simulation");
+		ImGui::Text("Simulation tools are on a dedicated screen.");
+		if (ImGui::Button("Open Simulation Screen (F2)")) {
+			LaunchSimulationExecutable();
+		}
+		ImGui::End();
+		if (false) {
+
 		// --- シミュレーション起動用ミニウィンドウ ---
 		ImGui::Begin("シミュレーション", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 		if (ImGui::Button(showSimulationWindow_ ? "シミュレーションツールを閉じる" : "シミュレーションツールを開く")) {
@@ -1799,6 +2086,7 @@ void GamePlayScene::UpdateUI() {
 
 		// --- オリジナルUI（今まで出していたImGui関連） ---
 		//開発用UIの処理
+		}
 		ImGui::ShowDemoWindow();
 		//ウィンドウのサイズを設定
 		ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);

@@ -12,6 +12,8 @@ std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneNam
 		newScene = std::make_unique<TitleScene>();
 	} else if (sceneName == "GAMEPLAY") {
 		newScene = std::make_unique<GamePlayScene>();
+	} else if (sceneName == "SIMULATION") {
+		newScene = std::make_unique<GamePlayScene>(GamePlayScene::Mode::Simulation);
 	} else if (sceneName == "GAMEOVER") {
 		newScene = std::make_unique<GameOverScene>();
 	}

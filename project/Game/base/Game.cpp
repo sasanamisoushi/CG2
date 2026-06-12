@@ -5,6 +5,32 @@
 #include "engine/Scene/SceneManager.h"
 #include "engine/Camera/FlyCamera.h"
 #include <engine/Resource/TextureManager.h>
+#include <Windows.h>
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+#include <string>
+
+namespace {
+	bool ShouldStartSimulationScene() {
+		const wchar_t *commandLine = GetCommandLineW();
+		if (commandLine && std::wstring(commandLine).find(L"--simulation") != std::wstring::npos) {
+			return true;
+		}
+
+		wchar_t modulePath[MAX_PATH] = {};
+		const DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+		if (length == 0) {
+			return false;
+		}
+
+		std::wstring exeName = std::filesystem::path(modulePath).stem().wstring();
+		std::transform(exeName.begin(), exeName.end(), exeName.begin(), [](wchar_t c) {
+			return static_cast<wchar_t>(std::towlower(c));
+		});
+		return exeName.find(L"simulation") != std::wstring::npos;
+	}
+}
 
 void Game::Initialize() {
 
@@ -36,7 +62,7 @@ void Game::Initialize() {
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
 	//最初のシーンをセット
-	SceneManager::GetInstance()->ChangeScene("TITLE");
+	SceneManager::GetInstance()->ChangeScene(ShouldStartSimulationScene() ? "SIMULATION" : "TITLE");
 
 	// ノイズ画像を2種類とも読み込んでおく
 	TextureManager::GetInstance()->LoadTexture("resources/noise0.png");

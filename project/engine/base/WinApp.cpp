@@ -2,6 +2,10 @@
 #include <WinUser.h>
 #include <combaseapi.h>
 #include <cstdint>
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+#include <string>
 
 
 #pragma comment(lib,"winmm.lib")
@@ -96,9 +100,20 @@ void WinApp::Initialize() {
 
 
 	//ウィンドウの生成
+	wchar_t modulePath[MAX_PATH] = {};
+	std::wstring windowTitle = L"CG2";
+	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) != 0) {
+		std::wstring exeName = std::filesystem::path(modulePath).stem().wstring();
+		std::transform(exeName.begin(), exeName.end(), exeName.begin(), [](wchar_t c) {
+			return static_cast<wchar_t>(std::towlower(c));
+		});
+		if (exeName.find(L"simulation") != std::wstring::npos) {
+			windowTitle = L"CG2 Simulation";
+		}
+	}
 	hwnd = CreateWindow(
 		wc.lpszClassName,
-		L"CG2",
+		windowTitle.c_str(),
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
