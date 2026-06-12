@@ -1743,12 +1743,18 @@ void GamePlayScene::DrawSimulationScreenUI() {
 	if (currentSimulationTarget_ == 0) {
 		ImGui::Text("プレイヤー移動設定");
 		if (player_) {
-			ImGui::SliderFloat("最大移動速度", &player_->GetMaxMoveSpeedRef(), 0.01f, 1.0f);
-			ImGui::SliderFloat("移動加速度", &player_->GetMoveAccelerationRef(), 0.001f, 0.1f);
-			ImGui::SliderFloat("移動減衰", &player_->GetMoveDampingRef(), 0.1f, 1.0f);
-			ImGui::SliderFloat("ピッチ回転速度", &player_->GetPitchSpeedRef(), 0.001f, 0.1f);
-			ImGui::SliderFloat("ヨー回転速度", &player_->GetYawSpeedRef(), 0.001f, 0.1f);
-			ImGui::SliderFloat("ロール回転速度", &player_->GetRollSpeedRef(), 0.001f, 0.1f);
+			auto mode = player_->GetCurrentMode();
+			const char* modeName = (mode == PlayerMode::Fighter) ? "ファイター (1キー)" : 
+								   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイド (3キー)";
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形態: %s", modeName);
+			
+			PlayerModeParams& p = player_->GetModeParams(mode);
+			ImGui::SliderFloat("最大移動速度", &p.maxMoveSpeed, 0.01f, 1.0f);
+			ImGui::SliderFloat("移動加速度", &p.moveAcceleration, 0.001f, 0.1f);
+			ImGui::SliderFloat("移動減衰", &p.moveDamping, 0.1f, 1.0f);
+			ImGui::SliderFloat("ピッチ回転速度", &p.pitchSpeed, 0.001f, 0.1f);
+			ImGui::SliderFloat("ヨー回転速度", &p.yawSpeed, 0.001f, 0.1f);
+			ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
 		} else {
 			ImGui::Text("プレイヤーが初期化されていません。");
 		}
@@ -1938,12 +1944,18 @@ void GamePlayScene::UpdateUI() {
 			if (currentSimulationTarget_ == 0) {
 				ImGui::Text("プレイヤー移動設定");
 				if (player_) {
-					ImGui::SliderFloat("最大移動速度", &player_->GetMaxMoveSpeedRef(), 0.01f, 1.0f);
-					ImGui::SliderFloat("移動加速度", &player_->GetMoveAccelerationRef(), 0.001f, 0.1f);
-					ImGui::SliderFloat("移動減衰", &player_->GetMoveDampingRef(), 0.1f, 1.0f);
-					ImGui::SliderFloat("ピッチ回転速度", &player_->GetPitchSpeedRef(), 0.001f, 0.1f);
-					ImGui::SliderFloat("ヨー回転速度", &player_->GetYawSpeedRef(), 0.001f, 0.1f);
-					ImGui::SliderFloat("ロール回転速度", &player_->GetRollSpeedRef(), 0.001f, 0.1f);
+					auto mode = player_->GetCurrentMode();
+					const char* modeName = (mode == PlayerMode::Fighter) ? "ファイター (1キー)" : 
+										   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイド (3キー)";
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形態: %s", modeName);
+					
+					PlayerModeParams& p = player_->GetModeParams(mode);
+					ImGui::SliderFloat("最大移動速度", &p.maxMoveSpeed, 0.01f, 1.0f);
+					ImGui::SliderFloat("移動加速度", &p.moveAcceleration, 0.001f, 0.1f);
+					ImGui::SliderFloat("移動減衰", &p.moveDamping, 0.1f, 1.0f);
+					ImGui::SliderFloat("ピッチ回転速度", &p.pitchSpeed, 0.001f, 0.1f);
+					ImGui::SliderFloat("ヨー回転速度", &p.yawSpeed, 0.001f, 0.1f);
+					ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
 				} else {
 					ImGui::Text("プレイヤーが初期化されていません。");
 				}

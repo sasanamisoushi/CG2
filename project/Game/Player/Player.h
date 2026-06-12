@@ -7,8 +7,22 @@
 #include <string>
 #include <list>
 
-
 class Obstacle;
+
+enum class PlayerMode {
+    Fighter,  // 高速飛行
+    Gerwalk,  // ホバリング
+    Battroid  // 人型
+};
+
+struct PlayerModeParams {
+    float maxMoveSpeed = 0.22f;
+    float moveAcceleration = 0.018f;
+    float moveDamping = 0.90f;
+    float pitchSpeed = 0.015f;
+    float yawSpeed = 0.014f;
+    float rollSpeed = 0.025f;
+};
 
 class Player {
 public:
@@ -29,15 +43,21 @@ public:
     Quaternion GetQuaternion() const { return quaternion_; }
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
-    //セッター
+    // セッター
     void SetPosition(const Vector3 &position) {
         position_ = position;
-        if (object_) {
-            object_->SetTranslate(position_);
-            object_->Update();
+        for (int i = 0; i < 3; ++i) {
+            if (objects_[i]) {
+                objects_[i]->SetTranslate(position_);
+                objects_[i]->Update();
+            }
         }
     }
-    void SetScale(const Vector3 &scale) { if (object_) object_->SetScale(scale); }
+    void SetScale(const Vector3 &scale) { 
+        for(int i = 0; i < 3; ++i) {
+            if (objects_[i]) objects_[i]->SetScale(scale); 
+        }
+    }
     void SetRotation(const Vector3 &eulerRotation);
 
     void OnCollision();
@@ -46,29 +66,23 @@ public:
     int GetHP() const { return hp_; }
 
     void Move(); // 移動と回転の処理
-    // シミュレーションUI用
-    float& GetMaxMoveSpeedRef() { return maxMoveSpeed_; }
-    float& GetMoveAccelerationRef() { return moveAcceleration_; }
-    float& GetMoveDampingRef() { return moveDamping_; }
-    float& GetPitchSpeedRef() { return pitchSpeed_; }
-    float& GetYawSpeedRef() { return yawSpeed_; }
-    float& GetRollSpeedRef() { return rollSpeed_; }
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
     void UpdateLockOnRotation(const Vector3& targetPos); // ロックオン時の強制回転
 
+    // モード関連
+    void ChangeMode(PlayerMode newMode);
+    PlayerMode GetCurrentMode() const { return currentMode_; }
+    PlayerModeParams& GetModeParams(PlayerMode mode) { return modeParams_[static_cast<int>(mode)]; }
+
 private:
-    std::unique_ptr<Object3d> object_;
+    std::unique_ptr<Object3d> objects_[3]; // 0:Fighter, 1:Gerwalk, 2:Battroid
+
+    PlayerMode currentMode_ = PlayerMode::Fighter;
+    PlayerModeParams modeParams_[3];
 
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
-
-    float maxMoveSpeed_ = 0.22f;
-    float moveAcceleration_ = 0.018f;
-    float moveDamping_ = 0.90f;
-    float pitchSpeed_ = 0.015f;
-    float yawSpeed_ = 0.014f;
-    float rollSpeed_ = 0.025f;
 
     bool isDead_ = false;
     int hp_ = 3;
