@@ -46,6 +46,13 @@ public:
     int GetHP() const { return hp_; }
 
     void Move(); // 移動と回転の処理
+    // シミュレーションUI用
+    float& GetMaxMoveSpeedRef() { return maxMoveSpeed_; }
+    float& GetMoveAccelerationRef() { return moveAcceleration_; }
+    float& GetMoveDampingRef() { return moveDamping_; }
+    float& GetPitchSpeedRef() { return pitchSpeed_; }
+    float& GetYawSpeedRef() { return yawSpeed_; }
+    float& GetRollSpeedRef() { return rollSpeed_; }
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
     void UpdateLockOnRotation(const Vector3& targetPos); // ロックオン時の強制回転
 

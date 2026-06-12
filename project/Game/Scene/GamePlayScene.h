@@ -213,6 +213,10 @@ private:
 	bool isGameOver_ = false;
 	int gameOverTimer_ = 0;
 
+	// シミュレーションツールUI用
+	bool showSimulationWindow_ = false;
+	int currentSimulationTarget_ = 0;
+
 
 	// JSONファイルが最後に更新された日時を記録する変数
 	std::filesystem::file_time_type lastJsonWriteTime_;
