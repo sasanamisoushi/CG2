@@ -216,6 +216,17 @@ void Player::Move() {
 		pitch += mouseDY * mouseSensitivity;
 	}
 
+	// --- ピッチ制限（上下180度制限：FPS視点風のジンバルロック） ---
+	if (std::abs(pitch) > 0.0001f) {
+		Quaternion qTestPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+		Quaternion testQuat = MyMath::Multiply(quaternion_, qTestPitch);
+		Vector3 testForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, testQuat);
+		// Y成分が±0.99f (約82度) を超えたらピッチ回転をキャンセルする
+		if (testForward.y > 0.99f || testForward.y < -0.99f) {
+			pitch = 0.0f;
+		}
+	}
+
 	Vector3 localMove = { 0.0f, 0.0f, 0.0f };
 
 	if (currentMode_ == PlayerMode::Fighter) {
