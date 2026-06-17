@@ -3,6 +3,9 @@ import math
 import os
 import random
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 
 import bpy
 import bpy_extras
@@ -248,7 +251,168 @@ def _clamp_point_to_box(point, center, extents, margin):
     ))
 
 
-def _create_ai_enemy_path(collection, path_id, points, loop, speed):
+def _prompt_has(prompt, *keywords):
+    return any(keyword.casefold() in prompt for keyword in keywords)
+
+
+def _parse_ai_motion_prompt(prompt, style):
+    normalized = str(prompt or "").casefold()
+    motion = {
+        "pattern": "DEFAULT",
+        "vertical": "NONE",
+        "turn_sign": 1.0,
+        "loop": None,
+        "speed_multiplier": 1.0,
+        "amplitude_multiplier": 1.0,
+        "opener": None,
+        "keep_formation": False,
+        "respect_bounds": True,
+        "edge_margin": 2.0,
+    }
+
+    if _prompt_has(normalized, "反時計", "左回り", "counter", "ccw"):
+        motion["turn_sign"] = -1.0
+    elif _prompt_has(normalized, "時計", "右回り", "clockwise", "cw"):
+        motion["turn_sign"] = 1.0
+
+    wants_edge = _prompt_has(normalized, "フィールド", "外周", "端", "端沿い", "ぎりぎり", "ギリギリ", "境界", "枠", "場外", "edge", "border", "boundary")
+    wants_orbit = _prompt_has(normalized, "回る", "旋回", "円", "一周", "一週", "1周", "1週", "周回", "巡回", "ループ", "orbit", "circle", "loop")
+    if _prompt_has(normalized, "群れ", "隊列", "編隊", "フォーメーション", "まとま", "崩さ", "一団", "formation", "swarm"):
+        motion["keep_formation"] = True
+        motion["opener"] = "ALL"
+    if _prompt_has(normalized, "外に出ない", "外へ出ない", "はみ出", "出ない", "収め", "範囲内", "inside", "bounds"):
+        motion["respect_bounds"] = True
+    if _prompt_has(normalized, "ぎりぎり", "ギリギリ", "端沿い", "外周", "境界", "edge", "border"):
+        motion["edge_margin"] = 1.0
+
+    if wants_edge and wants_orbit:
+        motion["pattern"] = "EDGE_ORBIT"
+        motion["loop"] = True
+    elif _prompt_has(normalized, "螺旋", "スパイラル", "spiral"):
+        motion["pattern"] = "SPIRAL"
+        motion["loop"] = True
+        motion["amplitude_multiplier"] = 1.15
+    elif _prompt_has(normalized, "ジグザグ", "蛇行", "左右", "s字", "s-字", "zigzag", "zig-zag"):
+        motion["pattern"] = "ZIGZAG"
+        motion["amplitude_multiplier"] = 1.25
+    elif wants_orbit:
+        motion["pattern"] = "ORBIT"
+        motion["loop"] = True
+    elif _prompt_has(normalized, "突撃", "直線", "まっすぐ", "正面", "接近", "rush", "charge", "straight"):
+        motion["pattern"] = "STRAIGHT"
+        motion["loop"] = False
+
+    if _prompt_has(normalized, "上昇", "上に", "上が", "登", "高く", "climb", "up"):
+        motion["vertical"] = "UP"
+    elif _prompt_has(normalized, "下降", "下に", "下が", "降下", "低く", "dive", "down"):
+        motion["vertical"] = "DOWN"
+    elif _prompt_has(normalized, "上下", "波", "うね", "wave", "sine"):
+        motion["vertical"] = "WAVE"
+
+    if _prompt_has(normalized, "高速", "速く", "早く", "fast", "quick"):
+        motion["speed_multiplier"] *= 1.25
+    if _prompt_has(normalized, "低速", "ゆっくり", "slow"):
+        motion["speed_multiplier"] *= 0.75
+
+    if _prompt_has(normalized, "大きく", "広く", "ワイド", "wide"):
+        motion["amplitude_multiplier"] *= 1.25
+    if _prompt_has(normalized, "小さく", "狭く", "tight", "small"):
+        motion["amplitude_multiplier"] *= 0.75
+
+    if _prompt_has(normalized, "同時", "一斉", "まとめて", "simultaneous"):
+        motion["opener"] = "ALL"
+    elif _prompt_has(normalized, "順番", "一体ずつ", "wave", "sequential"):
+        motion["opener"] = "ONE"
+
+    if motion["pattern"] == "DEFAULT" and style == 'PATROL':
+        motion["pattern"] = "ORBIT"
+        motion["loop"] = True
+    return motion
+
+
+def _apply_vertical_motion(points, motion, extents):
+    vertical = motion.get("vertical", "NONE")
+    if vertical == "NONE" or len(points) <= 1:
+        return points
+
+    max_offset = min(extents.z * 0.28, 4.0)
+    adjusted = []
+    for index, point in enumerate(points):
+        t = index / (len(points) - 1)
+        z_offset = 0.0
+        if vertical == "UP":
+            z_offset = max_offset * t
+        elif vertical == "DOWN":
+            z_offset = -max_offset * t
+        elif vertical == "WAVE":
+            z_offset = max_offset * (1.0 if index % 2 == 1 else -0.55)
+        adjusted.append(point + Vector((0.0, 0.0, z_offset)))
+    return adjusted
+
+
+def _build_ai_formation_offsets(count, extents, motion):
+    if not motion.get("keep_formation"):
+        return [Vector((0.0, 0.0, 0.0)) for _ in range(count)]
+
+    columns = max(1, math.ceil(math.sqrt(count)))
+    rows = max(1, math.ceil(count / columns))
+    max_spacing_x = (extents.x * 0.60) / max(1, columns - 1)
+    max_spacing_y = (extents.y * 0.60) / max(1, rows - 1)
+    spacing = min(2.0, max_spacing_x, max_spacing_y)
+    spacing = max(0.65, spacing)
+
+    offsets = []
+    for index in range(count):
+        col = index % columns
+        row = index // columns
+        offsets.append(Vector((
+            (col - (columns - 1) * 0.5) * spacing,
+            (row - (rows - 1) * 0.5) * spacing,
+            0.0,
+        )))
+
+    motion["formation_extent_x"] = max((abs(offset.x) for offset in offsets), default=0.0)
+    motion["formation_extent_y"] = max((abs(offset.y) for offset in offsets), default=0.0)
+    return offsets
+
+
+def _build_edge_orbit_points(motion, center, extents, formation_offset):
+    edge_margin = float(motion.get("edge_margin", 2.0))
+    formation_extent_x = float(motion.get("formation_extent_x", 0.0))
+    formation_extent_y = float(motion.get("formation_extent_y", 0.0))
+    radius_x = max(1.0, extents.x - edge_margin - formation_extent_x)
+    radius_y = max(1.0, extents.y - edge_margin - formation_extent_y)
+
+    if float(motion.get("turn_sign", 1.0)) < 0.0:
+        corners = [
+            (radius_x, -radius_y),
+            (0.0, -radius_y),
+            (-radius_x, -radius_y),
+            (-radius_x, 0.0),
+            (-radius_x, radius_y),
+            (0.0, radius_y),
+            (radius_x, radius_y),
+            (radius_x, 0.0),
+        ]
+    else:
+        corners = [
+            (-radius_x, -radius_y),
+            (0.0, -radius_y),
+            (radius_x, -radius_y),
+            (radius_x, 0.0),
+            (radius_x, radius_y),
+            (0.0, radius_y),
+            (-radius_x, radius_y),
+            (-radius_x, 0.0),
+        ]
+
+    return [
+        center + Vector((x, y, 0.0)) + formation_offset
+        for x, y in corners
+    ]
+
+
+def _create_ai_enemy_path(collection, path_id, points, loop, speed, handle_type='AUTO'):
     curve = bpy.data.curves.new(path_id, 'CURVE')
     curve.dimensions = '3D'
     curve.resolution_u = 24
@@ -261,8 +425,8 @@ def _create_ai_enemy_path(collection, path_id, points, loop, speed):
 
     for point, co in zip(spline.bezier_points, points):
         point.co = co
-        point.handle_left_type = 'AUTO'
-        point.handle_right_type = 'AUTO'
+        point.handle_left_type = handle_type
+        point.handle_right_type = handle_type
 
     obj = bpy.data.objects.new(path_id, curve)
     collection.objects.link(obj)
@@ -293,14 +457,79 @@ def _create_ai_enemy_spawn(collection, name, location, facing, enemy_type, path_
     return obj
 
 
-def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_index, rng):
+def _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, pair_index, rng, formation_offset=None):
+    if formation_offset is None:
+        formation_offset = Vector((0.0, 0.0, 0.0))
+
     margin = Vector((1.5, 1.5, 1.0))
     to_player = player - spawn
     flat_to_player = Vector((to_player.x, to_player.y, 0.0))
     forward = _safe_normalized(flat_to_player, Vector((0.0, -1.0, 0.0)))
     right = Vector((forward.y, -forward.x, 0.0))
-    lateral = min(extents.x * 0.45, 8.0) * side
+    amplitude = float(motion.get("amplitude_multiplier", 1.0))
+    turn_side = side * float(motion.get("turn_sign", 1.0))
+    lateral = min(extents.x * 0.45, 8.0) * side * amplitude
     z_swing = min(extents.z * 0.18, 2.5)
+    pattern = motion.get("pattern", "DEFAULT")
+
+    if pattern == "EDGE_ORBIT":
+        raw_points = _build_edge_orbit_points(motion, center, extents, formation_offset)
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
+        edge_margin = float(motion.get("edge_margin", 2.0))
+        return [_clamp_point_to_box(point, center, extents, Vector((edge_margin, edge_margin, 1.0))) for point in raw_points]
+
+    if pattern == "SPIRAL":
+        focus = player + forward * min(extents.y * 0.12, 3.0)
+        radius_x = min(extents.x * (0.22 + pair_index * 0.025), 7.5) * amplitude
+        radius_y = min(extents.y * (0.16 + pair_index * 0.025), 7.5) * amplitude
+        raw_points = [
+            spawn,
+            focus + right * (radius_x * turn_side) + Vector((0.0, 0.0, -z_swing)),
+            focus + forward * radius_y - right * (radius_x * turn_side * 0.45),
+            focus - right * (radius_x * turn_side) + Vector((0.0, 0.0, z_swing)),
+            focus - forward * radius_y + right * (radius_x * turn_side * 0.45),
+        ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    if pattern == "ORBIT":
+        focus = player + forward * min(extents.y * 0.08, 2.5)
+        radius_x = min(extents.x * (0.24 + pair_index * 0.03), 8.0) * amplitude
+        radius_y = min(extents.y * (0.18 + pair_index * 0.025), 8.0) * amplitude
+        raw_points = [
+            spawn,
+            focus + right * (radius_x * turn_side),
+            focus + forward * radius_y + Vector((0.0, 0.0, z_swing)),
+            focus - right * (radius_x * turn_side),
+            focus - forward * radius_y + Vector((0.0, 0.0, -z_swing)),
+        ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    if pattern == "ZIGZAG":
+        step = min(max((player - spawn).length / 4.0, 3.0), extents.y * 0.28)
+        zigzag_width = min(extents.x * 0.28, 6.0) * amplitude * side
+        raw_points = [spawn]
+        for point_index in range(1, 5):
+            direction = -1.0 if point_index % 2 == 0 else 1.0
+            raw_points.append(
+                spawn
+                + forward * (step * point_index)
+                + right * (zigzag_width * direction)
+                + Vector((0.0, 0.0, z_swing * direction * 0.7))
+            )
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    if pattern == "STRAIGHT":
+        overshoot = min(extents.y * 0.24, 6.0)
+        raw_points = [
+            spawn,
+            spawn + forward * min(extents.y * 0.24, 6.0) + Vector((0.0, 0.0, z_swing * 0.25)),
+            player + forward * overshoot,
+        ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
 
     if style == 'PATROL':
         radius_x = min(extents.x * 0.25 + pair_index * 0.4, 7.0)
@@ -311,6 +540,7 @@ def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_ind
             spawn + forward * (radius_y * 0.2) - right * (radius_x * side),
             spawn - forward * radius_y,
         ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
 
     if style == 'SWARM':
@@ -321,6 +551,7 @@ def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_ind
             player - right * lateral + Vector((0.0, 0.0, -z_swing)),
             spawn - forward * min(extents.y * 0.22, 5.0),
         ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
 
     if style == 'AMBUSH':
@@ -331,6 +562,7 @@ def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_ind
             player - right * (lateral * 0.65) + Vector((0.0, 0.0, -z_swing)),
             center - forward * min(extents.y * 0.38, 9.0) - right * (lateral * 0.35),
         ]
+        raw_points = _apply_vertical_motion(raw_points, motion, extents)
         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
 
     raw_points = [
@@ -339,7 +571,346 @@ def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_ind
         player + forward * min(extents.y * 0.2, 6.0) - right * (lateral * 0.45),
         center - forward * min(extents.y * 0.35, 8.0) - right * (lateral * 0.25),
     ]
+    raw_points = _apply_vertical_motion(raw_points, motion, extents)
     return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+
+def _gemini_enemy_plan_schema():
+    point_schema = {
+        "type": "object",
+        "properties": {
+            "x": {"type": "number"},
+            "y": {"type": "number"},
+            "z": {"type": "number"},
+        },
+        "required": ["x", "y", "z"],
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "enemies": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "spawn": point_schema,
+                        "path": {
+                            "type": "array",
+                            "items": point_schema,
+                        },
+                        "loop": {"type": "boolean"},
+                        "speed": {"type": "number"},
+                        "enemy_type": {
+                            "type": "string",
+                            "enum": ["VF1", "VF1-1"],
+                        },
+                        "trigger_index": {"type": "integer"},
+                        "delay_frames": {"type": "integer"},
+                        "handle_type": {
+                            "type": "string",
+                            "enum": ["AUTO", "VECTOR"],
+                        },
+                    },
+                    "required": ["spawn", "path", "loop", "speed", "enemy_type"],
+                },
+            },
+            "notes": {"type": "string"},
+        },
+        "required": ["enemies"],
+    }
+
+
+def _resolve_gemini_api_key(scene):
+    configured_key = getattr(scene, "myaddon_ai_enemy_gemini_api_key", "").strip()
+    if configured_key:
+        return configured_key
+    return os.environ.get("GEMINI_API_KEY", "").strip()
+
+
+def _gemini_model_name(scene):
+    model = str(getattr(scene, "myaddon_ai_enemy_gemini_model", "gemini-3.5-flash")).strip()
+    if not model:
+        model = "gemini-3.5-flash"
+    if model.startswith("models/"):
+        model = model[len("models/"):]
+    return model
+
+
+def _stage_bounds_prompt(center, extents):
+    return {
+        "center": [center.x, center.y, center.z],
+        "extents": [extents.x, extents.y, extents.z],
+        "min": [center.x - extents.x, center.y - extents.y, center.z - extents.z],
+        "max": [center.x + extents.x, center.y + extents.y, center.z + extents.z],
+    }
+
+
+def _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, center, extents, player):
+    style_label = {
+        'BALANCED': "バランス",
+        'AMBUSH': "挟み撃ち",
+        'SWARM': "群れ",
+        'PATROL': "巡回",
+    }.get(style, style)
+    bounds = _stage_bounds_prompt(center, extents)
+    player_data = {"x": player.x, "y": player.y, "z": player.z}
+    return (
+        "You are a level-design route generator for a 3D shooting game.\n"
+        "Return only JSON that matches the provided schema. Do not wrap it in markdown.\n"
+        "Coordinate system: X is left/right, Y is field depth, Z is height. Unit is Blender world unit.\n"
+        f"Enemy count must be exactly {count}.\n"
+        f"Seed hint: {seed}. Style: {style_label}. Default reinforcement delay: {wave_delay} frames.\n"
+        f"Field bounds JSON: {json.dumps(bounds, ensure_ascii=False)}\n"
+        f"Player spawn JSON: {json.dumps(player_data, ensure_ascii=False)}\n"
+        f"Designer request: {motion_prompt}\n"
+        "Rules:\n"
+        "- Every spawn and path point must stay inside the field bounds.\n"
+        "- spawn should be the first path point or very close to it.\n"
+        "- Each path must contain 3 to 10 points.\n"
+        "- Use loop=true for patrol, orbit, lap, circle, one-lap, or field-edge movement.\n"
+        "- Use handle_type=VECTOR for paths that must not bulge outside the field.\n"
+        "- Use speed from 0.015 to 0.18. If the request says very fast or explosive speed, use a higher value.\n"
+        "- trigger_index is -1 for enemies that appear immediately. Otherwise use a previous enemy index.\n"
+        "- If the request says to keep a swarm, formation, or group together, keep route shapes similar and offset the points slightly.\n"
+        "- If the request says field edge or one lap, create a route around the inside edge without leaving the field.\n"
+    )
+
+
+def _parse_gemini_json_text(text):
+    stripped = str(text or "").strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start >= 0 and end > start:
+            return json.loads(stripped[start:end + 1])
+        raise
+
+
+def _request_gemini_enemy_plan(scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
+    api_key = _resolve_gemini_api_key(scene)
+    if not api_key:
+        raise ValueError("Gemini APIキーが未設定です。")
+
+    model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    prompt = _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, center, extents, player)
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt},
+                ],
+            },
+        ],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": _gemini_enemy_plan_schema(),
+            "maxOutputTokens": 4096,
+        },
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": api_key,
+        },
+        method="POST",
+    )
+
+    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_gemini_timeout", 25)))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Gemini APIエラー {exc.code}: {detail[:280]}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Gemini APIへ接続できません: {exc.reason}") from exc
+
+    candidates = response_data.get("candidates", [])
+    if not candidates:
+        raise RuntimeError("Geminiから候補が返ってきませんでした。")
+
+    parts = candidates[0].get("content", {}).get("parts", [])
+    text = "".join(part.get("text", "") for part in parts)
+    if not text.strip():
+        raise RuntimeError("Geminiの返答が空でした。")
+    return _parse_gemini_json_text(text)
+
+
+def _coerce_ai_point(value):
+    if isinstance(value, dict):
+        raw = (value.get("x"), value.get("y"), value.get("z"))
+    elif isinstance(value, (list, tuple)) and len(value) >= 3:
+        raw = (value[0], value[1], value[2])
+    else:
+        return None
+
+    try:
+        coords = tuple(float(component) for component in raw)
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(component) for component in coords):
+        return None
+    return Vector(coords)
+
+
+def _clamp_float(value, default, minimum, maximum):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = default
+    if not math.isfinite(number):
+        number = default
+    return max(minimum, min(maximum, number))
+
+
+def _fallback_second_path_point(spawn, player, center, extents):
+    forward = _safe_normalized(player - spawn, Vector((0.0, 1.0, 0.0)))
+    distance = min(max(extents.y * 0.20, 2.0), 6.0)
+    point = _clamp_point_to_box(spawn + forward * distance, center, extents, Vector((1.0, 1.0, 0.8)))
+    if (point - spawn).length < 0.05:
+        point = _clamp_point_to_box(spawn + Vector((distance, 0.0, 0.0)), center, extents, Vector((1.0, 1.0, 0.8)))
+    return point
+
+
+def _sanitize_gemini_enemy_plan(plan_data, count, center, extents, player):
+    enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
+    if not isinstance(enemies, list) or not enemies:
+        raise ValueError("Geminiから敵データが返ってきませんでした。")
+
+    blueprints = []
+    margin = Vector((1.0, 1.0, 0.8))
+    for index, enemy in enumerate(enemies[:count]):
+        if not isinstance(enemy, dict):
+            continue
+
+        raw_path = enemy.get("path", [])
+        points = []
+        if isinstance(raw_path, list):
+            for raw_point in raw_path[:12]:
+                point = _coerce_ai_point(raw_point)
+                if point is not None:
+                    points.append(_clamp_point_to_box(point, center, extents, margin))
+
+        spawn = _coerce_ai_point(enemy.get("spawn"))
+        if spawn is None and points:
+            spawn = points[0]
+        if spawn is None:
+            continue
+        spawn = _clamp_point_to_box(spawn, center, extents, margin)
+
+        if points:
+            if (points[0] - spawn).length > 0.05:
+                points.insert(0, spawn)
+            else:
+                points[0] = spawn
+        else:
+            points = [spawn]
+
+        if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
+            points.append(_fallback_second_path_point(spawn, player, center, extents))
+
+        enemy_type = str(enemy.get("enemy_type", "")).strip()
+        if enemy_type not in {"VF1", "VF1-1"}:
+            enemy_type = "VF1-1" if index % 3 == 2 else "VF1"
+
+        try:
+            trigger_index = int(enemy.get("trigger_index", -1))
+        except (TypeError, ValueError):
+            trigger_index = -1
+        if trigger_index < 0 or trigger_index >= index:
+            trigger_index = -1
+
+        try:
+            delay_frames = int(enemy.get("delay_frames", 0))
+        except (TypeError, ValueError):
+            delay_frames = 0
+        delay_frames = max(0, min(3600, delay_frames))
+
+        handle_type = str(enemy.get("handle_type", "AUTO")).upper()
+        if handle_type not in {"AUTO", "VECTOR"}:
+            handle_type = "AUTO"
+
+        blueprints.append({
+            "spawn": spawn,
+            "points": points,
+            "loop": bool(enemy.get("loop", False)),
+            "speed": _clamp_float(enemy.get("speed", 0.05), 0.05, 0.001, 0.20),
+            "enemy_type": enemy_type,
+            "trigger_index": trigger_index,
+            "delay_frames": delay_frames,
+            "handle_type": handle_type,
+        })
+
+    if not blueprints:
+        raise ValueError("Geminiの敵データを有効な座標に変換できませんでした。")
+    if len(blueprints) < count:
+        raise ValueError(f"Geminiの有効な敵データが不足しています: {len(blueprints)}/{count}")
+    return blueprints
+
+
+def _path_start_facing(points, fallback):
+    start = points[0] if points else Vector((0.0, 0.0, 0.0))
+    for point in points[1:]:
+        direction = point - start
+        if direction.length > 0.05:
+            return direction
+    return fallback
+
+
+def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, motion_prompt, player, provider_label):
+    generated_objects = []
+    generated_enemies = []
+    for index, blueprint in enumerate(blueprints):
+        spawn = blueprint["spawn"]
+        points = blueprint["points"]
+        path_id = _unique_enemy_path_id(scene)
+        path_obj = _create_ai_enemy_path(
+            collection,
+            path_id,
+            points,
+            blueprint["loop"],
+            blueprint["speed"],
+            blueprint["handle_type"],
+        )
+        path_obj["myaddon_ai_motion_prompt"] = motion_prompt
+        path_obj["myaddon_ai_provider"] = provider_label
+
+        trigger_name = ""
+        trigger_index = blueprint.get("trigger_index", -1)
+        if 0 <= trigger_index < len(generated_enemies):
+            trigger_name = generated_enemies[trigger_index].name
+
+        enemy_name = f"AIEnemy_{index + 1:02d}"
+        enemy_obj = _create_ai_enemy_spawn(
+            collection,
+            enemy_name,
+            spawn,
+            _path_start_facing(points, player - spawn),
+            blueprint["enemy_type"],
+            path_id,
+            trigger_name,
+            blueprint.get("delay_frames", 0),
+        )
+        enemy_obj["myaddon_ai_motion_prompt"] = motion_prompt
+        enemy_obj["myaddon_ai_provider"] = provider_label
+
+        generated_objects.extend([path_obj, enemy_obj])
+        generated_enemies.append(enemy_obj)
+
+    return generated_objects, generated_enemies
 
 
 def _is_unset_text(value):
@@ -851,9 +1422,6 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
     def execute(self, context):
         scene = context.scene
 
-        if getattr(scene, "myaddon_ai_enemy_clear_existing", True):
-            _delete_ai_generated_objects(scene)
-
         collection = _get_ai_collection(scene)
         center, extents = _stage_bounds_box(scene)
         player = _find_player_spawn_position(scene, center, extents)
@@ -866,10 +1434,61 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
         count = max(1, int(getattr(scene, "myaddon_ai_enemy_count", 6)))
         seed = max(0, int(getattr(scene, "myaddon_ai_enemy_seed", 1)))
         style = getattr(scene, "myaddon_ai_enemy_style", 'BALANCED')
+        motion_prompt = getattr(scene, "myaddon_ai_enemy_motion_prompt", "")
+        motion = _parse_ai_motion_prompt(motion_prompt, style)
         wave_delay = max(0, int(getattr(scene, "myaddon_ai_enemy_wave_delay", 90)))
         rng = random.Random(seed)
+        provider = getattr(scene, "myaddon_ai_enemy_provider", 'BUILTIN')
+
+        if provider == 'GEMINI':
+            try:
+                plan_data = _request_gemini_enemy_plan(
+                    scene,
+                    count,
+                    seed,
+                    style,
+                    motion_prompt,
+                    wave_delay,
+                    center,
+                    extents,
+                    player,
+                )
+                blueprints = _sanitize_gemini_enemy_plan(plan_data, count, center, extents, player)
+                if getattr(scene, "myaddon_ai_enemy_clear_existing", True):
+                    _delete_ai_generated_objects(scene)
+                generated_objects, generated_enemies = _create_ai_enemy_objects_from_blueprints(
+                    scene,
+                    collection,
+                    blueprints,
+                    motion_prompt,
+                    player,
+                    "GEMINI",
+                )
+
+                bpy.ops.object.select_all(action='DESELECT')
+                for obj in generated_objects:
+                    obj.select_set(True)
+                if generated_enemies:
+                    context.view_layer.objects.active = generated_enemies[0]
+
+                errors, warnings = validation.validate_and_store(scene)
+                _auto_export_scene_json()
+
+                if errors:
+                    self.report({'WARNING'}, f"Geminiで生成しましたが、チェックエラーが{len(errors)}件あります。")
+                elif warnings:
+                    self.report({'WARNING'}, f"Geminiで生成しました。警告{len(warnings)}件があります。")
+                else:
+                    self.report({'INFO'}, f"Geminiで敵プランを生成しました: 敵{len(generated_enemies)} / パス{len(generated_enemies)}")
+                return {'FINISHED'}
+            except Exception as exc:
+                if not getattr(scene, "myaddon_ai_enemy_gemini_fallback", True):
+                    self.report({'ERROR'}, f"Gemini生成に失敗しました: {exc}")
+                    return {'CANCELLED'}
+                self.report({'WARNING'}, f"Gemini生成に失敗したため内蔵AIで生成します: {exc}")
 
         lane_count = max(1, (count + 1) // 2)
+        formation_offsets = _build_ai_formation_offsets(count, extents, motion)
         speed_by_style = {
             'BALANCED': 0.050,
             'AMBUSH': 0.060,
@@ -879,7 +1498,13 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
         generated_objects = []
         generated_enemies = []
         opener_count = min(count, 4 if style == 'SWARM' else 2)
+        if motion.get("opener") == "ALL":
+            opener_count = count
+        elif motion.get("opener") == "ONE":
+            opener_count = 1
         margin = Vector((2.0, 2.0, 1.2))
+        if getattr(scene, "myaddon_ai_enemy_clear_existing", True):
+            _delete_ai_generated_objects(scene)
 
         for index in range(count):
             pair_index = index // 2
@@ -909,12 +1534,20 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 + Vector((0.0, 0.0, height))
             )
             spawn = _clamp_point_to_box(spawn, center, extents, margin)
+            formation_offset = formation_offsets[index] if index < len(formation_offsets) else Vector((0.0, 0.0, 0.0))
+            if motion.get("keep_formation") and motion.get("pattern") != "EDGE_ORBIT":
+                spawn = _clamp_point_to_box(spawn + formation_offset, center, extents, margin)
 
             path_id = _unique_enemy_path_id(scene)
-            speed = speed_by_style.get(style, 0.050) * rng.uniform(0.88, 1.12)
-            loop = style == 'PATROL'
-            points = _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_index, rng)
-            path_obj = _create_ai_enemy_path(collection, path_id, points, loop, speed)
+            speed_jitter = 1.0 if motion.get("keep_formation") else rng.uniform(0.88, 1.12)
+            speed = speed_by_style.get(style, 0.050) * motion.get("speed_multiplier", 1.0) * speed_jitter
+            loop = motion["loop"] if motion.get("loop") is not None else style == 'PATROL'
+            points = _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, pair_index, rng, formation_offset)
+            if motion.get("pattern") == "EDGE_ORBIT" and points:
+                spawn = points[0]
+            handle_type = 'VECTOR' if motion.get("pattern") == "EDGE_ORBIT" and motion.get("respect_bounds") else 'AUTO'
+            path_obj = _create_ai_enemy_path(collection, path_id, points, loop, speed, handle_type)
+            path_obj["myaddon_ai_motion_prompt"] = motion_prompt
 
             trigger_name = ""
             delay_frames = wave_delay
@@ -936,6 +1569,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 trigger_name,
                 delay_frames,
             )
+            enemy_obj["myaddon_ai_motion_prompt"] = motion_prompt
 
             generated_objects.extend([path_obj, enemy_obj])
             generated_enemies.append(enemy_obj)

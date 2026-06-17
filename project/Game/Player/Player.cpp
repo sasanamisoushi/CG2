@@ -65,8 +65,33 @@ namespace {
 		return Scale(value, maxLength / length);
 	}
 
-	Quaternion MakeLevelYawQuaternion(const Quaternion &sourceRotation) {
-		const Vector3 forward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, sourceRotation);
+	Quaternion MakeNoRollLookQuaternion(const Vector3 &forward) {
+		Vector3 normalizedForward = NormalizeOrZero(forward);
+		if (LengthSq(normalizedForward) <= 0.0001f) {
+			normalizedForward = { 0.0f, 0.0f, 1.0f };
+		}
+
+		const float clampedY = std::clamp(normalizedForward.y, -1.0f, 1.0f);
+		const float pitch = -std::asin(clampedY);
+		const float yaw = std::atan2(normalizedForward.x, normalizedForward.z);
+		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+		return MyMath::Normalize(MyMath::Multiply(qYaw, qPitch));
+	}
+
+	Vector3 MakeForwardFromFlatAndPitch(const Vector3 &flatForward, float pitch) {
+		Vector3 normalizedFlat = NormalizeOrZero({ flatForward.x, 0.0f, flatForward.z });
+		if (LengthSq(normalizedFlat) <= 0.0001f) {
+			normalizedFlat = { 0.0f, 0.0f, 1.0f };
+		}
+
+		const float yaw = std::atan2(normalizedFlat.x, normalizedFlat.z);
+		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+		return MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, MyMath::Normalize(MyMath::Multiply(qYaw, qPitch)));
+	}
+
+	Quaternion MakeYawQuaternionFromForward(const Vector3 &forward) {
 		Vector3 flatForward = NormalizeOrZero({ forward.x, 0.0f, forward.z });
 		if (LengthSq(flatForward) <= 0.0001f) {
 			flatForward = { 0.0f, 0.0f, 1.0f };
@@ -74,6 +99,14 @@ namespace {
 
 		const float yaw = std::atan2(flatForward.x, flatForward.z);
 		return MyMath::Normalize(MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw));
+	}
+
+	float CameraPitchFromForward(const Vector3 &forward) {
+		Vector3 normalizedForward = NormalizeOrZero(forward);
+		if (LengthSq(normalizedForward) <= 0.0001f) {
+			return 0.0f;
+		}
+		return std::clamp(-std::asin(std::clamp(normalizedForward.y, -1.0f, 1.0f)), -1.2f, 1.2f);
 	}
 }
 
@@ -125,6 +158,12 @@ void Player::Initialize(const std::string &modelName) {
 }
 
 void Player::ChangeMode(PlayerMode newMode) {
+	if (newMode != PlayerMode::Fighter) {
+		const Vector3 currentForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+		cameraPitch_ = CameraPitchFromForward(currentForward);
+		quaternion_ = MakeYawQuaternionFromForward(currentForward);
+	}
+
     currentMode_ = newMode;
     // 形態ごとの見た目の変更（スケールを変えて仮表現する）
     for (int i = 0; i < 3; ++i) {
@@ -207,22 +246,59 @@ OBB Player::GetOBB() const {
 }
 
 void Player::UpdateCamera(Camera *camera) {
-	Vector3 offset = { 0.0f, 2.0f, -12.0f };
-	Quaternion levelCameraRotation = MakeLevelYawQuaternion(quaternion_);
-	Vector3 rotatedOffset = MyMath::RotateVector(offset, levelCameraRotation);
-	Vector3 camPos = {
-		position_.x + rotatedOffset.x,
-		position_.y + rotatedOffset.y,
-		position_.z + rotatedOffset.z
+	Vector3 playerForward = NormalizeOrZero(GetForwardVector());
+	if (LengthSq(playerForward) <= 0.0001f) {
+		playerForward = { 0.0f, 0.0f, 1.0f };
+	}
+	Vector3 flatForward = NormalizeOrZero({ playerForward.x, 0.0f, playerForward.z });
+	if (LengthSq(flatForward) <= 0.0001f) {
+		flatForward = { 0.0f, 0.0f, 1.0f };
+	}
+	Vector3 cameraDirection = {
+		playerForward.x,
+		std::clamp(playerForward.y, -0.75f, 0.75f),
+		playerForward.z
 	};
+	if (LengthSq({ cameraDirection.x, 0.0f, cameraDirection.z }) <= 0.0001f) {
+		cameraDirection.x = flatForward.x * 0.35f;
+		cameraDirection.z = flatForward.z * 0.35f;
+	}
+	cameraDirection = NormalizeOrZero(cameraDirection);
+	if (LengthSq(cameraDirection) <= 0.0001f) {
+		cameraDirection = flatForward;
+	}
+
+	const float backDistance = 12.0f;
+	const float heightOffset = 2.5f;
+	const Vector3 lookTarget = GetOBB().center;
+	Vector3 cameraBackOffset = Scale(cameraDirection, -backDistance);
+	Vector3 camPos = {
+		lookTarget.x + cameraBackOffset.x,
+		lookTarget.y + heightOffset,
+		lookTarget.z + cameraBackOffset.z
+	};
+	Vector3 lookForward = NormalizeOrZero({
+		lookTarget.x - camPos.x,
+		lookTarget.y - camPos.y,
+		lookTarget.z - camPos.z
+	});
+	if (LengthSq(lookForward) <= 0.0001f) {
+		lookForward = flatForward;
+	}
+	Quaternion cameraRotation = MakeNoRollLookQuaternion(lookForward);
 
 	camera->SetTranslate(camPos);
 	camera->SetRotate({ 0,0,0 });
-	camera->SetQuaternion(levelCameraRotation);
+	camera->SetQuaternion(cameraRotation);
 }
 
 Vector3 Player::GetForwardVector() const {
-	return MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+	Vector3 bodyForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+	if (currentMode_ == PlayerMode::Fighter) {
+		return bodyForward;
+	}
+
+	return MakeForwardFromFlatAndPitch(bodyForward, cameraPitch_);
 }
 
 void Player::SetRotation(const Vector3 &eulerRotation) {
@@ -235,6 +311,11 @@ void Player::SetRotation(const Vector3 &eulerRotation) {
 	quaternion_ = MyMath::Multiply(quaternion_, qYaw);
 	quaternion_ = MyMath::Multiply(quaternion_, qRoll);
 	quaternion_ = MyMath::Normalize(quaternion_);
+	if (currentMode_ != PlayerMode::Fighter) {
+		const Vector3 currentForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
+		cameraPitch_ = CameraPitchFromForward(currentForward);
+		quaternion_ = MakeYawQuaternionFromForward(currentForward);
+	}
 
     for (int i = 0; i < 3; ++i) {
 	    if (objects_[i]) {
@@ -281,14 +362,30 @@ void Player::Move() {
 	float pitch = 0.0f;
 	float yaw = 0.0f;
 	float roll = 0.0f;
+	float cameraPitchDelta = 0.0f;
+	const bool usesDetachedCameraPitch = currentMode_ != PlayerMode::Fighter;
 
 	// 姿勢制御（共通）
-	if (input->PushKey(DIK_UP)) pitch -= p.pitchSpeed;
-	if (input->PushKey(DIK_DOWN)) pitch += p.pitchSpeed;
+	if (input->PushKey(DIK_UP)) {
+		if (usesDetachedCameraPitch) {
+			cameraPitchDelta -= p.pitchSpeed;
+		} else {
+			pitch -= p.pitchSpeed;
+		}
+	}
+	if (input->PushKey(DIK_DOWN)) {
+		if (usesDetachedCameraPitch) {
+			cameraPitchDelta += p.pitchSpeed;
+		} else {
+			pitch += p.pitchSpeed;
+		}
+	}
 	if (input->PushKey(DIK_RIGHT)) yaw += p.yawSpeed;
 	if (input->PushKey(DIK_LEFT)) yaw -= p.yawSpeed;
-	if (input->PushKey(DIK_E)) roll -= p.rollSpeed;
-	if (input->PushKey(DIK_Q)) roll += p.rollSpeed;
+	if (!usesDetachedCameraPitch) {
+		if (input->PushKey(DIK_E)) roll -= p.rollSpeed;
+		if (input->PushKey(DIK_Q)) roll += p.rollSpeed;
+	}
 
 	// マウス入力による回転（視点・機体回転）
 	long mouseDX = input->GetMouseDeltaX();
@@ -298,7 +395,14 @@ void Player::Move() {
 		yaw += mouseDX * mouseSensitivity;
 	}
 	if (mouseDY != 0) {
-		pitch += mouseDY * mouseSensitivity;
+		if (usesDetachedCameraPitch) {
+			cameraPitchDelta += mouseDY * mouseSensitivity;
+		} else {
+			pitch += mouseDY * mouseSensitivity;
+		}
+	}
+	if (usesDetachedCameraPitch && std::abs(cameraPitchDelta) > 0.0001f) {
+		cameraPitch_ = std::clamp(cameraPitch_ + cameraPitchDelta, -1.2f, 1.2f);
 	}
 
 	// --- ピッチ制限（上下180度制限：FPS視点風のジンバルロック） ---
@@ -348,10 +452,15 @@ void Player::Move() {
 	Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
 	Quaternion qRoll = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, roll);
 
-	quaternion_ = MyMath::Multiply(quaternion_, qPitch);
-	quaternion_ = MyMath::Multiply(quaternion_, qYaw);
-	quaternion_ = MyMath::Multiply(quaternion_, qRoll);
-	quaternion_ = MyMath::Normalize(quaternion_);
+	if (usesDetachedCameraPitch) {
+		quaternion_ = MyMath::Multiply(quaternion_, qYaw);
+		quaternion_ = MakeYawQuaternionFromForward(MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_));
+	} else {
+		quaternion_ = MyMath::Multiply(quaternion_, qPitch);
+		quaternion_ = MyMath::Multiply(quaternion_, qYaw);
+		quaternion_ = MyMath::Multiply(quaternion_, qRoll);
+		quaternion_ = MyMath::Normalize(quaternion_);
+	}
 
 	// ======== 自動水平復元処理 ========
 	bool isInputRotation = (std::abs(pitch) > 0.0001f || std::abs(yaw) > 0.0001f || std::abs(roll) > 0.0001f);

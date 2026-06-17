@@ -179,7 +179,7 @@ private:
 	std::unique_ptr<FlyCamera> debugFlyCamera_;
 	bool isDebugCameraActive_ = false;
 	bool isEditorPreviewPlaying_ = true;
-	bool isCinematicLockOnCameraEnabled_ = true;
+	bool isCinematicLockOnCameraEnabled_ = false;
 	bool isCinematicLockOnCameraInitialized_ = false;
 	Vector3 cinematicLockOnCameraPosition_ = { 0.0f, 0.0f, 0.0f };
 	Quaternion cinematicLockOnCameraRotation_ = { 0.0f, 0.0f, 0.0f, 1.0f };

@@ -89,6 +89,7 @@ private:
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
+    float cameraPitch_ = 0.0f;
 
     bool isDead_ = false;
     int hp_ = 3;

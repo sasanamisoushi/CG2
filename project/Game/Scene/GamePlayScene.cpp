@@ -280,7 +280,7 @@ namespace {
 
 		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
 		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
-		return MyMath::Normalize(MyMath::Multiply(qPitch, qYaw));
+		return MyMath::Normalize(MyMath::Multiply(qYaw, qPitch));
 	}
 
 	bool IsImGuiKeyboardCaptureActive() {
@@ -1981,7 +1981,7 @@ void GamePlayScene::UpdateCinematicLockOnCamera() {
 
 	if (!isCinematicLockOnCameraInitialized_) {
 		cinematicLockOnCameraPosition_ = camera->GetTranslate();
-		cinematicLockOnCameraRotation_ = player_->GetQuaternion();
+		cinematicLockOnCameraRotation_ = MakeLookQuaternion(playerForward);
 		cinematicLockOnCameraFocus_ = rawFocus;
 		cinematicLockOnCameraBackDirection_ = rawCameraBackDirection;
 		cinematicLockOnCameraSeparation_ = separation;
