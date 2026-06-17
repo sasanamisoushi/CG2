@@ -15,13 +15,25 @@ enum class MissileType {
     MissileWithTrail // 煙を引くミサイル
 };
 
+struct MissileTuning {
+    float speed = 0.75f;
+    float homingStrength = 0.085f;
+    float scale = 0.5f;
+    float collisionRadius = 0.5f;
+    float trailWidth = 0.5f;
+    int lifeTime = 240;
+};
+
 class Missile {
 public:
     // 初期化（発生位置と飛んでいく方向を渡す）
-    void Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type);
+    void Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning);
 
     // 毎フレームの更新
     void Update(Camera *camera, Enemy *enemy);
+
+    // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
+    void UpdateModel(Camera *camera = nullptr);
 
     // 描画
     void Draw();
@@ -39,6 +51,7 @@ public:
 private:
     std::unique_ptr<Object3d> object_;
     MissileType type_;     // 自分のタイプを保持
+    MissileTuning tuning_;
 
     // このミサイル専用の軌跡（煙）オブジェクト
     std::unique_ptr<Trail> trail_;

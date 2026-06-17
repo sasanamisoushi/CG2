@@ -13,6 +13,7 @@ public:
     void Initialize();
     // プレイヤーへのポインタを受け取って当たり判定を行う
     void Update(Player *player, std::vector<Vector3> &hitPositions, const std::list<std::unique_ptr<Obstacle>> &obstacles);
+    void UpdateModels();
     void Draw();
 
     // 弾を発射する

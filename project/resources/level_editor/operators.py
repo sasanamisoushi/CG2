@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import random
 import subprocess
 
 import bpy
@@ -12,6 +13,8 @@ import validation
 
 
 _INVALID_FILENAME_CHARS = '<>:"/\\|?*'
+_AI_GENERATED_MARKER = "myaddon_ai_generated"
+_AI_GENERATED_COLLECTION = "AI Enemy Plan"
 
 
 def _default_scene_json_path():
@@ -180,6 +183,163 @@ def _unique_enemy_path_id(scene):
         if candidate not in used_ids:
             return candidate
         index += 1
+
+
+def _get_ai_collection(scene):
+    collection = bpy.data.collections.get(_AI_GENERATED_COLLECTION)
+    if collection is None:
+        collection = bpy.data.collections.new(_AI_GENERATED_COLLECTION)
+
+    if collection.name not in {child.name for child in scene.collection.children}:
+        scene.collection.children.link(collection)
+
+    return collection
+
+
+def _delete_ai_generated_objects(scene):
+    removed_count = 0
+    for obj in list(scene.objects):
+        if not obj.get(_AI_GENERATED_MARKER):
+            continue
+        bpy.data.objects.remove(obj, do_unlink=True)
+        removed_count += 1
+
+    return removed_count
+
+
+def _stage_bounds_box(scene):
+    stage_bounds = next((obj for obj in scene.objects if obj.name.startswith("StageBounds")), None)
+    if stage_bounds:
+        center = stage_bounds.matrix_world.translation.copy()
+        dimensions = stage_bounds.dimensions
+        extents = Vector((
+            max(1.0, abs(dimensions.x) * 0.5),
+            max(1.0, abs(dimensions.y) * 0.5),
+            max(1.0, abs(dimensions.z) * 0.5),
+        ))
+        return center, extents
+
+    return Vector((0.0, 0.0, 0.0)), Vector((18.0, 22.0, 10.0))
+
+
+def _find_player_spawn_position(scene, fallback_center, fallback_extents):
+    for obj in scene.objects:
+        if getattr(obj, "game_obj_type", "NONE") == "PLAYER":
+            return obj.matrix_world.translation.copy()
+
+    return fallback_center + Vector((0.0, -fallback_extents.y * 0.55, 0.0))
+
+
+def _safe_normalized(vector, fallback):
+    if vector.length <= 0.0001:
+        return fallback.copy()
+    return vector.normalized()
+
+
+def _clamp_point_to_box(point, center, extents, margin):
+    def clamp_axis(value, center_value, extent_value, margin_value):
+        usable_extent = max(0.0, extent_value - margin_value)
+        return max(center_value - usable_extent, min(center_value + usable_extent, value))
+
+    return Vector((
+        clamp_axis(point.x, center.x, extents.x, margin.x),
+        clamp_axis(point.y, center.y, extents.y, margin.y),
+        clamp_axis(point.z, center.z, extents.z, margin.z),
+    ))
+
+
+def _create_ai_enemy_path(collection, path_id, points, loop, speed):
+    curve = bpy.data.curves.new(path_id, 'CURVE')
+    curve.dimensions = '3D'
+    curve.resolution_u = 24
+    curve.bevel_depth = 0.04
+    curve.bevel_resolution = 2
+
+    spline = curve.splines.new('BEZIER')
+    spline.bezier_points.add(len(points) - 1)
+    spline.use_cyclic_u = loop
+
+    for point, co in zip(spline.bezier_points, points):
+        point.co = co
+        point.handle_left_type = 'AUTO'
+        point.handle_right_type = 'AUTO'
+
+    obj = bpy.data.objects.new(path_id, curve)
+    collection.objects.link(obj)
+    obj.enemy_path_id = path_id
+    obj.enemy_path_loop = loop
+    obj.enemy_path_speed = speed
+    obj[_AI_GENERATED_MARKER] = True
+    return obj
+
+
+def _create_ai_enemy_spawn(collection, name, location, facing, enemy_type, path_id, trigger_name, delay_frames):
+    obj = bpy.data.objects.new(name, None)
+    collection.objects.link(obj)
+    obj.empty_display_type = 'SINGLE_ARROW'
+    obj.empty_display_size = 2.0
+    obj.location = location
+
+    facing_xy = Vector((facing.x, facing.y, 0.0))
+    if facing_xy.length > 0.0001:
+        obj.rotation_euler = (0.0, 0.0, math.atan2(facing_xy.y, facing_xy.x) - math.pi * 0.5)
+
+    obj.game_obj_type = 'ENEMY'
+    obj.enemy_type = enemy_type
+    obj.enemy_path_id = path_id
+    obj.enemy_reinforcement_trigger_name = trigger_name
+    obj.enemy_reinforcement_delay_frames = delay_frames
+    obj[_AI_GENERATED_MARKER] = True
+    return obj
+
+
+def _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_index, rng):
+    margin = Vector((1.5, 1.5, 1.0))
+    to_player = player - spawn
+    flat_to_player = Vector((to_player.x, to_player.y, 0.0))
+    forward = _safe_normalized(flat_to_player, Vector((0.0, -1.0, 0.0)))
+    right = Vector((forward.y, -forward.x, 0.0))
+    lateral = min(extents.x * 0.45, 8.0) * side
+    z_swing = min(extents.z * 0.18, 2.5)
+
+    if style == 'PATROL':
+        radius_x = min(extents.x * 0.25 + pair_index * 0.4, 7.0)
+        radius_y = min(extents.y * 0.18 + pair_index * 0.3, 8.0)
+        raw_points = [
+            spawn,
+            spawn + forward * radius_y + right * (radius_x * side),
+            spawn + forward * (radius_y * 0.2) - right * (radius_x * side),
+            spawn - forward * radius_y,
+        ]
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    if style == 'SWARM':
+        lateral *= 0.45
+        raw_points = [
+            spawn,
+            player + forward * min(extents.y * 0.22, 5.0) + right * lateral + Vector((0.0, 0.0, z_swing)),
+            player - right * lateral + Vector((0.0, 0.0, -z_swing)),
+            spawn - forward * min(extents.y * 0.22, 5.0),
+        ]
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    if style == 'AMBUSH':
+        lateral *= 1.15
+        raw_points = [
+            spawn,
+            center + right * lateral + Vector((0.0, 0.0, z_swing)),
+            player - right * (lateral * 0.65) + Vector((0.0, 0.0, -z_swing)),
+            center - forward * min(extents.y * 0.38, 9.0) - right * (lateral * 0.35),
+        ]
+        return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+
+    raw_points = [
+        spawn,
+        center + right * lateral + Vector((0.0, 0.0, z_swing)),
+        player + forward * min(extents.y * 0.2, 6.0) - right * (lateral * 0.45),
+        center - forward * min(extents.y * 0.35, 8.0) - right * (lateral * 0.25),
+    ]
+    return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
 
 
 def _is_unset_text(value):
@@ -682,6 +842,123 @@ class MYADDON_OT_apply_active_properties_to_selection(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_ai_generate_enemy_plan"
+    bl_label = "AI敵プラン生成"
+    bl_description = "敵の位置、飛行ルート、登場パターンを自動生成します"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scene = context.scene
+
+        if getattr(scene, "myaddon_ai_enemy_clear_existing", True):
+            _delete_ai_generated_objects(scene)
+
+        collection = _get_ai_collection(scene)
+        center, extents = _stage_bounds_box(scene)
+        player = _find_player_spawn_position(scene, center, extents)
+        player_forward = _safe_normalized(
+            Vector((center.x - player.x, center.y - player.y, 0.0)),
+            Vector((0.0, 1.0, 0.0)),
+        )
+        player_right = Vector((player_forward.y, -player_forward.x, 0.0))
+
+        count = max(1, int(getattr(scene, "myaddon_ai_enemy_count", 6)))
+        seed = max(0, int(getattr(scene, "myaddon_ai_enemy_seed", 1)))
+        style = getattr(scene, "myaddon_ai_enemy_style", 'BALANCED')
+        wave_delay = max(0, int(getattr(scene, "myaddon_ai_enemy_wave_delay", 90)))
+        rng = random.Random(seed)
+
+        lane_count = max(1, (count + 1) // 2)
+        speed_by_style = {
+            'BALANCED': 0.050,
+            'AMBUSH': 0.060,
+            'SWARM': 0.072,
+            'PATROL': 0.038,
+        }
+        generated_objects = []
+        generated_enemies = []
+        opener_count = min(count, 4 if style == 'SWARM' else 2)
+        margin = Vector((2.0, 2.0, 1.2))
+
+        for index in range(count):
+            pair_index = index // 2
+            lane_t = 0.0 if lane_count <= 1 else pair_index / (lane_count - 1)
+            side = -1.0 if index % 2 == 0 else 1.0
+            z_span = min(extents.z * 0.32, 4.0)
+            height = rng.uniform(-z_span, z_span)
+
+            if style == 'AMBUSH':
+                lateral = side * extents.x * rng.uniform(0.55, 0.82)
+                depth = extents.y * rng.uniform(-0.05, 0.42)
+            elif style == 'SWARM':
+                swarm_step = min(2.2, extents.x * 0.12)
+                lateral = (index - (count - 1) * 0.5) * swarm_step + rng.uniform(-0.7, 0.7)
+                depth = extents.y * rng.uniform(0.18, 0.34)
+            elif style == 'PATROL':
+                lateral = side * extents.x * (0.28 + 0.38 * lane_t)
+                depth = extents.y * (0.02 + 0.34 * lane_t)
+            else:
+                lateral = side * extents.x * (0.22 + 0.45 * lane_t)
+                depth = extents.y * (0.22 + 0.28 * (1.0 - lane_t))
+
+            spawn = (
+                center
+                + player_forward * depth
+                + player_right * lateral
+                + Vector((0.0, 0.0, height))
+            )
+            spawn = _clamp_point_to_box(spawn, center, extents, margin)
+
+            path_id = _unique_enemy_path_id(scene)
+            speed = speed_by_style.get(style, 0.050) * rng.uniform(0.88, 1.12)
+            loop = style == 'PATROL'
+            points = _build_ai_enemy_points(style, spawn, player, center, extents, side, pair_index, rng)
+            path_obj = _create_ai_enemy_path(collection, path_id, points, loop, speed)
+
+            trigger_name = ""
+            delay_frames = wave_delay
+            if index >= opener_count and generated_enemies:
+                trigger_enemy = generated_enemies[index - opener_count]
+                trigger_name = trigger_enemy.name
+                delay_jitter = wave_delay // 5
+                delay_frames = max(0, wave_delay + rng.randint(-delay_jitter, delay_jitter))
+
+            enemy_name = f"AIEnemy_{index + 1:02d}"
+            enemy_type = "VF1-1" if index % 3 == 2 else "VF1"
+            enemy_obj = _create_ai_enemy_spawn(
+                collection,
+                enemy_name,
+                spawn,
+                player - spawn,
+                enemy_type,
+                path_id,
+                trigger_name,
+                delay_frames,
+            )
+
+            generated_objects.extend([path_obj, enemy_obj])
+            generated_enemies.append(enemy_obj)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in generated_objects:
+            obj.select_set(True)
+        if generated_enemies:
+            context.view_layer.objects.active = generated_enemies[0]
+
+        errors, warnings = validation.validate_and_store(scene)
+        _auto_export_scene_json()
+
+        if errors:
+            self.report({'WARNING'}, f"AI敵プランを生成しましたが、チェックエラーが{len(errors)}件あります。")
+        elif warnings:
+            self.report({'WARNING'}, f"AI敵プランを生成しました。警告{len(warnings)}件があります。")
+        else:
+            self.report({'INFO'}, f"AI敵プランを生成しました: 敵{len(generated_enemies)} / パス{len(generated_enemies)}")
+
+        return {'FINISHED'}
+
+
 class MYADDON_OT_create_enemy_path(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_create_enemy_path"
     bl_label = "敵飛行パスを配置"
@@ -834,6 +1111,7 @@ classes = (
     MYADDON_OT_validate_scene,
     MYADDON_OT_playtest_game,
     MYADDON_OT_apply_active_properties_to_selection,
+    MYADDON_OT_ai_generate_enemy_plan,
     MYADDON_OT_create_enemy_path,
     MYADDON_OT_assign_selected_enemy_path,
     MYADDON_OT_assign_selected_reinforcement_trigger,

@@ -1,7 +1,9 @@
 #include "Missile.h"
 #include "3D/Object3dCommon.h"
 #include "Game/enemy/Enemy.h"
+#include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace {
 	float LengthSq(const Vector3 &value) {
@@ -37,8 +39,9 @@ namespace {
 	}
 }
 
-void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type) {
+void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning) {
 	type_ = type; // タイプを保存
+	tuning_ = tuning;
 
 	object_ = std::make_unique<Object3d>();
 	object_->Initialize(Object3dCommon::GetInstance());
@@ -47,13 +50,13 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	// タイプによって見た目を変える
 	if (type_ == MissileType::Normal) {
 		if (object_->GetModel()) object_->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f }); // 通常弾は黄色
-		object_->SetScale({ 0.3f, 0.3f, 0.3f }); // 通常弾は小さめ
-		collisionRadius_ = 0.3f;
 	} else {
 		if (object_->GetModel()) object_->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f }); // ミサイルは赤
-		object_->SetScale({ 0.5f, 0.5f, 0.5f });
-		collisionRadius_ = 0.5f;
 	}
+
+	const float visualScale = (std::max)(0.01f, tuning_.scale);
+	object_->SetScale({ visualScale, visualScale, visualScale });
+	collisionRadius_ = (std::max)(0.01f, tuning_.collisionRadius);
 
 
 
@@ -61,7 +64,7 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	position_ = position;
 	velocity_ = velocity;
 
-	lifeTimer_ = (type_ == MissileType::MissileWithTrail) ? kHomingLifeTime : kLifeTime;
+	lifeTimer_ = (std::max)(1, tuning_.lifeTime);
 	isDead_ = false;
 
 	// ミサイルタイプのみトレイルを準備
@@ -83,13 +86,12 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 		const Vector3 targetPos = enemy->GetPosition();
 		const Vector3 desiredDirection = NormalizeOr(Subtract(targetPos, position_), NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }));
 		const Vector3 currentDirection = NormalizeOr(velocity_, desiredDirection);
-		const Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, 0.085f);
-		const float homingSpeed = 0.75f;
+		const Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, std::clamp(tuning_.homingStrength, 0.0f, 1.0f));
+		const float homingSpeed = (std::max)(0.01f, tuning_.speed);
 		velocity_ = Scale(homingDirection, homingSpeed);
 	} else if (type_ == MissileType::MissileWithTrail) {
-		velocity_ = Scale(NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }), 0.75f);
+		velocity_ = Scale(NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }), (std::max)(0.01f, tuning_.speed));
 	}
-
 	// 基本の移動処理
 	position_.x += velocity_.x;
 	position_.y += velocity_.y;
@@ -101,15 +103,27 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 		isDead_ = true; // 寿命が尽きたら死ぬフラグを立てる
 	}
 
-	// 座標をモデルに適用して更新
-	object_->SetTranslate(position_);
-	object_->Update();
+	UpdateModel();
 
 	// ミサイルタイプのみトレイルを更新
 	if (type_ == MissileType::MissileWithTrail && trail_ && trailObject_) {
 		trail_->Update(position_);
-		std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, 0.5f);
+		std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
 		if (trailObject_->GetModel()) {
+			trailObject_->GetModel()->UpdateTrailVertices(trailVertices);
+		}
+		trailObject_->Update();
+	}
+}
+
+void Missile::UpdateModel(Camera *camera) {
+	if (object_) {
+		object_->SetTranslate(position_);
+		object_->Update();
+	}
+	if (type_ == MissileType::MissileWithTrail && trailObject_) {
+		if (camera && trail_ && trailObject_->GetModel()) {
+			std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
 			trailObject_->GetModel()->UpdateTrailVertices(trailVertices);
 		}
 		trailObject_->Update();

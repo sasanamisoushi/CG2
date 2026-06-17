@@ -56,9 +56,21 @@ private:
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
 	void DrawSimulationScreenUI();
+	void DrawSimulationSaveControls();
+	void DrawGameplayActionControls();
+	void DrawMissileSettingsUI();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
+	MissileTuning MakeMissileTuning(MissileType type) const;
+	void FirePlayerMissile(MissileType type);
+	bool SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath);
+	bool SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName);
+	bool ApplySimulationAction(const std::string &filePath, const std::string &actionName);
+	void RefreshSimulationActionNames();
+	bool SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
+	bool ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
+	void RefreshMissilePresetNames();
 	void SpawnEnemiesFromSpawnPoints();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
 	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
@@ -178,21 +190,31 @@ private:
 
 	// UIと状態管理
 	bool showParticles = false;
-	bool showModel = false;
-	bool enableSkinning = false; // スキニング（ガワを動かす）の切り替え
-	float modelScale = 0.01f;
+	bool showModel = true;
+	bool enableSkinning = true; // スキニング（ガワを動かす）の切り替え
+	float modelScale = 1.0f;
 	int currentAnimationIndex = 0;
 
 
 	std::unique_ptr<Trail> missileTrail;        // 軌跡の計算を行うクラス
 	std::unique_ptr<Object3d> trailObject;      // 軌跡を描画する実体
 
-	float missileSpeed = 0.05f;   // 飛ぶスピード
+	float missileNormalSpeed = 1.5f; // 通常弾の速度
+	float missileNormalScale = 0.3f;
+	float missileNormalCollisionRadius = 0.3f;
+	int missileNormalLifeTime = 120;
+	float missileSpeed = 0.75f;   // ホーミングミサイルの速度
 	float missileAmpX = 15.0f;   // X軸の旋回半径（振り幅）
 	float missileAmpZ = 15.0f;   // Z軸の旋回半径
 	float missileAmpY = 3.0f;    // 上下に波打つ高さ
 	float missileFreqY = 4.0f;    // 上下に波打つ細かさ（周波数）
 	float missileBaseY = 5.0f;    // 基準となる飛行高度
+	float missileHomingStrength = 0.085f;
+	float missileHomingScale = 0.5f;
+	float missileHomingCollisionRadius = 0.5f;
+	float missileTrailWidth = 0.5f;
+	int missileLifeTime = 240;
+	float missileMuzzleOffset = 0.8f;
 
 	std::unique_ptr<Player> player_;
 
@@ -225,6 +247,17 @@ private:
 	// シミュレーションツールUI用
 	bool showSimulationWindow_ = false;
 	int currentSimulationTarget_ = 0;
+	std::string simulationSaveMessage_;
+	char simulationActionName_[64] = "Action1";
+	std::vector<std::string> simulationActionNames_;
+	int selectedSimulationActionIndex_ = 0;
+	std::string simulationActionMessage_;
+	int simulationPlaybackMode_ = 0;
+	char missilePresetName_[64] = "MissilePreset1";
+	int missilePresetTypeIndex_ = 0;
+	std::vector<std::string> missilePresetNames_[2];
+	int selectedMissilePresetIndex_[2] = { 0, 0 };
+	std::string missilePresetMessage_;
 
 
 	// JSONファイルが最後に更新された日時を記録する変数

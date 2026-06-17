@@ -947,6 +947,22 @@ SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
 		}
 	}
 
+	for (size_t i = 0; i < skinCluster.boneIndexToJointIndex.size(); ++i) {
+		const int32_t jointIndex = skinCluster.boneIndexToJointIndex[i];
+		if (jointIndex >= 0 && jointIndex < static_cast<int32_t>(skeleton.joints.size())) {
+			Matrix4x4 paletteMatrix = math->Multiply(
+				skinCluster.inverseBindMatrices[i],
+				skeleton.joints[jointIndex].skeletonSpaceMatrix);
+
+			if (std::isnan(paletteMatrix.m[0][0])) {
+				paletteMatrix = math->MakeIdentity4x4();
+			}
+			skinCluster.mappedPalette[i].skeletonSpaceMatrix = paletteMatrix;
+		} else {
+			skinCluster.mappedPalette[i].skeletonSpaceMatrix = math->MakeIdentity4x4();
+		}
+	}
+
 	// ビューの生成 (SrvManager への登録)
 	SrvManager* srvManager = SrvManager::GetInstance();
 	

@@ -46,6 +46,34 @@ namespace {
         return { v.x * scalar, v.y * scalar, v.z * scalar };
     }
 
+    float Dot(const Vector3 &a, const Vector3 &b) {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    }
+
+    float Abs(float value) {
+        return value < 0.0f ? -value : value;
+    }
+
+    Vector3 AbsVector(const Vector3 &value) {
+        return { Abs(value.x), Abs(value.y), Abs(value.z) };
+    }
+
+    float ProjectionRadius(const OBB &obb, const Vector3 &axis) {
+        return obb.size.x * Abs(Dot(obb.orientations[0], axis)) +
+            obb.size.y * Abs(Dot(obb.orientations[1], axis)) +
+            obb.size.z * Abs(Dot(obb.orientations[2], axis));
+    }
+
+    float GetAxisSize(const Vector3 &value, int axisIndex) {
+        if (axisIndex == 0) return value.x;
+        if (axisIndex == 1) return value.y;
+        return value.z;
+    }
+
+    Vector3 ComposeFromAxes(const OBB &basis, const Vector3 &amount) {
+        return Add(Add(Scale(basis.orientations[0], amount.x), Scale(basis.orientations[1], amount.y)), Scale(basis.orientations[2], amount.z));
+    }
+
     Vector3 NormalizeOr(const Vector3 &v, const Vector3 &fallback) {
         float length = Length(v);
         if (length <= 0.001f) {
@@ -180,17 +208,62 @@ void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, 
     CheckCollision(obstacles);
 
     // 莉翫・蜍輔°縺ｪ縺・・縺ｧ縲∝ｺｧ讓吶ｒ繧ｻ繝・ヨ縺励※譖ｴ譁ｰ縺吶ｋ縺縺・
-    object_->SetTranslate(position_);
-    // 繝｢繝・Ν縺ｫ蝗櫁ｻ｢繧帝←逕ｨ縺吶ｋ・・
-    object_->SetRotate(rotation_);
-    object_->SetScale(scale_);
-    object_->Update();
+    UpdateModel();
+}
+
+void Enemy::UpdateModel() {
+    if (object_) {
+        object_->SetTranslate(position_);
+        object_->SetRotate(rotation_);
+        object_->SetScale(scale_);
+        object_->Update();
+    }
 }
 
 void Enemy::Draw() {
     if (object_) {
         object_->Draw();
     }
+}
+
+Vector3 Enemy::GetWorldHalfExtents() const {
+    if (!object_ || !object_->GetModel()) {
+        return AbsVector(scale_);
+    }
+
+    const Vector3 localHalf = object_->GetModel()->GetHalfExtents();
+    const Vector3 absScale = AbsVector(scale_);
+    return { localHalf.x * absScale.x, localHalf.y * absScale.y, localHalf.z * absScale.z };
+}
+
+float Enemy::GetCollisionRadius() const {
+    const Vector3 halfExtents = GetWorldHalfExtents();
+    float radius = halfExtents.x;
+    if (halfExtents.y > radius) radius = halfExtents.y;
+    if (halfExtents.z > radius) radius = halfExtents.z;
+    return radius;
+}
+
+OBB Enemy::GetOBB() const {
+    OBB obb{};
+    obb.center = position_;
+    obb.size = GetWorldHalfExtents();
+
+    const Matrix4x4 rotationMatrix = MyMath::Multiply(
+        MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation_.x), MyMath::MakeRotateYMatrix(rotation_.y)),
+        MyMath::MakeRotateZMatrix(rotation_.z));
+    obb.orientations[0] = MyMath::Normalize(Vector3{ rotationMatrix.m[0][0], rotationMatrix.m[0][1], rotationMatrix.m[0][2] });
+    obb.orientations[1] = MyMath::Normalize(Vector3{ rotationMatrix.m[1][0], rotationMatrix.m[1][1], rotationMatrix.m[1][2] });
+    obb.orientations[2] = MyMath::Normalize(Vector3{ rotationMatrix.m[2][0], rotationMatrix.m[2][1], rotationMatrix.m[2][2] });
+
+    if (object_ && object_->GetModel()) {
+        const Vector3 localCenter = object_->GetModel()->GetBoundsCenter();
+        const Vector3 scaledCenter = { localCenter.x * scale_.x, localCenter.y * scale_.y, localCenter.z * scale_.z };
+        const Vector3 rotatedCenter = MyMath::Transform(scaledCenter, rotationMatrix);
+        obb.center = Add(position_, rotatedCenter);
+    }
+
+    return obb;
 }
 
 // 蠖薙◆縺｣縺滓凾縺ｮ蜃ｦ逅・
@@ -421,77 +494,79 @@ void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles
     // =========================================================
     //    謨ｵ縺ｨ髫懷ｮｳ迚ｩ縺ｮ蠖薙◆繧雁愛螳・
     // =========================================================
-    // 謨ｵ縺ｮAABB half-extents (EnemyBox繝｢繝・Ν縺ｯ鬆らせﾂｱ1 ﾃ・繧ｹ繧ｱ繝ｼ繝ｫ1.0 = extents 1.0)
-    Vector3 enemyHalf = GetWorldHalfExtents();
+    OBB enemyOBB = GetOBB();
 
     for (const auto &obstacle : obstacles) {
-        Vector3 obsPos = obstacle->GetPosition();
-        Vector3 obsRot = obstacle->GetRotation();
-        // 繝｢繝・Ν縺ｮ螳滄圀縺ｮ繝舌え繝ｳ繝・ぅ繝ｳ繧ｰ繝懊ャ繧ｯ繧ｹ蜊雁ｾ・ﾃ・Blender繧ｹ繧ｱ繝ｼ繝ｫ
-        Vector3 obsHalf = obstacle->GetWorldHalfExtents();
+        if (!obstacle) {
+            continue;
+        }
 
-        Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(obsRot.x), MyMath::MakeRotateYMatrix(obsRot.y)), MyMath::MakeRotateZMatrix(obsRot.z));
-        Matrix4x4 invRotMat = MyMath::Transpose(rotMat);
-
-        Vector3 diff = { position_.x - obsPos.x, position_.y - obsPos.y, position_.z - obsPos.z };
-        Vector3 localDiff = MyMath::Transform(diff, invRotMat);
-
-        float dx = localDiff.x;
-        float dy = localDiff.y;
-        float dz = localDiff.z;
-
-        float halfWidth = enemyHalf.x + obsHalf.x;
-        float halfHeight = enemyHalf.y + obsHalf.y;
-        float halfDepth = enemyHalf.z + obsHalf.z;
+        const OBB obsOBB = obstacle->GetOBB();
+        const Vector3 diff = {
+            enemyOBB.center.x - obsOBB.center.x,
+            enemyOBB.center.y - obsOBB.center.y,
+            enemyOBB.center.z - obsOBB.center.z,
+        };
+        const float localDistance[3] = {
+            Dot(diff, obsOBB.orientations[0]),
+            Dot(diff, obsOBB.orientations[1]),
+            Dot(diff, obsOBB.orientations[2]),
+        };
+        const float enemyProjection[3] = {
+            ProjectionRadius(enemyOBB, obsOBB.orientations[0]),
+            ProjectionRadius(enemyOBB, obsOBB.orientations[1]),
+            ProjectionRadius(enemyOBB, obsOBB.orientations[2]),
+        };
 
         // StageBounds は壁ではなくステージ全体の範囲なので、内側に留める。
         if (obstacle->IsStageBounds()) {
             Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 
-            if (dx > obsHalf.x - enemyHalf.x) {
-                localPushOut.x = (obsHalf.x - enemyHalf.x) - dx;
-            } else if (dx < -(obsHalf.x - enemyHalf.x)) {
-                localPushOut.x = -(obsHalf.x - enemyHalf.x) - dx;
+            for (int axis = 0; axis < 3; ++axis) {
+                const float limit = (std::max)(0.0f, GetAxisSize(obsOBB.size, axis) - enemyProjection[axis]);
+                if (localDistance[axis] > limit) {
+                    if (axis == 0) localPushOut.x = limit - localDistance[axis];
+                    if (axis == 1) localPushOut.y = limit - localDistance[axis];
+                    if (axis == 2) localPushOut.z = limit - localDistance[axis];
+                } else if (localDistance[axis] < -limit) {
+                    if (axis == 0) localPushOut.x = -limit - localDistance[axis];
+                    if (axis == 1) localPushOut.y = -limit - localDistance[axis];
+                    if (axis == 2) localPushOut.z = -limit - localDistance[axis];
+                }
             }
 
-            if (dy > obsHalf.y - enemyHalf.y) {
-                localPushOut.y = (obsHalf.y - enemyHalf.y) - dy;
-            } else if (dy < -(obsHalf.y - enemyHalf.y)) {
-                localPushOut.y = -(obsHalf.y - enemyHalf.y) - dy;
-            }
-
-            if (dz > obsHalf.z - enemyHalf.z) {
-                localPushOut.z = (obsHalf.z - enemyHalf.z) - dz;
-            } else if (dz < -(obsHalf.z - enemyHalf.z)) {
-                localPushOut.z = -(obsHalf.z - enemyHalf.z) - dz;
-            }
-
-            Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+            Vector3 worldPushOut = ComposeFromAxes(obsOBB, localPushOut);
             position_.x += worldPushOut.x;
             position_.y += worldPushOut.y;
             position_.z += worldPushOut.z;
+            enemyOBB.center = Add(enemyOBB.center, worldPushOut);
             continue;
         }
 
-        float overlapX = halfWidth - std::abs(dx);
-        float overlapY = halfHeight - std::abs(dy);
-        float overlapZ = halfDepth - std::abs(dz);
+        if (!MyMath::IsCollision(enemyOBB, obsOBB)) {
+            continue;
+        }
+
+        float overlapX = obsOBB.size.x + enemyProjection[0] - std::abs(localDistance[0]);
+        float overlapY = obsOBB.size.y + enemyProjection[1] - std::abs(localDistance[1]);
+        float overlapZ = obsOBB.size.z + enemyProjection[2] - std::abs(localDistance[2]);
 
         if (overlapX > 0.0f && overlapY > 0.0f && overlapZ > 0.0f) {
             Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 
             if (overlapX < overlapY && overlapX < overlapZ) {
-                localPushOut.x = (dx > 0.0f) ? overlapX : -overlapX;
+                localPushOut.x = (localDistance[0] > 0.0f) ? overlapX : -overlapX;
             } else if (overlapY < overlapX && overlapY < overlapZ) {
-                localPushOut.y = (dy > 0.0f) ? overlapY : -overlapY;
+                localPushOut.y = (localDistance[1] > 0.0f) ? overlapY : -overlapY;
             } else {
-                localPushOut.z = (dz > 0.0f) ? overlapZ : -overlapZ;
+                localPushOut.z = (localDistance[2] > 0.0f) ? overlapZ : -overlapZ;
             }
 
-            Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+            Vector3 worldPushOut = ComposeFromAxes(obsOBB, localPushOut);
             position_.x += worldPushOut.x;
             position_.y += worldPushOut.y;
             position_.z += worldPushOut.z;
+            enemyOBB.center = Add(enemyOBB.center, worldPushOut);
         }
     }
 }

@@ -12,6 +12,19 @@
 #include <string>
 
 namespace {
+	bool IsImGuiKeyboardCaptureActive() {
+#ifdef ENABLE_IMGUI
+		if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+			return false;
+		}
+
+		const ImGuiIO &io = ImGui::GetIO();
+		return io.WantCaptureKeyboard || io.WantTextInput;
+#else
+		return false;
+#endif
+	}
+
 	bool ShouldStartSimulationScene() {
 		const wchar_t *commandLine = GetCommandLineW();
 		if (commandLine && std::wstring(commandLine).find(L"--simulation") != std::wstring::npos) {
@@ -91,7 +104,7 @@ void Game::Update() {
 
 #ifdef ENABLE_IMGUI
 	// F1キーでImGuiの表示・非表示を切り替え
-	if (Input::GetInstance()->TriggerKey(DIK_F1)) {
+	if (!IsImGuiKeyboardCaptureActive() && Input::GetInstance()->TriggerKey(DIK_F1)) {
 		showImGui_ = !showImGui_;
 		ImGuiManager::SetVisible(showImGui_);
 	}

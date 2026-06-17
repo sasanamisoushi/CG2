@@ -12,12 +12,18 @@
 #include "engine/Scene/SceneManager.h"
 #include "engine/Utility/StageLoader.h"
 #include "engine/Utility/StageValidation.h"
+#include "externals/json.hpp"
 #include "Game/editor/EditorReceiver.h"
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <shellapi.h>
+
+using json = nlohmann::json;
 
 namespace {
 	constexpr int kEnemyRespawnDelayFrames = 180;
@@ -30,6 +36,10 @@ namespace {
 	constexpr float kCinematicCameraDirectionBlend = 0.10f;
 	constexpr float kCinematicCameraPositionBlend = 0.10f;
 	constexpr float kCinematicCameraRotationBlend = 0.12f;
+	constexpr float kRadiansToDegrees = 180.0f / 3.141592654f;
+	constexpr size_t kInvalidSceneObjectIndex = static_cast<size_t>(-1);
+	const char *kSimulationActionsFilePath = "resources/simulation_actions.json";
+	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
 
 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -77,6 +87,167 @@ namespace {
 		return reinterpret_cast<intptr_t>(result) > 32;
 	}
 
+	std::string GetJsonString(const json &objectData, const char *key) {
+		if (!objectData.contains(key) || !objectData[key].is_string()) {
+			return {};
+		}
+		return objectData[key].get<std::string>();
+	}
+
+	bool IsSceneCategory(const json &objectData, const char *category) {
+		return GetJsonString(objectData, "category") == category;
+	}
+
+	bool IsSceneEnemyObject(const json &objectData) {
+		return IsSceneCategory(objectData, "ENEMY") || objectData.contains("enemy");
+	}
+
+	bool IsScenePlayerObject(const json &objectData) {
+		return IsSceneCategory(objectData, "PLAYER");
+	}
+
+	bool IsSceneObstacleObject(const json &objectData) {
+		if (IsScenePlayerObject(objectData) || IsSceneEnemyObject(objectData)) {
+			return false;
+		}
+		return IsSceneCategory(objectData, "OBSTACLE") || GetJsonString(objectData, "type") == "MESH";
+	}
+
+	json ToBlenderPositionJson(const Vector3 &position) {
+		return json::array({ position.x, position.z, position.y });
+	}
+
+	json ToBlenderRotationJson(const Vector3 &rotation) {
+		return json::array({
+			rotation.x * kRadiansToDegrees,
+			rotation.z * kRadiansToDegrees,
+			rotation.y * kRadiansToDegrees
+		});
+	}
+
+	json ToBlenderScaleJson(const Vector3 &scale) {
+		return json::array({ scale.x, scale.z, scale.y });
+	}
+
+	void WriteSceneTransform(
+		json &objectData,
+		const Vector3 &position,
+		const Vector3 *rotation,
+		const Vector3 *scale) {
+
+		if (!objectData.contains("transform") || !objectData["transform"].is_object()) {
+			objectData["transform"] = json::object();
+		}
+
+		json &transform = objectData["transform"];
+		transform["translation"] = ToBlenderPositionJson(position);
+		if (rotation) {
+			transform["rotation"] = ToBlenderRotationJson(*rotation);
+		}
+		if (scale) {
+			transform["scale"] = ToBlenderScaleJson(*scale);
+		}
+	}
+
+	Vector3 EulerFromQuaternionXYZ(const Quaternion &quaternion) {
+		const Matrix4x4 matrix = MyMath::MakeRotateMatrix(MyMath::Normalize(quaternion));
+		const float sinY = std::clamp(-matrix.m[0][2], -1.0f, 1.0f);
+		const float y = std::asin(sinY);
+		const float cosY = std::cos(y);
+
+		Vector3 rotation = { 0.0f, y, 0.0f };
+		if (std::abs(cosY) > 0.0001f) {
+			rotation.x = std::atan2(matrix.m[1][2], matrix.m[2][2]);
+			rotation.z = std::atan2(matrix.m[0][1], matrix.m[0][0]);
+		} else {
+			rotation.z = std::atan2(-matrix.m[1][0], matrix.m[1][1]);
+		}
+		return rotation;
+	}
+
+	bool SceneObjectNameExists(const json &objects, const std::string &name) {
+		for (const auto &objectData : objects) {
+			if (GetJsonString(objectData, "name") == name) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	std::string MakeUniqueSceneObjectName(const json &objects, const std::string &prefix) {
+		for (int index = 1; index < 10000; ++index) {
+			std::string name = prefix + std::to_string(index);
+			if (!SceneObjectNameExists(objects, name)) {
+				return name;
+			}
+		}
+		return prefix + "9999";
+	}
+
+	std::string TrimActionName(const std::string &name) {
+		size_t begin = 0;
+		while (begin < name.size() && std::isspace(static_cast<unsigned char>(name[begin]))) {
+			++begin;
+		}
+
+		size_t end = name.size();
+		while (end > begin && std::isspace(static_cast<unsigned char>(name[end - 1]))) {
+			--end;
+		}
+
+		return name.substr(begin, end - begin);
+	}
+
+	json ToVector3Json(const Vector3 &value) {
+		return json::array({ value.x, value.y, value.z });
+	}
+
+	Vector3 ReadVector3Json(const json &value, const Vector3 &fallback) {
+		if (!value.is_array() || value.size() < 3) {
+			return fallback;
+		}
+
+		return {
+			value[0].get<float>(),
+			value[1].get<float>(),
+			value[2].get<float>()
+		};
+	}
+
+	float ReadJsonFloat(const json &objectData, const char *key, float fallback) {
+		if (!objectData.is_object() || !objectData.contains(key) || !objectData[key].is_number()) {
+			return fallback;
+		}
+		return objectData[key].get<float>();
+	}
+
+	int ReadJsonInt(const json &objectData, const char *key, int fallback) {
+		if (!objectData.is_object() || !objectData.contains(key) || !objectData[key].is_number_integer()) {
+			return fallback;
+		}
+		return objectData[key].get<int>();
+	}
+
+	json PlayerModeParamsToJson(const PlayerModeParams &params) {
+		json data;
+		data["maxMoveSpeed"] = params.maxMoveSpeed;
+		data["moveAcceleration"] = params.moveAcceleration;
+		data["moveDamping"] = params.moveDamping;
+		data["pitchSpeed"] = params.pitchSpeed;
+		data["yawSpeed"] = params.yawSpeed;
+		data["rollSpeed"] = params.rollSpeed;
+		return data;
+	}
+
+	void ApplyPlayerModeParamsFromJson(const json &data, PlayerModeParams &params) {
+		params.maxMoveSpeed = ReadJsonFloat(data, "maxMoveSpeed", params.maxMoveSpeed);
+		params.moveAcceleration = ReadJsonFloat(data, "moveAcceleration", params.moveAcceleration);
+		params.moveDamping = ReadJsonFloat(data, "moveDamping", params.moveDamping);
+		params.pitchSpeed = ReadJsonFloat(data, "pitchSpeed", params.pitchSpeed);
+		params.yawSpeed = ReadJsonFloat(data, "yawSpeed", params.yawSpeed);
+		params.rollSpeed = ReadJsonFloat(data, "rollSpeed", params.rollSpeed);
+	}
+
 	float LengthSqVector3(const Vector3 &value) {
 		return value.x * value.x + value.y * value.y + value.z * value.z;
 	}
@@ -110,6 +281,32 @@ namespace {
 		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
 		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
 		return MyMath::Normalize(MyMath::Multiply(qPitch, qYaw));
+	}
+
+	bool IsImGuiKeyboardCaptureActive() {
+#ifdef ENABLE_IMGUI
+		if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+			return false;
+		}
+
+		const ImGuiIO &io = ImGui::GetIO();
+		return io.WantCaptureKeyboard || io.WantTextInput || ImGui::IsAnyItemActive();
+#else
+		return false;
+#endif
+	}
+
+	bool IsImGuiMouseCaptureActive() {
+#ifdef ENABLE_IMGUI
+		if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+			return false;
+		}
+
+		const ImGuiIO &io = ImGui::GetIO();
+		return io.WantCaptureMouse || ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive();
+#else
+		return false;
+#endif
 	}
 
 	bool GetOverlayBounds(float &minX, float &minY, float &maxX, float &maxY) {
@@ -554,6 +751,8 @@ void GamePlayScene::Initialize() {
 	gameOverTimer_ = 0;
 
 	ReloadSceneJson();
+	RefreshSimulationActionNames();
+	RefreshMissilePresetNames();
 
 	if (IsSimulationMode()) {
 		isEditorPreviewPlaying_ = false;
@@ -640,6 +839,854 @@ void GamePlayScene::ResetEditorPreview() {
 	}
 
 	OutputDebugStringA("[EditorPreview] Reset scene and paused.\n");
+}
+
+bool GamePlayScene::SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath) {
+	json root;
+	{
+		std::ifstream ifs(filePath);
+		if (!ifs.is_open()) {
+			simulationSaveMessage_ = "scene.json が見つからないため保存できませんでした。";
+			OutputDebugStringA(("[SimulationSave] File not found: " + filePath + "\n").c_str());
+			return false;
+		}
+
+		try {
+			ifs >> root;
+		} catch (const std::exception &e) {
+			simulationSaveMessage_ = "scene.json の読み込みに失敗しました。";
+			OutputDebugStringA(("[SimulationSave] JSON parse failed: " + std::string(e.what()) + "\n").c_str());
+			return false;
+		}
+	}
+
+	if (!root.contains("objects") || !root["objects"].is_array()) {
+		simulationSaveMessage_ = "scene.json に objects がないため保存できませんでした。";
+		OutputDebugStringA("[SimulationSave] objects array not found.\n");
+		return false;
+	}
+
+	json &objects = root["objects"];
+	size_t playerObjectIndex = kInvalidSceneObjectIndex;
+	std::vector<size_t> enemyObjectIndices;
+	std::vector<size_t> obstacleObjectIndices;
+
+	for (size_t index = 0; index < objects.size(); ++index) {
+		const json &objectData = objects[index];
+		if (IsScenePlayerObject(objectData) && playerObjectIndex == kInvalidSceneObjectIndex) {
+			playerObjectIndex = index;
+		}
+		if (IsSceneEnemyObject(objectData)) {
+			enemyObjectIndices.push_back(index);
+		} else if (IsSceneObstacleObject(objectData)) {
+			obstacleObjectIndices.push_back(index);
+		}
+	}
+
+	size_t savedCount = 0;
+
+	if (player_ && playerObjectIndex != kInvalidSceneObjectIndex) {
+		const Vector3 playerRotation = EulerFromQuaternionXYZ(player_->GetQuaternion());
+		WriteSceneTransform(objects[playerObjectIndex], player_->GetPosition(), &playerRotation, nullptr);
+		++savedCount;
+	}
+
+	size_t obstacleIndex = 0;
+	for (const auto &obstacle : obstacles_) {
+		if (!obstacle || obstacleIndex >= obstacleObjectIndices.size()) {
+			break;
+		}
+
+		const Vector3 obstacleRotation = obstacle->GetRotation();
+		const Vector3 obstacleScale = obstacle->GetScale();
+		WriteSceneTransform(
+			objects[obstacleObjectIndices[obstacleIndex]],
+			obstacle->GetPosition(),
+			&obstacleRotation,
+			&obstacleScale);
+		++obstacleIndex;
+		++savedCount;
+	}
+
+	for (const auto &enemy : enemies_) {
+		if (!enemy || enemy->IsDead()) {
+			continue;
+		}
+
+		const Vector3 enemyPosition = enemy->GetPosition();
+		const Vector3 enemyRotation = enemy->GetRotation();
+		const size_t spawnPointIndex = enemy->GetSpawnPointIndex();
+
+		if (spawnPointIndex != Enemy::kNoSpawnPoint && spawnPointIndex < enemyObjectIndices.size()) {
+			WriteSceneTransform(objects[enemyObjectIndices[spawnPointIndex]], enemyPosition, &enemyRotation, nullptr);
+			if (spawnPointIndex < enemySpawns_.size()) {
+				enemySpawns_[spawnPointIndex].position = enemyPosition;
+				enemySpawns_[spawnPointIndex].rotation = enemyRotation;
+			}
+			++savedCount;
+			continue;
+		}
+
+		json newEnemy;
+		newEnemy["type"] = "MESH";
+		newEnemy["name"] = MakeUniqueSceneObjectName(objects, "SimEnemy");
+		newEnemy["category"] = "ENEMY";
+		newEnemy["enemy"] = { { "type", "VF1" } };
+		newEnemy["vertices_count"] = 0;
+		const Vector3 enemyScale = enemy->GetScale();
+		WriteSceneTransform(newEnemy, enemyPosition, &enemyRotation, &enemyScale);
+
+		objects.push_back(newEnemy);
+
+		EnemySpawnData spawnData;
+		spawnData.name = newEnemy["name"].get<std::string>();
+		spawnData.position = enemyPosition;
+		spawnData.rotation = enemyRotation;
+		spawnData.isInitialSpawn = true;
+		enemySpawns_.push_back(spawnData);
+		enemy->SetSpawnPointIndex(enemySpawns_.size() - 1);
+		enemyObjectIndices.push_back(objects.size() - 1);
+		++savedCount;
+	}
+
+	std::ofstream ofs(filePath, std::ios::trunc);
+	if (!ofs.is_open()) {
+		simulationSaveMessage_ = "scene.json を書き込めませんでした。";
+		OutputDebugStringA(("[SimulationSave] Failed to open for write: " + filePath + "\n").c_str());
+		return false;
+	}
+
+	ofs << root.dump(4);
+	ofs.close();
+
+	try {
+		lastJsonWriteTime_ = std::filesystem::last_write_time(filePath);
+	} catch (...) {
+	}
+
+	simulationSaveMessage_ = "現在の配置を scene.json に保存しました。実ゲームにも反映されます。";
+	OutputDebugStringA(("[SimulationSave] Saved " + std::to_string(savedCount) + " transforms.\n").c_str());
+	return true;
+}
+
+void GamePlayScene::RefreshSimulationActionNames() {
+	simulationActionNames_.clear();
+
+	std::ifstream ifs(kSimulationActionsFilePath);
+	if (!ifs.is_open()) {
+		selectedSimulationActionIndex_ = 0;
+		return;
+	}
+
+	json root;
+	try {
+		ifs >> root;
+	} catch (...) {
+		selectedSimulationActionIndex_ = 0;
+		return;
+	}
+
+	if (!root.contains("actions") || !root["actions"].is_array()) {
+		selectedSimulationActionIndex_ = 0;
+		return;
+	}
+
+	for (const auto &actionData : root["actions"]) {
+		if (!actionData.is_object() || !actionData.contains("name") || !actionData["name"].is_string()) {
+			continue;
+		}
+
+		simulationActionNames_.push_back(actionData["name"].get<std::string>());
+	}
+
+	if (selectedSimulationActionIndex_ >= static_cast<int>(simulationActionNames_.size())) {
+		selectedSimulationActionIndex_ = simulationActionNames_.empty() ? 0 : static_cast<int>(simulationActionNames_.size()) - 1;
+	}
+}
+
+bool GamePlayScene::SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName) {
+	const std::string trimmedName = TrimActionName(actionName);
+	if (trimmedName.empty()) {
+		simulationActionMessage_ = "保存名を入力してください。";
+		return false;
+	}
+
+	json root;
+	{
+		std::ifstream ifs(filePath);
+		if (ifs.is_open()) {
+			try {
+				ifs >> root;
+			} catch (...) {
+				root = json::object();
+			}
+		}
+	}
+
+	if (!root.is_object()) {
+		root = json::object();
+	}
+	if (!root.contains("actions") || !root["actions"].is_array()) {
+		root["actions"] = json::array();
+	}
+
+	json action;
+	action["name"] = trimmedName;
+
+	if (player_) {
+		json playerData;
+		playerData["position"] = ToVector3Json(player_->GetPosition());
+		playerData["rotation"] = ToVector3Json(EulerFromQuaternionXYZ(player_->GetQuaternion()));
+		playerData["mode"] = static_cast<int>(player_->GetCurrentMode());
+
+		json modeParams = json::array();
+		for (int modeIndex = 0; modeIndex < 3; ++modeIndex) {
+			modeParams.push_back(PlayerModeParamsToJson(player_->GetModeParams(static_cast<PlayerMode>(modeIndex))));
+		}
+		playerData["modeParams"] = modeParams;
+		action["player"] = playerData;
+	}
+
+	json missileData;
+	missileData["normalSpeed"] = missileNormalSpeed;
+	missileData["normalScale"] = missileNormalScale;
+	missileData["normalCollisionRadius"] = missileNormalCollisionRadius;
+	missileData["normalLifeTime"] = missileNormalLifeTime;
+	missileData["speed"] = missileSpeed;
+	missileData["ampX"] = missileAmpX;
+	missileData["ampZ"] = missileAmpZ;
+	missileData["ampY"] = missileAmpY;
+	missileData["freqY"] = missileFreqY;
+	missileData["baseY"] = missileBaseY;
+	missileData["homingStrength"] = missileHomingStrength;
+	missileData["homingScale"] = missileHomingScale;
+	missileData["homingCollisionRadius"] = missileHomingCollisionRadius;
+	missileData["trailWidth"] = missileTrailWidth;
+	missileData["lifeTime"] = missileLifeTime;
+	missileData["muzzleOffset"] = missileMuzzleOffset;
+	action["missile"] = missileData;
+
+	json enemiesData = json::array();
+	int generatedEnemyIndex = 1;
+	for (const auto &enemy : enemies_) {
+		if (!enemy || enemy->IsDead()) {
+			continue;
+		}
+
+		json enemyData;
+		const size_t spawnPointIndex = enemy->GetSpawnPointIndex();
+		if (spawnPointIndex < enemySpawns_.size()) {
+			const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
+			enemyData["name"] = spawnData.name;
+			enemyData["reinforcementTrigger"] = spawnData.reinforcementTriggerName;
+			enemyData["reinforcementDelay"] = spawnData.reinforcementDelayFrames;
+		} else {
+			enemyData["name"] = "SimEnemy" + std::to_string(generatedEnemyIndex++);
+		}
+
+		enemyData["position"] = ToVector3Json(enemy->GetPosition());
+		enemyData["rotation"] = ToVector3Json(enemy->GetRotation());
+		enemyData["scale"] = ToVector3Json(enemy->GetScale());
+		enemyData["initial"] = true;
+		enemiesData.push_back(enemyData);
+	}
+	action["enemies"] = enemiesData;
+
+	json obstaclesData = json::array();
+	for (const auto &obstacle : obstacles_) {
+		if (!obstacle) {
+			continue;
+		}
+
+		json obstacleData;
+		obstacleData["position"] = ToVector3Json(obstacle->GetPosition());
+		obstacleData["rotation"] = ToVector3Json(obstacle->GetRotation());
+		obstacleData["scale"] = ToVector3Json(obstacle->GetScale());
+		obstacleData["stageBounds"] = obstacle->IsStageBounds();
+		obstaclesData.push_back(obstacleData);
+	}
+	action["obstacles"] = obstaclesData;
+
+	if (explosionManager_) {
+		const auto &config = explosionManager_->GetConfig();
+		json explosionData;
+		explosionData["count"] = config.count;
+		explosionData["color"] = json::array({ config.color[0], config.color[1], config.color[2], config.color[3] });
+		explosionData["speed"] = config.speed;
+		explosionData["speedVariance"] = config.speedVariance;
+		explosionData["scale"] = config.scale;
+		explosionData["scaleVariance"] = config.scaleVariance;
+		explosionData["lifeTimeMin"] = config.lifeTimeMin;
+		explosionData["lifeTimeMax"] = config.lifeTimeMax;
+		explosionData["posVariance"] = config.posVariance;
+		action["explosion"] = explosionData;
+	}
+
+	json &actions = root["actions"];
+	bool updated = false;
+	for (auto &existingAction : actions) {
+		if (existingAction.is_object() && existingAction.value("name", "") == trimmedName) {
+			existingAction = action;
+			updated = true;
+			break;
+		}
+	}
+	if (!updated) {
+		actions.push_back(action);
+	}
+
+	std::ofstream ofs(filePath, std::ios::trunc);
+	if (!ofs.is_open()) {
+		simulationActionMessage_ = "名前付き行動を保存できませんでした。";
+		return false;
+	}
+
+	ofs << root.dump(4);
+	ofs.close();
+
+	RefreshSimulationActionNames();
+	for (size_t index = 0; index < simulationActionNames_.size(); ++index) {
+		if (simulationActionNames_[index] == trimmedName) {
+			selectedSimulationActionIndex_ = static_cast<int>(index);
+			break;
+		}
+	}
+
+	simulationActionMessage_ = "行動「" + trimmedName + "」を保存しました。";
+	return true;
+}
+
+bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std::string &actionName) {
+	const std::string trimmedName = TrimActionName(actionName);
+	if (trimmedName.empty()) {
+		simulationActionMessage_ = "読み込む行動名がありません。";
+		return false;
+	}
+
+	std::ifstream ifs(filePath);
+	if (!ifs.is_open()) {
+		simulationActionMessage_ = "名前付き行動ファイルが見つかりません。";
+		return false;
+	}
+
+	json root;
+	try {
+		ifs >> root;
+	} catch (...) {
+		simulationActionMessage_ = "名前付き行動ファイルを読み込めませんでした。";
+		return false;
+	}
+
+	if (!root.contains("actions") || !root["actions"].is_array()) {
+		simulationActionMessage_ = "保存された行動がありません。";
+		return false;
+	}
+
+	const json *action = nullptr;
+	for (const auto &actionData : root["actions"]) {
+		if (actionData.is_object() && actionData.value("name", "") == trimmedName) {
+			action = &actionData;
+			break;
+		}
+	}
+
+	if (!action) {
+		simulationActionMessage_ = "選択した行動が見つかりません。";
+		return false;
+	}
+
+	lockedEnemy_ = nullptr;
+	isCinematicLockOnCameraInitialized_ = false;
+	isGameOver_ = false;
+	gameOverTimer_ = 0;
+
+	if (player_ && action->contains("player") && (*action)["player"].is_object()) {
+		const json &playerData = (*action)["player"];
+		if (playerData.contains("modeParams") && playerData["modeParams"].is_array()) {
+			const json &modeParams = playerData["modeParams"];
+			for (int modeIndex = 0; modeIndex < 3 && modeIndex < static_cast<int>(modeParams.size()); ++modeIndex) {
+				ApplyPlayerModeParamsFromJson(modeParams[modeIndex], player_->GetModeParams(static_cast<PlayerMode>(modeIndex)));
+			}
+		}
+
+		const int modeIndex = std::clamp(ReadJsonInt(playerData, "mode", 0), 0, 2);
+		player_->ChangeMode(static_cast<PlayerMode>(modeIndex));
+		player_->SetPosition(ReadVector3Json(playerData.value("position", json::array()), player_->GetPosition()));
+		player_->SetRotation(ReadVector3Json(playerData.value("rotation", json::array()), { 0.0f, 0.0f, 0.0f }));
+	}
+
+	if (action->contains("missile") && (*action)["missile"].is_object()) {
+		const json &missileData = (*action)["missile"];
+		missileNormalSpeed = ReadJsonFloat(missileData, "normalSpeed", missileNormalSpeed);
+		missileNormalScale = ReadJsonFloat(missileData, "normalScale", missileNormalScale);
+		missileNormalCollisionRadius = ReadJsonFloat(missileData, "normalCollisionRadius", missileNormalCollisionRadius);
+		missileNormalLifeTime = ReadJsonInt(missileData, "normalLifeTime", missileNormalLifeTime);
+		missileSpeed = ReadJsonFloat(missileData, "speed", missileSpeed);
+		missileAmpX = ReadJsonFloat(missileData, "ampX", missileAmpX);
+		missileAmpZ = ReadJsonFloat(missileData, "ampZ", missileAmpZ);
+		missileAmpY = ReadJsonFloat(missileData, "ampY", missileAmpY);
+		missileFreqY = ReadJsonFloat(missileData, "freqY", missileFreqY);
+		missileBaseY = ReadJsonFloat(missileData, "baseY", missileBaseY);
+		missileHomingStrength = ReadJsonFloat(missileData, "homingStrength", missileHomingStrength);
+		missileHomingScale = ReadJsonFloat(missileData, "homingScale", missileHomingScale);
+		missileHomingCollisionRadius = ReadJsonFloat(missileData, "homingCollisionRadius", missileHomingCollisionRadius);
+		missileTrailWidth = ReadJsonFloat(missileData, "trailWidth", missileTrailWidth);
+		missileLifeTime = ReadJsonInt(missileData, "lifeTime", missileLifeTime);
+		missileMuzzleOffset = ReadJsonFloat(missileData, "muzzleOffset", missileMuzzleOffset);
+	}
+
+	if (explosionManager_ && action->contains("explosion") && (*action)["explosion"].is_object()) {
+		const json &explosionData = (*action)["explosion"];
+		auto &config = explosionManager_->GetConfig();
+		config.count = ReadJsonInt(explosionData, "count", config.count);
+		if (explosionData.contains("color") && explosionData["color"].is_array() && explosionData["color"].size() >= 4) {
+			for (int index = 0; index < 4; ++index) {
+				config.color[index] = explosionData["color"][index].get<float>();
+			}
+		}
+		config.speed = ReadJsonFloat(explosionData, "speed", config.speed);
+		config.speedVariance = ReadJsonFloat(explosionData, "speedVariance", config.speedVariance);
+		config.scale = ReadJsonFloat(explosionData, "scale", config.scale);
+		config.scaleVariance = ReadJsonFloat(explosionData, "scaleVariance", config.scaleVariance);
+		config.lifeTimeMin = ReadJsonFloat(explosionData, "lifeTimeMin", config.lifeTimeMin);
+		config.lifeTimeMax = ReadJsonFloat(explosionData, "lifeTimeMax", config.lifeTimeMax);
+		config.posVariance = ReadJsonFloat(explosionData, "posVariance", config.posVariance);
+	}
+
+	if (action->contains("obstacles") && (*action)["obstacles"].is_array()) {
+		auto obstacleIt = obstacles_.begin();
+		for (const auto &obstacleData : (*action)["obstacles"]) {
+			if (obstacleIt == obstacles_.end()) {
+				break;
+			}
+			if (!(*obstacleIt)) {
+				++obstacleIt;
+				continue;
+			}
+
+			(*obstacleIt)->SetPosition(ReadVector3Json(obstacleData.value("position", json::array()), (*obstacleIt)->GetPosition()));
+			(*obstacleIt)->SetRotation(ReadVector3Json(obstacleData.value("rotation", json::array()), (*obstacleIt)->GetRotation()));
+			(*obstacleIt)->SetScale(ReadVector3Json(obstacleData.value("scale", json::array()), (*obstacleIt)->GetScale()));
+			(*obstacleIt)->Update();
+			++obstacleIt;
+		}
+	}
+
+	if (action->contains("enemies") && (*action)["enemies"].is_array()) {
+		enemies_.clear();
+		enemySpawns_.clear();
+
+		for (const auto &enemyData : (*action)["enemies"]) {
+			if (!enemyData.is_object()) {
+				continue;
+			}
+
+			EnemySpawnData spawnData;
+			spawnData.name = enemyData.value("name", "SavedEnemy");
+			spawnData.position = ReadVector3Json(enemyData.value("position", json::array()), { 0.0f, 0.0f, 0.0f });
+			spawnData.rotation = ReadVector3Json(enemyData.value("rotation", json::array()), { 0.0f, 0.0f, 0.0f });
+			spawnData.isInitialSpawn = enemyData.value("initial", true);
+			spawnData.reinforcementTriggerName = enemyData.value("reinforcementTrigger", "");
+			spawnData.reinforcementDelayFrames = ReadJsonInt(enemyData, "reinforcementDelay", 0);
+			enemySpawns_.push_back(spawnData);
+
+			if (spawnData.isInitialSpawn) {
+				auto enemy = std::make_unique<Enemy>();
+				enemy->Initialize(spawnData.position);
+				enemy->SetRotation(spawnData.rotation);
+				enemy->SetScale(ReadVector3Json(enemyData.value("scale", json::array()), enemy->GetScale()));
+				enemy->SetSpawnPointIndex(enemySpawns_.size() - 1);
+				enemies_.push_back(std::move(enemy));
+			}
+		}
+		enemyRespawnTimers_.assign(enemySpawns_.size(), kNoRespawnTimer);
+	}
+
+	if (missileManager_) {
+		missileManager_->Initialize();
+	}
+	if (enemyBulletManager_) {
+		enemyBulletManager_->Initialize();
+	}
+
+	if (!isDebugCameraActive_ && camera && player_) {
+		UpdateGameplayCamera();
+		camera->Update();
+	} else if (debugFlyCamera_) {
+		debugFlyCamera_->Camera::Update();
+	}
+
+	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+	if (player_) {
+		player_->UpdateModel();
+	}
+	for (auto &enemy : enemies_) {
+		enemy->UpdateModel();
+	}
+	for (auto &obstacle : obstacles_) {
+		obstacle->Update();
+	}
+	if (missileManager_) {
+		missileManager_->UpdateModels(activeCamera);
+	}
+
+	simulationActionMessage_ = "設定「" + trimmedName + "」をゲームに読み込みました。";
+	return true;
+}
+
+void GamePlayScene::RefreshMissilePresetNames() {
+	missilePresetNames_[0].clear();
+	missilePresetNames_[1].clear();
+
+	std::ifstream ifs(kMissilePresetsFilePath);
+	if (!ifs.is_open()) {
+		selectedMissilePresetIndex_[0] = 0;
+		selectedMissilePresetIndex_[1] = 0;
+		return;
+	}
+
+	json root;
+	try {
+		ifs >> root;
+	} catch (...) {
+		selectedMissilePresetIndex_[0] = 0;
+		selectedMissilePresetIndex_[1] = 0;
+		return;
+	}
+
+	const char *keys[] = { "normal", "homing" };
+	for (int typeIndex = 0; typeIndex < 2; ++typeIndex) {
+		if (!root.contains(keys[typeIndex]) || !root[keys[typeIndex]].is_array()) {
+			continue;
+		}
+
+		for (const auto &presetData : root[keys[typeIndex]]) {
+			if (presetData.is_object() && presetData.contains("name") && presetData["name"].is_string()) {
+				missilePresetNames_[typeIndex].push_back(presetData["name"].get<std::string>());
+			}
+		}
+
+		if (selectedMissilePresetIndex_[typeIndex] >= static_cast<int>(missilePresetNames_[typeIndex].size())) {
+			selectedMissilePresetIndex_[typeIndex] = missilePresetNames_[typeIndex].empty()
+				? 0
+				: static_cast<int>(missilePresetNames_[typeIndex].size()) - 1;
+		}
+	}
+}
+
+bool GamePlayScene::SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName) {
+	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
+	const std::string trimmedName = TrimActionName(presetName);
+	if (trimmedName.empty()) {
+		missilePresetMessage_ = "保存名を入力してください。";
+		return false;
+	}
+
+	json root;
+	{
+		std::ifstream ifs(filePath);
+		if (ifs.is_open()) {
+			try {
+				ifs >> root;
+			} catch (...) {
+				root = json::object();
+			}
+		}
+	}
+	if (!root.is_object()) {
+		root = json::object();
+	}
+
+	const char *keys[] = { "normal", "homing" };
+	if (!root.contains(keys[typeIndex]) || !root[keys[typeIndex]].is_array()) {
+		root[keys[typeIndex]] = json::array();
+	}
+
+	json preset;
+	preset["name"] = trimmedName;
+	if (typeIndex == 0) {
+		preset["speed"] = missileNormalSpeed;
+		preset["scale"] = missileNormalScale;
+		preset["collisionRadius"] = missileNormalCollisionRadius;
+		preset["lifeTime"] = missileNormalLifeTime;
+	} else {
+		preset["speed"] = missileSpeed;
+		preset["homingStrength"] = missileHomingStrength;
+		preset["scale"] = missileHomingScale;
+		preset["collisionRadius"] = missileHomingCollisionRadius;
+		preset["trailWidth"] = missileTrailWidth;
+		preset["lifeTime"] = missileLifeTime;
+	}
+	preset["muzzleOffset"] = missileMuzzleOffset;
+
+	json &presets = root[keys[typeIndex]];
+	bool updated = false;
+	for (auto &existingPreset : presets) {
+		if (existingPreset.is_object() && existingPreset.value("name", "") == trimmedName) {
+			existingPreset = preset;
+			updated = true;
+			break;
+		}
+	}
+	if (!updated) {
+		presets.push_back(preset);
+	}
+
+	std::ofstream ofs(filePath, std::ios::trunc);
+	if (!ofs.is_open()) {
+		missilePresetMessage_ = "ミサイル設定を保存できませんでした。";
+		return false;
+	}
+
+	ofs << root.dump(4);
+	ofs.close();
+
+	RefreshMissilePresetNames();
+	for (size_t index = 0; index < missilePresetNames_[typeIndex].size(); ++index) {
+		if (missilePresetNames_[typeIndex][index] == trimmedName) {
+			selectedMissilePresetIndex_[typeIndex] = static_cast<int>(index);
+			break;
+		}
+	}
+
+	missilePresetMessage_ =
+		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を保存しました。";
+	return true;
+}
+
+bool GamePlayScene::ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName) {
+	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
+	const std::string trimmedName = TrimActionName(presetName);
+	if (trimmedName.empty()) {
+		missilePresetMessage_ = "読み込むミサイル設定名がありません。";
+		return false;
+	}
+
+	std::ifstream ifs(filePath);
+	if (!ifs.is_open()) {
+		missilePresetMessage_ = "ミサイル設定ファイルが見つかりません。";
+		return false;
+	}
+
+	json root;
+	try {
+		ifs >> root;
+	} catch (...) {
+		missilePresetMessage_ = "ミサイル設定ファイルを読み込めませんでした。";
+		return false;
+	}
+
+	const char *keys[] = { "normal", "homing" };
+	if (!root.contains(keys[typeIndex]) || !root[keys[typeIndex]].is_array()) {
+		missilePresetMessage_ = "選択した種類の保存設定がありません。";
+		return false;
+	}
+
+	const json *preset = nullptr;
+	for (const auto &presetData : root[keys[typeIndex]]) {
+		if (presetData.is_object() && presetData.value("name", "") == trimmedName) {
+			preset = &presetData;
+			break;
+		}
+	}
+	if (!preset) {
+		missilePresetMessage_ = "選択したミサイル設定が見つかりません。";
+		return false;
+	}
+
+	if (typeIndex == 0) {
+		missileNormalSpeed = ReadJsonFloat(*preset, "speed", missileNormalSpeed);
+		missileNormalScale = ReadJsonFloat(*preset, "scale", missileNormalScale);
+		missileNormalCollisionRadius = ReadJsonFloat(*preset, "collisionRadius", missileNormalCollisionRadius);
+		missileNormalLifeTime = ReadJsonInt(*preset, "lifeTime", missileNormalLifeTime);
+	} else {
+		missileSpeed = ReadJsonFloat(*preset, "speed", missileSpeed);
+		missileHomingStrength = ReadJsonFloat(*preset, "homingStrength", missileHomingStrength);
+		missileHomingScale = ReadJsonFloat(*preset, "scale", missileHomingScale);
+		missileHomingCollisionRadius = ReadJsonFloat(*preset, "collisionRadius", missileHomingCollisionRadius);
+		missileTrailWidth = ReadJsonFloat(*preset, "trailWidth", missileTrailWidth);
+		missileLifeTime = ReadJsonInt(*preset, "lifeTime", missileLifeTime);
+	}
+	missileMuzzleOffset = ReadJsonFloat(*preset, "muzzleOffset", missileMuzzleOffset);
+
+	missilePresetMessage_ =
+		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を読み込みました。";
+	return true;
+}
+
+void GamePlayScene::DrawSimulationSaveControls() {
+#ifdef ENABLE_IMGUI
+	ImGui::Separator();
+	ImGui::InputText("保存名", simulationActionName_, IM_ARRAYSIZE(simulationActionName_));
+	if (ImGui::Button("名前を付けて行動を保存")) {
+		SaveNamedSimulationAction(kSimulationActionsFilePath, simulationActionName_);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("保存一覧を更新")) {
+		RefreshSimulationActionNames();
+	}
+
+	if (!simulationActionMessage_.empty()) {
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.45f, 1.0f), "%s", simulationActionMessage_.c_str());
+	}
+#endif
+}
+
+void GamePlayScene::DrawGameplayActionControls() {
+#ifdef ENABLE_IMGUI
+	ImGui::Separator();
+	ImGui::Text("保存済みシミュレーション設定");
+	ImGui::TextWrapped("シミュレーション画面で保存した内容を、現在のゲーム側の設定値として読み込みます。");
+	if (ImGui::Button("保存一覧を更新")) {
+		RefreshSimulationActionNames();
+	}
+
+	if (simulationActionNames_.empty()) {
+		ImGui::TextDisabled("保存されたシミュレーション設定がありません。");
+		if (!simulationActionMessage_.empty()) {
+			ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
+		}
+		return;
+	}
+
+	std::vector<const char *> actionNameItems;
+	actionNameItems.reserve(simulationActionNames_.size());
+	for (const std::string &name : simulationActionNames_) {
+		actionNameItems.push_back(name.c_str());
+	}
+
+	if (selectedSimulationActionIndex_ >= static_cast<int>(actionNameItems.size())) {
+		selectedSimulationActionIndex_ = 0;
+	}
+
+	ImGui::Combo("読み込む設定", &selectedSimulationActionIndex_, actionNameItems.data(), static_cast<int>(actionNameItems.size()));
+	if (ImGui::Button("この設定をゲームに読み込む")) {
+		ApplySimulationAction(kSimulationActionsFilePath, simulationActionNames_[selectedSimulationActionIndex_]);
+	}
+
+	if (!simulationActionMessage_.empty()) {
+		ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
+	}
+#endif
+}
+
+void GamePlayScene::DrawMissileSettingsUI() {
+#ifdef ENABLE_IMGUI
+	ImGui::Text("ミサイル設定");
+	ImGui::DragFloat("発射位置距離", &missileMuzzleOffset, 0.05f, 0.0f, 5.0f, "%.2f");
+
+	ImGui::Separator();
+	const char *presetTypes[] = { "通常弾", "ホーミング" };
+	ImGui::Combo("保存する種類", &missilePresetTypeIndex_, presetTypes, IM_ARRAYSIZE(presetTypes));
+	ImGui::InputText("ミサイル保存名", missilePresetName_, IM_ARRAYSIZE(missilePresetName_));
+	if (ImGui::Button("この種類の設定を保存")) {
+		SaveMissilePreset(kMissilePresetsFilePath, missilePresetTypeIndex_, missilePresetName_);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("ミサイル保存一覧を更新")) {
+		RefreshMissilePresetNames();
+	}
+
+	const int loadTypeIndex = std::clamp(missilePresetTypeIndex_, 0, 1);
+	if (!missilePresetNames_[loadTypeIndex].empty()) {
+		std::vector<const char *> presetItems;
+		presetItems.reserve(missilePresetNames_[loadTypeIndex].size());
+		for (const std::string &name : missilePresetNames_[loadTypeIndex]) {
+			presetItems.push_back(name.c_str());
+		}
+		if (selectedMissilePresetIndex_[loadTypeIndex] >= static_cast<int>(presetItems.size())) {
+			selectedMissilePresetIndex_[loadTypeIndex] = 0;
+		}
+		ImGui::Combo("読み込む設定", &selectedMissilePresetIndex_[loadTypeIndex], presetItems.data(), static_cast<int>(presetItems.size()));
+		if (ImGui::Button("選択したミサイル設定を読み込む")) {
+			ApplyMissilePreset(
+				kMissilePresetsFilePath,
+				loadTypeIndex,
+				missilePresetNames_[loadTypeIndex][selectedMissilePresetIndex_[loadTypeIndex]]);
+		}
+	} else {
+		ImGui::TextDisabled("%sの保存設定はまだありません。", presetTypes[loadTypeIndex]);
+	}
+	if (!missilePresetMessage_.empty()) {
+		ImGui::TextWrapped("%s", missilePresetMessage_.c_str());
+	}
+
+	ImGui::Separator();
+	ImGui::Text("通常弾（左クリック）");
+	ImGui::DragFloat("通常弾速度", &missileNormalSpeed, 0.05f, 0.1f, 6.0f, "%.2f");
+	ImGui::DragFloat("通常弾サイズ", &missileNormalScale, 0.01f, 0.05f, 2.0f, "%.2f");
+	ImGui::DragFloat("通常弾当たり判定", &missileNormalCollisionRadius, 0.01f, 0.05f, 2.0f, "%.2f");
+	ImGui::SliderInt("通常弾寿命", &missileNormalLifeTime, 10, 900);
+
+	ImGui::Separator();
+	ImGui::Text("ホーミングミサイル（右クリック）");
+	ImGui::DragFloat("追尾速度", &missileSpeed, 0.05f, 0.1f, 6.0f, "%.2f");
+	ImGui::DragFloat("曲がりやすさ", &missileHomingStrength, 0.005f, 0.0f, 0.6f, "%.3f");
+	ImGui::DragFloat("ミサイルサイズ", &missileHomingScale, 0.01f, 0.05f, 3.0f, "%.2f");
+	ImGui::DragFloat("ミサイル当たり判定", &missileHomingCollisionRadius, 0.01f, 0.05f, 3.0f, "%.2f");
+	ImGui::DragFloat("煙の太さ", &missileTrailWidth, 0.01f, 0.05f, 3.0f, "%.2f");
+	ImGui::SliderInt("ミサイル寿命", &missileLifeTime, 10, 1200);
+
+	ImGui::Separator();
+	if (ImGui::Button("通常弾をテスト発射")) {
+		if (IsSimulationMode()) {
+			isEditorPreviewPlaying_ = true;
+		}
+		FirePlayerMissile(MissileType::Normal);
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("ホーミングをテスト発射")) {
+		if (IsSimulationMode()) {
+			isEditorPreviewPlaying_ = true;
+		}
+		FirePlayerMissile(MissileType::MissileWithTrail);
+	}
+	ImGui::TextDisabled("選択中だけ確認では、弾はこのテストボタンを押した時だけ出ます。");
+#endif
+}
+
+MissileTuning GamePlayScene::MakeMissileTuning(MissileType type) const {
+	MissileTuning tuning;
+	if (type == MissileType::Normal) {
+		tuning.speed = missileNormalSpeed;
+		tuning.homingStrength = 0.0f;
+		tuning.scale = missileNormalScale;
+		tuning.collisionRadius = missileNormalCollisionRadius;
+		tuning.trailWidth = 0.0f;
+		tuning.lifeTime = missileNormalLifeTime;
+		return tuning;
+	}
+
+	tuning.speed = missileSpeed;
+	tuning.homingStrength = missileHomingStrength;
+	tuning.scale = missileHomingScale;
+	tuning.collisionRadius = missileHomingCollisionRadius;
+	tuning.trailWidth = missileTrailWidth;
+	tuning.lifeTime = missileLifeTime;
+	return tuning;
+}
+
+void GamePlayScene::FirePlayerMissile(MissileType type) {
+	if (!player_ || !missileManager_) {
+		return;
+	}
+
+	const MissileTuning tuning = MakeMissileTuning(type);
+	const Vector3 playerPos = player_->GetPosition();
+	const Vector3 forward = player_->GetForwardVector();
+	const float muzzleOffset = (std::max)(0.0f, missileMuzzleOffset);
+	const Vector3 muzzlePos = {
+		playerPos.x + forward.x * muzzleOffset,
+		playerPos.y + forward.y * muzzleOffset,
+		playerPos.z + forward.z * muzzleOffset,
+	};
+	const Vector3 velocity = {
+		forward.x * (std::max)(0.01f, tuning.speed),
+		forward.y * (std::max)(0.01f, tuning.speed),
+		forward.z * (std::max)(0.01f, tuning.speed),
+	};
+
+	missileManager_->Shoot(muzzlePos, velocity, type, tuning);
 }
 
 void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
@@ -851,8 +1898,9 @@ Enemy *GamePlayScene::FindLockOnTarget(Camera *activeCamera) const {
 void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 	Input *input = Input::GetInstance();
 	if (!input) return;
+	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
 
-	if (input->TriggerKey(DIK_TAB)) {
+	if (canUseKeyboardInput && input->TriggerKey(DIK_TAB)) {
 		lockedEnemy_ = FindLockOnTarget(activeCamera);
 		isCinematicLockOnCameraInitialized_ = false;
 	}
@@ -866,7 +1914,7 @@ void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 		return;
 	}
 
-	if (input->TriggerKey(DIK_X)) {
+	if (canUseKeyboardInput && input->TriggerKey(DIK_X)) {
 		lockedEnemy_ = nullptr;
 		isCinematicLockOnCameraInitialized_ = false;
 		return;
@@ -1037,11 +2085,14 @@ void GamePlayScene::Update() {
 		// C++からアクセスできずエラーになることがあるため、try-catchで握りつぶす
 	}
 
-	if (Input::GetInstance()->TriggerKey(DIK_0)) {
+	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
+	const bool canUseMouseInput = !IsImGuiMouseCaptureActive();
+
+	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
 	}
 
-	if (Input::GetInstance()->TriggerKey(DIK_F2)) {
+	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_F2)) {
 		if (IsSimulationMode()) {
 			PostQuitMessage(0);
 		} else {
@@ -1050,8 +2101,12 @@ void GamePlayScene::Update() {
 		return;
 	}
 
+	if (canUseKeyboardInput && IsSimulationMode() && Input::GetInstance()->TriggerKey(DIK_F3)) {
+		SetDebugCameraActive(!isDebugCameraActive_);
+	}
+
 	// Rキーでシーンを最初からやり直す
-	if (Input::GetInstance()->TriggerKey(DIK_R)) {
+	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_R)) {
 		SceneManager::GetInstance()->ChangeScene(IsSimulationMode() ? "SIMULATION" : "GAMEPLAY");
 		return;
 	}
@@ -1105,9 +2160,20 @@ void GamePlayScene::Update() {
 		}
 	}
 	shouldUpdateGame = shouldUpdateGame && isEditorPreviewPlaying_;
+	const bool isSimulation = IsSimulationMode();
+	const bool isFullFlowPreview = !isSimulation || simulationPlaybackMode_ == 1;
+	const bool isSelectedOnlyPreview = isSimulation && simulationPlaybackMode_ == 0;
+	const bool updateSelectedPlayer = shouldUpdateGame && canUseKeyboardInput && (isFullFlowPreview || currentSimulationTarget_ == 0);
+	const bool updateSelectedMissiles = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 1);
+	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 2);
+	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 3);
+	const bool allowMouseMissileFire = shouldUpdateGame && canUseMouseInput && (!isSimulation || isFullFlowPreview);
+	const bool allowLockOnBehavior = !isGameOver_ && (isFullFlowPreview || currentSimulationTarget_ == 1 || currentSimulationTarget_ == 2);
+	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
+	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
 
 	if (myBox && animationData.duration > 0.0f) {
-		if (playAnimation) {
+		if (playAnimation && updateAnimationPreview) {
 			animationTime += 1.0f / 60.0f;
 			animationTime = std::fmod(animationTime, animationData.duration);
 		}
@@ -1143,7 +2209,7 @@ void GamePlayScene::Update() {
 		}
 
 		// 骨描画の更新
-		if (showBones) {
+		if (showBones && updateAnimationPreview) {
 			std::vector<VertexData> lineVertices;
 
 			for (size_t i = 0; i < skeleton.joints.size(); ++i) {
@@ -1205,11 +2271,13 @@ void GamePlayScene::Update() {
 
 	// プレイヤーの更新と、カメラの追従
 	if (player_) {
-		if (shouldUpdateGame) {
+		if (updateSelectedPlayer) {
 			if (lockedEnemy_) {
 				player_->UpdateLockOnRotation(lockedEnemy_->GetPosition());
 			}
 			player_->Update(obstacles_);
+		} else {
+			player_->UpdateModel();
 		}
 
 	}
@@ -1220,7 +2288,7 @@ void GamePlayScene::Update() {
 	// プレイヤーの最新座標を取得する
 	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
 
-	if (shouldUpdateGame) {
+	if (updateSelectedEnemies) {
 		// 敵の弾の更新（被弾時の爆発座標を受け取る）
 		std::vector<Vector3> enemyBulletHits;
 		if (enemyBulletManager_ && player_) {
@@ -1260,16 +2328,37 @@ void GamePlayScene::Update() {
 		for (auto &obstacle : obstacles_) {
 			obstacle->Update();
 		}
+	} else {
+		for (auto &enemy : enemies_) {
+			enemy->UpdateModel();
+		}
 	}
 
 	// カメラの更新
 	if (isDebugCameraActive_) {
-		debugFlyCamera_->Update(); // FlyCameraが自分で入力を消化して自分を更新する
+		if (canUseKeyboardInput && canUseMouseInput) {
+			debugFlyCamera_->Update(); // FlyCameraが自分で入力を消化して自分を更新する
+		} else {
+			debugFlyCamera_->Camera::Update();
+		}
 		skybox->Update(debugFlyCamera_.get());
 	} else {
 		UpdateGameplayCamera();
 		camera->Update();
 		skybox->Update(camera.get());
+	}
+
+	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+	if (isSelectedOnlyPreview) {
+		for (auto &enemy : enemies_) {
+			enemy->UpdateModel();
+		}
+		if (enemyBulletManager_) {
+			enemyBulletManager_->UpdateModels();
+		}
+		for (auto &obstacle : obstacles_) {
+			obstacle->Update();
+		}
 	}
 
 	if (myRing && showNormalRing) {
@@ -1349,10 +2438,9 @@ void GamePlayScene::Update() {
 	size.y = 300.0f;
 	sprite->SetSize(size);
 
-	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
-	UpdateLockOn(activeCamera, shouldUpdateGame && !isGameOver_);
+	UpdateLockOn(activeCamera, allowLockOnBehavior);
 
-	if (showParticles) {
+	if (showParticles && updateSelectedParticles) {
 		particleEmitter->Update();
 	}
 
@@ -1360,25 +2448,15 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ミサイルの発射処理
 	// ==========================================
-	if (shouldUpdateGame && player_ && !isGameOver_) {
-		Vector3 playerPos = player_->GetPosition();
-		Vector3 forward = player_->GetForwardVector();
-		Vector3 muzzlePos = {
-			playerPos.x + forward.x * 0.8f,
-			playerPos.y + forward.y * 0.8f,
-			playerPos.z + forward.z * 0.8f,
-		};
-
+	if (allowMouseMissileFire && player_ && !isGameOver_) {
 		// 左クリック：速くて煙が出ない通常弾
 		if (Input::GetInstance()->TriggerMouseButton(0)) {
-			Vector3 vel = { forward.x * 1.5f, forward.y * 1.5f, forward.z * 1.5f };
-			missileManager_->Shoot(muzzlePos, vel, MissileType::Normal);
+			FirePlayerMissile(MissileType::Normal);
 		}
 
 		// 右クリック：煙を引きながら敵へ曲がるホーミング弾
 		if (Input::GetInstance()->TriggerMouseButton(1)) {
-			Vector3 vel = { forward.x * 0.75f, forward.y * 0.75f, forward.z * 0.75f };
-			missileManager_->Shoot(muzzlePos, vel, MissileType::MissileWithTrail);
+			FirePlayerMissile(MissileType::MissileWithTrail);
 		}
 	}
 
@@ -1386,7 +2464,7 @@ void GamePlayScene::Update() {
 	// 弾の更新処理
 	// ==========================================
 	std::vector<Vector3> hitPositions;
-	if (shouldUpdateGame) {
+	if (updateSelectedMissiles) {
 		if (missileManager_) {
 			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, lockedEnemy_);
 		}
@@ -1396,22 +2474,48 @@ void GamePlayScene::Update() {
 			explosionManager_->CreateExplosions(hitPositions);
 		}
 
-		// 爆発マネージャーの更新
-		if (explosionManager_) {
-			explosionManager_->Update();
+	} else {
+		if (missileManager_) {
+			missileManager_->UpdateModels(activeCamera);
 		}
 	}
 
+	// 爆発マネージャーの更新
+	if ((!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) && explosionManager_) {
+		explosionManager_->Update();
+	}
+
 	// 大元のパーティクル全体の更新
-	particleManager->Update(activeCamera);
+	if (!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) {
+		particleManager->Update(activeCamera);
+	}
 
 	// ==========================================
 	// デバッグ用コライダー頂点構築
 	// ==========================================
-	if (showDebugColliders && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
+	if (showDebugColliders && updateDebugWireframes && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
 		std::vector<VertexData> colliderVertices;
+		const bool drawAllDebugFrames = !isSelectedOnlyPreview || isFullFlowPreview;
+		const bool drawPlayerDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 0;
+		const bool drawMissileDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 1;
+		const bool drawEnemyDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 2;
+		const bool drawObstacleDebugFrame = drawAllDebugFrames;
 
-		// AABB構築ヘルパー
+		auto pushLine = [&](const Vector3& start, const Vector3& end, const Vector4& color) {
+			VertexData v1{};
+			VertexData v2{};
+			v1.position = { start.x, start.y, start.z, 1.0f };
+			v2.position = { end.x, end.y, end.z, 1.0f };
+			v1.normal = { 0.0f, 1.0f, 0.0f, 0.0f };
+			v2.normal = { 0.0f, 1.0f, 0.0f, 0.0f };
+			v1.texcoord = { 0.0f, 0.0f, 0.0f, 0.0f };
+			v2.texcoord = { 1.0f, 1.0f, 0.0f, 0.0f };
+			v1.color = color;
+			v2.color = color;
+			colliderVertices.push_back(v1);
+			colliderVertices.push_back(v2);
+		};
+
 		auto addAABB = [&](const Vector3& center, const Vector3& extents, const Vector4& color) {
 			Vector3 p[8] = {
 				{ center.x - extents.x, center.y - extents.y, center.z - extents.z },
@@ -1421,30 +2525,20 @@ void GamePlayScene::Update() {
 				{ center.x - extents.x, center.y - extents.y, center.z + extents.z },
 				{ center.x + extents.x, center.y - extents.y, center.z + extents.z },
 				{ center.x + extents.x, center.y + extents.y, center.z + extents.z },
-				{ center.x - extents.x, center.y + extents.y, center.z + extents.z }
+				{ center.x - extents.x, center.y + extents.y, center.z + extents.z },
 			};
 
-			auto addLine = [&](int i1, int i2) {
-				VertexData v1, v2;
-				v1.position = { p[i1].x, p[i1].y, p[i1].z, 1.0f };
-				v1.color = color;
-				v2.position = { p[i2].x, p[i2].y, p[i2].z, 1.0f };
-				v2.color = color;
-				colliderVertices.push_back(v1);
-				colliderVertices.push_back(v2);
+			const int edges[12][2] = {
+				{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+				{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+				{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
 			};
-
-			// 底面
-			addLine(0, 1); addLine(1, 2); addLine(2, 3); addLine(3, 0);
-			// 天面
-			addLine(4, 5); addLine(5, 6); addLine(6, 7); addLine(7, 4);
-			// 側面
-			addLine(0, 4); addLine(1, 5); addLine(2, 6); addLine(3, 7);
+			for (const auto& edge : edges) {
+				pushLine(p[edge[0]], p[edge[1]], color);
+			}
 		};
 
 		auto addOBB = [&](const Vector3& center, const Vector3& extents, const Vector3& rotation, const Vector4& color) {
-			Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation.x), MyMath::MakeRotateYMatrix(rotation.y)), MyMath::MakeRotateZMatrix(rotation.z));
-
 			Vector3 local[8] = {
 				{ -extents.x, -extents.y, -extents.z },
 				{  extents.x, -extents.y, -extents.z },
@@ -1453,97 +2547,106 @@ void GamePlayScene::Update() {
 				{ -extents.x, -extents.y,  extents.z },
 				{  extents.x, -extents.y,  extents.z },
 				{  extents.x,  extents.y,  extents.z },
-				{ -extents.x,  extents.y,  extents.z }
+				{ -extents.x,  extents.y,  extents.z },
 			};
+			const Matrix4x4 rotationMatrix = MyMath::Multiply(
+				MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation.x), MyMath::MakeRotateYMatrix(rotation.y)),
+				MyMath::MakeRotateZMatrix(rotation.z));
 
-			Vector3 p[8];
+			Vector3 p[8]{};
 			for (int i = 0; i < 8; ++i) {
-				Vector3 rotated = MyMath::Transform(local[i], rotMat);
-				p[i] = { center.x + rotated.x, center.y + rotated.y, center.z + rotated.z };
+				const Vector3 rotated = MyMath::Transform(local[i], rotationMatrix);
+				p[i] = AddVector3(center, rotated);
 			}
 
-			auto addLine = [&](int i1, int i2) {
-				VertexData v1, v2;
-				v1.position = { p[i1].x, p[i1].y, p[i1].z, 1.0f };
-				v1.color = color;
-				v2.position = { p[i2].x, p[i2].y, p[i2].z, 1.0f };
-				v2.color = color;
-				colliderVertices.push_back(v1);
-				colliderVertices.push_back(v2);
+			const int edges[12][2] = {
+				{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+				{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+				{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
 			};
-
-			addLine(0, 1); addLine(1, 2); addLine(2, 3); addLine(3, 0);
-			addLine(4, 5); addLine(5, 6); addLine(6, 7); addLine(7, 4);
-			addLine(0, 4); addLine(1, 5); addLine(2, 6); addLine(3, 7);
+			for (const auto& edge : edges) {
+				pushLine(p[edge[0]], p[edge[1]], color);
+			}
 		};
 
-		// 球体構築ヘルパー
+		auto addOBBShape = [&](const OBB& obb, const Vector4& color) {
+			Vector3 p[8] = {
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0], -obb.size.x)), ScaleVector3(obb.orientations[1], -obb.size.y)), ScaleVector3(obb.orientations[2], -obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0],  obb.size.x)), ScaleVector3(obb.orientations[1], -obb.size.y)), ScaleVector3(obb.orientations[2], -obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0],  obb.size.x)), ScaleVector3(obb.orientations[1],  obb.size.y)), ScaleVector3(obb.orientations[2], -obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0], -obb.size.x)), ScaleVector3(obb.orientations[1],  obb.size.y)), ScaleVector3(obb.orientations[2], -obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0], -obb.size.x)), ScaleVector3(obb.orientations[1], -obb.size.y)), ScaleVector3(obb.orientations[2],  obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0],  obb.size.x)), ScaleVector3(obb.orientations[1], -obb.size.y)), ScaleVector3(obb.orientations[2],  obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0],  obb.size.x)), ScaleVector3(obb.orientations[1],  obb.size.y)), ScaleVector3(obb.orientations[2],  obb.size.z)),
+				AddVector3(AddVector3(AddVector3(obb.center, ScaleVector3(obb.orientations[0], -obb.size.x)), ScaleVector3(obb.orientations[1],  obb.size.y)), ScaleVector3(obb.orientations[2],  obb.size.z)),
+			};
+			const int edges[12][2] = {
+				{ 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+				{ 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+				{ 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
+			};
+			for (const auto& edge : edges) {
+				pushLine(p[edge[0]], p[edge[1]], color);
+			}
+		};
+
 		auto addSphere = [&](const Vector3& center, float radius, const Vector4& color) {
-			const int subdiv = 24;
-			for (int i = 0; i < subdiv; ++i) {
-				float theta1 = 2.0f * 3.14159265f * (float)i / (float)subdiv;
-				float theta2 = 2.0f * 3.14159265f * (float)(i + 1) / (float)subdiv;
+			constexpr int segmentCount = 24;
+			constexpr float twoPi = 6.283185307f;
+			for (int i = 0; i < segmentCount; ++i) {
+				const float angle1 = twoPi * static_cast<float>(i) / static_cast<float>(segmentCount);
+				const float angle2 = twoPi * static_cast<float>(i + 1) / static_cast<float>(segmentCount);
+				const float cos1 = std::cos(angle1);
+				const float sin1 = std::sin(angle1);
+				const float cos2 = std::cos(angle2);
+				const float sin2 = std::sin(angle2);
 
-				float cos1 = std::cos(theta1);
-				float sin1 = std::sin(theta1);
-				float cos2 = std::cos(theta2);
-				float sin2 = std::sin(theta2);
-
-				// X-Y 平面
-				VertexData v1, v2;
-				v1.color = color;
-				v2.color = color;
-
-				v1.position = { center.x + radius * cos1, center.y + radius * sin1, center.z, 1.0f };
-				v2.position = { center.x + radius * cos2, center.y + radius * sin2, center.z, 1.0f };
-				colliderVertices.push_back(v1);
-				colliderVertices.push_back(v2);
-
-				// Y-Z 平面
-				v1.position = { center.x, center.y + radius * cos1, center.z + radius * sin1, 1.0f };
-				v2.position = { center.x, center.y + radius * cos2, center.z + radius * sin2, 1.0f };
-				colliderVertices.push_back(v1);
-				colliderVertices.push_back(v2);
-
-				// Z-X 平面
-				v1.position = { center.x + radius * sin1, center.y, center.z + radius * cos1, 1.0f };
-				v2.position = { center.x + radius * sin2, center.y, center.z + radius * cos2, 1.0f };
-				colliderVertices.push_back(v1);
-				colliderVertices.push_back(v2);
+				pushLine(
+					{ center.x + radius * cos1, center.y + radius * sin1, center.z },
+					{ center.x + radius * cos2, center.y + radius * sin2, center.z },
+					color);
+				pushLine(
+					{ center.x, center.y + radius * cos1, center.z + radius * sin1 },
+					{ center.x, center.y + radius * cos2, center.z + radius * sin2 },
+					color);
+				pushLine(
+					{ center.x + radius * sin1, center.y, center.z + radius * cos1 },
+					{ center.x + radius * sin2, center.y, center.z + radius * cos2 },
+					color);
 			}
 		};
 
 		// 1. プレイヤーのAABBと球
-		if (player_ && !player_->IsDead()) {
-			// AABB: Green, Size: 0.4x0.4x0.4 (extents: 0.2)
-			addAABB(player_->GetPosition(), { 0.2f, 0.2f, 0.2f }, { 0.0f, 1.0f, 0.0f, 1.0f });
-			// Sphere (対敵の弾用当たり判定): Cyan/Green (radius: 1.0f)
-			addSphere(player_->GetPosition(), 1.0f, { 0.0f, 1.0f, 0.5f, 1.0f });
+		if (drawPlayerDebugFrame && player_ && !player_->IsDead()) {
+			addOBBShape(player_->GetOBB(), { 0.0f, 1.0f, 0.0f, 1.0f });
 		}
 
 		// 2. 障害物のAABB
-		for (const auto& obstacle : obstacles_) {
-			// モデルの実際のバウンディングボックス × Blenderスケール = 正確なワールドAABB
-			Vector3 extents = obstacle->GetWorldHalfExtents();
-			addOBB(obstacle->GetPosition(), extents, obstacle->GetRotation(), { 0.0f, 1.0f, 1.0f, 1.0f });
-		}
-
-		// 3. 敵のAABBと球
-		for (const auto& enemy : enemies_) {
-			if (!enemy->IsDead()) {
-				// AABB: Red, scaled from Blender object.
-				addAABB(enemy->GetPosition(), enemy->GetWorldHalfExtents(), { 1.0f, 0.0f, 0.0f, 1.0f });
-				// Sphere (対プレイヤーミサイル用当たり判定): Red/Orange
-				addSphere(enemy->GetPosition(), enemy->GetCollisionRadius(), { 1.0f, 0.3f, 0.0f, 1.0f });
+		if (drawObstacleDebugFrame) {
+			for (const auto& obstacle : obstacles_) {
+				if (!obstacle || obstacle->IsStageBounds()) {
+					continue;
+				}
+				// モデルの実際のバウンディングボックス × Blenderスケール = 正確なワールドAABB
+				addOBBShape(obstacle->GetOBB(), { 0.0f, 1.0f, 1.0f, 1.0f });
 			}
 		}
 
-		if (lockedEnemy_ && !lockedEnemy_->IsDead()) {
+		// 3. 敵のAABBと球
+		if (drawEnemyDebugFrame) {
+			for (const auto& enemy : enemies_) {
+				if (!enemy->IsDead()) {
+					addOBBShape(enemy->GetOBB(), { 1.0f, 0.0f, 0.0f, 1.0f });
+				}
+			}
+		}
+
+		if ((drawEnemyDebugFrame || drawMissileDebugFrame) && lockedEnemy_ && !lockedEnemy_->IsDead()) {
 			addSphere(lockedEnemy_->GetPosition(), lockedEnemy_->GetCollisionRadius() + 0.35f, { 1.0f, 0.95f, 0.0f, 1.0f });
 		}
 
 		// 4. 自機ミサイル（Player Bullets）
-		if (missileManager_) {
+		if (drawMissileDebugFrame && missileManager_) {
 			for (const auto& missile : missileManager_->GetMissiles()) {
 				if (!missile->IsDead()) {
 					// Sphere: Magenta (radius: 0.5f)
@@ -1553,7 +2656,7 @@ void GamePlayScene::Update() {
 		}
 
 		// 5. 敵の弾（Enemy Bullets）
-		if (enemyBulletManager_) {
+		if (drawEnemyDebugFrame && enemyBulletManager_) {
 			for (const auto& bullet : enemyBulletManager_->GetBullets()) {
 				if (!bullet.isDead) {
 					// Sphere: Orange (radius: 0.5f)
@@ -1610,6 +2713,7 @@ void GamePlayScene::Draw() {
 	// 障害物の描画
 	for (const auto &obstacle : obstacles_) {
 		obstacle->Draw();
+		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
@@ -1636,15 +2740,11 @@ void GamePlayScene::Draw() {
 		}
 	}
 
-	// デバッグコライダーの描画
 	if (showDebugColliders && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
-		// 描画の前に設定を確実にする
-		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 		debugColliderLinesObject->Draw();
 	}
-	
-	// スカイボックスの描画
-	if (showSkybox) {
+
+	if (showSkybox && skybox) {
 		skybox->Draw();
 	}
 	
@@ -1736,6 +2836,30 @@ void GamePlayScene::DrawSimulationScreenUI() {
 		isEditorPreviewPlaying_ ? "再生中" : "停止中");
 
 	ImGui::Separator();
+	const char *previewModes[] = { "選択中だけ確認", "全体確認" };
+	ImGui::Combo("確認モード", &simulationPlaybackMode_, previewModes, IM_ARRAYSIZE(previewModes));
+	if (simulationPlaybackMode_ == 0) {
+		ImGui::TextDisabled("今選んでいるカテゴリだけ動きます。ミサイルはテスト発射ボタンでだけ出ます。");
+	} else {
+		ImGui::TextDisabled("プレイヤー・敵・ミサイルをまとめて動かして全体の流れを確認します。");
+	}
+
+	ImGui::Separator();
+	ImGui::Text("カメラ: %s", isDebugCameraActive_ ? "フリーカメラ" : "プレイヤー視点");
+	ImGui::SameLine();
+	if (isDebugCameraActive_) {
+		if (ImGui::Button("プレイヤー視点にする (F3)")) {
+			SetDebugCameraActive(false);
+		}
+	} else {
+		if (ImGui::Button("フリーカメラに戻す (F3)")) {
+			SetDebugCameraActive(true);
+		}
+	}
+
+	DrawSimulationSaveControls();
+
+	ImGui::Separator();
 	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
 	ImGui::Combo("カテゴリ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
 	ImGui::Separator();
@@ -1759,13 +2883,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			ImGui::Text("プレイヤーが初期化されていません。");
 		}
 	} else if (currentSimulationTarget_ == 1) {
-		ImGui::Text("ミサイル軌道設定");
-		ImGui::SliderFloat("速度", &missileSpeed, 0.01f, 0.2f);
-		ImGui::SliderFloat("X軸の旋回半径", &missileAmpX, 0.0f, 50.0f);
-		ImGui::SliderFloat("Z軸の旋回半径", &missileAmpZ, 0.0f, 50.0f);
-		ImGui::SliderFloat("上下の波打ち幅", &missileAmpY, 0.0f, 20.0f);
-		ImGui::SliderFloat("波打ちの細かさ", &missileFreqY, 0.1f, 20.0f);
-		ImGui::SliderFloat("基準高度", &missileBaseY, 0.0f, 20.0f);
+		DrawMissileSettingsUI();
 	} else if (currentSimulationTarget_ == 2) {
 		ImGui::Text("=== 敵の出現とルート ===");
 		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
@@ -1873,7 +2991,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 		ImGui::Text("カメラ設定");
 		if (isDebugCameraActive_) {
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[フリーカメラ アクティブ]");
-			if (ImGui::Button("自機追従カメラに戻る")) {
+			if (ImGui::Button("プレイヤー視点にする")) {
 				SetDebugCameraActive(false);
 			}
 			float moveSpeed = debugFlyCamera_->GetMoveSpeed();
@@ -1893,7 +3011,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 				debugFlyCamera_->SetTranslate({ flyPosArr[0], flyPosArr[1], flyPosArr[2] });
 			}
 		} else {
-			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[自機追従カメラ アクティブ]");
+			ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "[プレイヤー視点 アクティブ]");
 			if (ImGui::Button("フリーカメラに切り替え")) {
 				SetDebugCameraActive(true);
 			}
@@ -1918,10 +3036,12 @@ void GamePlayScene::UpdateUI() {
 		}
 
 		ImGui::Begin("Simulation");
-		ImGui::Text("Simulation tools are on a dedicated screen.");
-		if (ImGui::Button("Open Simulation Screen (F2)")) {
+		ImGui::Text("シミュレーション設定");
+		ImGui::TextWrapped("保存済み設定の読み込みはここで行えます。細かい保存や確認は専用画面を開いてください。");
+		if (ImGui::Button("シミュレーション画面を開く (F2)")) {
 			LaunchSimulationExecutable();
 		}
+		DrawGameplayActionControls();
 		ImGui::End();
 		if (false) {
 
@@ -1961,13 +3081,7 @@ void GamePlayScene::UpdateUI() {
 				}
 			}
 			else if (currentSimulationTarget_ == 1) {
-				ImGui::Text("ミサイル軌道設定");
-				ImGui::SliderFloat("速度", &missileSpeed, 0.01f, 0.2f);
-				ImGui::SliderFloat("X軸の旋回半径", &missileAmpX, 0.0f, 50.0f);
-				ImGui::SliderFloat("Z軸の旋回半径", &missileAmpZ, 0.0f, 50.0f);
-				ImGui::SliderFloat("上下の波打ち幅", &missileAmpY, 0.0f, 20.0f);
-				ImGui::SliderFloat("波打ちの細かさ", &missileFreqY, 0.1f, 20.0f);
-				ImGui::SliderFloat("基準高度", &missileBaseY, 0.0f, 20.0f);
+				DrawMissileSettingsUI();
 			}
 			else if (currentSimulationTarget_ == 2) {
 				ImGui::Text("=== 敵の出現とルート ===");
@@ -2162,10 +3276,12 @@ void GamePlayScene::UpdateUI() {
 			if (myModelObject->GetModel()) {
 				myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 			}
+			showModel = true;
+			enableSkinning = true;
 
 			// モデルに応じた適切なスケールを自動設定する
 			if (currentAnimationIndex == 0) {
-				modelScale = 0.01f; // AnimatedCubeは巨大なので縮小
+				modelScale = 1.0f;
 			} else {
 				modelScale = 1.0f;  // simpleSkinなどは等倍で人間サイズ
 			}
@@ -2183,15 +3299,7 @@ void GamePlayScene::UpdateUI() {
 		ImGui::SliderFloat("アルファリファレンス", &cylinderAlphaReference, 0.0f, 1.0f);
 
 		ImGui::Separator();
-		ImGui::Text("ミサイル軌跡設定"); // ミサイル軌道設定
-
-		// スライダーで各パラメータを調整できるようにする
-		ImGui::SliderFloat("スピード", &missileSpeed, 0.01f, 0.2f);
-		ImGui::SliderFloat("X軸の旋回半径", &missileAmpX, 0.0f, 50.0f);
-		ImGui::SliderFloat("Z軸の旋回半径", &missileAmpZ, 0.0f, 50.0f);
-		ImGui::SliderFloat("上下の波打ち幅", &missileAmpY, 0.0f, 20.0f);
-		ImGui::SliderFloat("波打ちの細かさ", &missileFreqY, 0.1f, 20.0f);
-		ImGui::SliderFloat("基準高度", &missileBaseY, 0.0f, 20.0f);
+		DrawMissileSettingsUI();
 
 		bool cChanged = false;
 		if (ImGui::SliderInt("Subdivision##Cyl", &cylinderSubdivision, 3, 128)) cChanged = true;

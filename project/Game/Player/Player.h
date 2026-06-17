@@ -35,12 +35,18 @@ public:
     // 描画
     void Draw();
 
-    // カメラを自機の背後に追従させる
+    // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
+    void UpdateModel();
+
+    // カメラへの追従（Debug用のカメラではなく、本番用カメラをプレイヤーの後ろに置く処理）
     void UpdateCamera(Camera *camera);
 
     // ゲッター
     Vector3 GetPosition() const { return position_; }
     Quaternion GetQuaternion() const { return quaternion_; }
+    Vector3 GetWorldHalfExtents() const;
+    float GetCollisionRadius() const;
+    OBB GetOBB() const;
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
     // セッター

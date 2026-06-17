@@ -81,8 +81,18 @@ OBB Obstacle::GetOBB() const {
     obb.center = position_;
     obb.size = GetWorldHalfExtents();
     Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(rotation_.x), MyMath::MakeRotateYMatrix(rotation_.y)), MyMath::MakeRotateZMatrix(rotation_.z));
-    obb.orientations[0] = { rotMat.m[0][0], rotMat.m[0][1], rotMat.m[0][2] };
-    obb.orientations[1] = { rotMat.m[1][0], rotMat.m[1][1], rotMat.m[1][2] };
-    obb.orientations[2] = { rotMat.m[2][0], rotMat.m[2][1], rotMat.m[2][2] };
+    obb.orientations[0] = MyMath::Normalize(Vector3{ rotMat.m[0][0], rotMat.m[0][1], rotMat.m[0][2] });
+    obb.orientations[1] = MyMath::Normalize(Vector3{ rotMat.m[1][0], rotMat.m[1][1], rotMat.m[1][2] });
+    obb.orientations[2] = MyMath::Normalize(Vector3{ rotMat.m[2][0], rotMat.m[2][1], rotMat.m[2][2] });
+    if (object_ && object_->GetModel()) {
+        Vector3 localCenter = object_->GetModel()->GetBoundsCenter();
+        Vector3 scaledCenter = { localCenter.x * scale_.x, localCenter.y * scale_.y, localCenter.z * scale_.z };
+        Vector3 rotatedCenter = MyMath::Transform(scaledCenter, rotMat);
+        obb.center = {
+            position_.x + rotatedCenter.x,
+            position_.y + rotatedCenter.y,
+            position_.z + rotatedCenter.z,
+        };
+    }
     return obb;
 }

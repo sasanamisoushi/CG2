@@ -31,30 +31,17 @@ public:
     // 描画
     void Draw();
 
+    // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
+    void UpdateModel();
+
     // ミサイルに狙われるためのゲッター
     Vector3 GetPosition() const { return position_; }
     Vector3 GetRotation() const { return rotation_; }
     Vector3 GetScale() const { return scale_; }
 
-    Vector3 GetWorldHalfExtents() const {
-        auto absf = [](float value) { return value < 0.0f ? -value : value; };
-        Vector3 absScale = { absf(scale_.x), absf(scale_.y), absf(scale_.z) };
-
-        if (object_ && object_->GetModel()) {
-            Vector3 localHalf = object_->GetModel()->GetHalfExtents();
-            return { localHalf.x * absScale.x, localHalf.y * absScale.y, localHalf.z * absScale.z };
-        }
-
-        return absScale;
-    }
-
-    float GetCollisionRadius() const {
-        Vector3 halfExtents = GetWorldHalfExtents();
-        float radius = halfExtents.x;
-        if (halfExtents.y > radius) radius = halfExtents.y;
-        if (halfExtents.z > radius) radius = halfExtents.z;
-        return radius;
-    }
+    Vector3 GetWorldHalfExtents() const;
+    float GetCollisionRadius() const;
+    OBB GetOBB() const;
 
     // ミサイルと衝突したときの処理
     void OnCollision();

@@ -69,19 +69,13 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
         if (!hitObstacle) {
             for (auto &enemy : enemies) {
                 if (!enemy->IsDead() && !missile->IsDead()) {
-                    Vector3 ePos = enemy->GetPosition();
-                    float dx = ePos.x - mPos.x;
-                    float dy = ePos.y - mPos.y;
-                    float dz = ePos.z - mPos.z;
-                    float distSq = dx * dx + dy * dy + dz * dz;
-
-                    float radius = missile->GetCollisionRadius() + enemy->GetCollisionRadius();
-                    if (distSq <= radius * radius) {
+                    OBB enemyOBB = enemy->GetOBB();
+                    if (MyMath::IsCollision(bulletSphere, enemyOBB)) {
                         missile->OnCollision();
                         enemy->TakeDamage(1);
 
                         // 当たった場所（敵の中心）を爆発リストに報告！
-                        hitPositions.push_back(ePos);
+                        hitPositions.push_back(enemy->GetPosition());
                     }
                 }
             }
@@ -98,16 +92,22 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
     }
 }
 
+void MissileManager::UpdateModels(Camera *camera) {
+    for (const auto &missile : missiles_) {
+        missile->UpdateModel(camera);
+    }
+}
+
 void MissileManager::Draw() {
 	for (const auto &missile : missiles_) {
 		missile->Draw();
 	}
 }
 
-void MissileManager::Shoot(const Vector3 &position, const Vector3 &velocity, MissileType type) {
+void MissileManager::Shoot(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning) {
 	// 新しいミサイルを生み出してリストに追加する
 	auto newMissile = std::make_unique<Missile>();
-	newMissile->Initialize(position, velocity, type);
+	newMissile->Initialize(position, velocity, type, tuning);
 
 	missiles_.push_back(std::move(newMissile));
 }

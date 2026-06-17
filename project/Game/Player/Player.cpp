@@ -21,6 +21,34 @@ namespace {
 		return { value.x * scalar, value.y * scalar, value.z * scalar };
 	}
 
+	float Dot(const Vector3 &a, const Vector3 &b) {
+		return a.x * b.x + a.y * b.y + a.z * b.z;
+	}
+
+	float Abs(float value) {
+		return value < 0.0f ? -value : value;
+	}
+
+	Vector3 AbsVector(const Vector3 &value) {
+		return { Abs(value.x), Abs(value.y), Abs(value.z) };
+	}
+
+	float ProjectionRadius(const OBB &obb, const Vector3 &axis) {
+		return obb.size.x * Abs(Dot(obb.orientations[0], axis)) +
+			obb.size.y * Abs(Dot(obb.orientations[1], axis)) +
+			obb.size.z * Abs(Dot(obb.orientations[2], axis));
+	}
+
+	float GetAxisSize(const Vector3 &value, int axisIndex) {
+		if (axisIndex == 0) return value.x;
+		if (axisIndex == 1) return value.y;
+		return value.z;
+	}
+
+	Vector3 ComposeFromAxes(const OBB &basis, const Vector3 &amount) {
+		return Add(Add(Scale(basis.orientations[0], amount.x), Scale(basis.orientations[1], amount.y)), Scale(basis.orientations[2], amount.z));
+	}
+
 	Vector3 NormalizeOrZero(const Vector3 &value) {
 		const float length = Length(value);
 		if (length <= 0.0001f) {
@@ -35,6 +63,17 @@ namespace {
 			return value;
 		}
 		return Scale(value, maxLength / length);
+	}
+
+	Quaternion MakeLevelYawQuaternion(const Quaternion &sourceRotation) {
+		const Vector3 forward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, sourceRotation);
+		Vector3 flatForward = NormalizeOrZero({ forward.x, 0.0f, forward.z });
+		if (LengthSq(flatForward) <= 0.0001f) {
+			flatForward = { 0.0f, 0.0f, 1.0f };
+		}
+
+		const float yaw = std::atan2(flatForward.x, flatForward.z);
+		return MyMath::Normalize(MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw));
 	}
 }
 
@@ -107,6 +146,10 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 	Move();
 	CheckCollision(obstacles);
 
+    UpdateModel();
+}
+
+void Player::UpdateModel() {
     int idx = static_cast<int>(currentMode_);
     if (objects_[idx]) {
 	    objects_[idx]->SetTranslate(position_);
@@ -122,9 +165,51 @@ void Player::Draw() {
 	}
 }
 
+Vector3 Player::GetWorldHalfExtents() const {
+	const int idx = static_cast<int>(currentMode_);
+	if (!objects_[idx] || !objects_[idx]->GetModel()) {
+		return { 0.2f, 0.2f, 0.2f };
+	}
+
+	const Vector3 localHalf = objects_[idx]->GetModel()->GetHalfExtents();
+	const Vector3 scale = AbsVector(objects_[idx]->GetScale());
+	return { localHalf.x * scale.x, localHalf.y * scale.y, localHalf.z * scale.z };
+}
+
+float Player::GetCollisionRadius() const {
+	const Vector3 halfExtents = GetWorldHalfExtents();
+	float radius = halfExtents.x;
+	if (halfExtents.y > radius) radius = halfExtents.y;
+	if (halfExtents.z > radius) radius = halfExtents.z;
+	return radius;
+}
+
+OBB Player::GetOBB() const {
+	OBB obb{};
+	obb.center = position_;
+	obb.size = GetWorldHalfExtents();
+
+	Matrix4x4 rotationMatrix = MyMath::MakeRotateMatrix(quaternion_);
+	obb.orientations[0] = MyMath::Normalize(Vector3{ rotationMatrix.m[0][0], rotationMatrix.m[0][1], rotationMatrix.m[0][2] });
+	obb.orientations[1] = MyMath::Normalize(Vector3{ rotationMatrix.m[1][0], rotationMatrix.m[1][1], rotationMatrix.m[1][2] });
+	obb.orientations[2] = MyMath::Normalize(Vector3{ rotationMatrix.m[2][0], rotationMatrix.m[2][1], rotationMatrix.m[2][2] });
+
+	const int idx = static_cast<int>(currentMode_);
+	if (objects_[idx] && objects_[idx]->GetModel()) {
+		const Vector3 localCenter = objects_[idx]->GetModel()->GetBoundsCenter();
+		const Vector3 scale = objects_[idx]->GetScale();
+		const Vector3 scaledCenter = { localCenter.x * scale.x, localCenter.y * scale.y, localCenter.z * scale.z };
+		const Vector3 rotatedCenter = MyMath::Transform(scaledCenter, rotationMatrix);
+		obb.center = Add(position_, rotatedCenter);
+	}
+
+	return obb;
+}
+
 void Player::UpdateCamera(Camera *camera) {
 	Vector3 offset = { 0.0f, 2.0f, -12.0f };
-	Vector3 rotatedOffset = MyMath::RotateVector(offset, quaternion_);
+	Quaternion levelCameraRotation = MakeLevelYawQuaternion(quaternion_);
+	Vector3 rotatedOffset = MyMath::RotateVector(offset, levelCameraRotation);
 	Vector3 camPos = {
 		position_.x + rotatedOffset.x,
 		position_.y + rotatedOffset.y,
@@ -133,7 +218,7 @@ void Player::UpdateCamera(Camera *camera) {
 
 	camera->SetTranslate(camPos);
 	camera->SetRotate({ 0,0,0 });
-	camera->SetQuaternion(quaternion_);
+	camera->SetQuaternion(levelCameraRotation);
 }
 
 Vector3 Player::GetForwardVector() const {
@@ -357,75 +442,79 @@ void Player::UpdateLockOnRotation(const Vector3& targetPos) {
 }
 
 void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
-	Vector3 playerHalf = { 0.2f, 0.2f, 0.2f };
+	OBB playerOBB = GetOBB();
 
 	for (const auto &obstacle : obstacles) {
-		Vector3 obsPos = obstacle->GetPosition();
-		Vector3 obsRot = obstacle->GetRotation();
-		Vector3 obsHalf = obstacle->GetWorldHalfExtents();
+		if (!obstacle) {
+			continue;
+		}
 
-		Matrix4x4 rotMat = MyMath::Multiply(MyMath::Multiply(MyMath::MakeRoteXMatrix(obsRot.x), MyMath::MakeRotateYMatrix(obsRot.y)), MyMath::MakeRotateZMatrix(obsRot.z));
-		Matrix4x4 invRotMat = MyMath::Transpose(rotMat);
-
-		Vector3 diff = { position_.x - obsPos.x, position_.y - obsPos.y, position_.z - obsPos.z };
-		Vector3 localDiff = MyMath::Transform(diff, invRotMat);
-
-		float dx = localDiff.x;
-		float dy = localDiff.y;
-		float dz = localDiff.z;
-
-		float halfWidth = playerHalf.x + obsHalf.x;
-		float halfHeight = playerHalf.y + obsHalf.y;
-		float halfDepth = playerHalf.z + obsHalf.z;
+		const OBB obsOBB = obstacle->GetOBB();
+		const Vector3 diff = {
+			playerOBB.center.x - obsOBB.center.x,
+			playerOBB.center.y - obsOBB.center.y,
+			playerOBB.center.z - obsOBB.center.z,
+		};
+		const float localDistance[3] = {
+			Dot(diff, obsOBB.orientations[0]),
+			Dot(diff, obsOBB.orientations[1]),
+			Dot(diff, obsOBB.orientations[2]),
+		};
+		const float playerProjection[3] = {
+			ProjectionRadius(playerOBB, obsOBB.orientations[0]),
+			ProjectionRadius(playerOBB, obsOBB.orientations[1]),
+			ProjectionRadius(playerOBB, obsOBB.orientations[2]),
+		};
 
 		if (obstacle->IsStageBounds()) {
 			Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 
-			if (dx > obsHalf.x - playerHalf.x) {
-				localPushOut.x = (obsHalf.x - playerHalf.x) - dx;
-			} else if (dx < -(obsHalf.x - playerHalf.x)) {
-				localPushOut.x = -(obsHalf.x - playerHalf.x) - dx;
-			}
-
-			if (dy > obsHalf.y - playerHalf.y) {
-				localPushOut.y = (obsHalf.y - playerHalf.y) - dy;
-			} else if (dy < -(obsHalf.y - playerHalf.y)) {
-				localPushOut.y = -(obsHalf.y - playerHalf.y) - dy;
-			}
-
-			if (dz > obsHalf.z - playerHalf.z) {
-				localPushOut.z = (obsHalf.z - playerHalf.z) - dz;
-			} else if (dz < -(obsHalf.z - playerHalf.z)) {
-				localPushOut.z = -(obsHalf.z - playerHalf.z) - dz;
+			for (int axis = 0; axis < 3; ++axis) {
+				const float limit = (std::max)(0.0f, GetAxisSize(obsOBB.size, axis) - playerProjection[axis]);
+				if (localDistance[axis] > limit) {
+					if (axis == 0) localPushOut.x = limit - localDistance[axis];
+					if (axis == 1) localPushOut.y = limit - localDistance[axis];
+					if (axis == 2) localPushOut.z = limit - localDistance[axis];
+				} else if (localDistance[axis] < -limit) {
+					if (axis == 0) localPushOut.x = -limit - localDistance[axis];
+					if (axis == 1) localPushOut.y = -limit - localDistance[axis];
+					if (axis == 2) localPushOut.z = -limit - localDistance[axis];
+				}
 			}
 
 			if (localPushOut.x != 0.0f || localPushOut.y != 0.0f || localPushOut.z != 0.0f) {
-				Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+				Vector3 worldPushOut = ComposeFromAxes(obsOBB, localPushOut);
 				position_.x += worldPushOut.x;
 				position_.y += worldPushOut.y;
 				position_.z += worldPushOut.z;
+				playerOBB.center = Add(playerOBB.center, worldPushOut);
 			}
 		} 
 		else {
-			float overlapX = halfWidth - std::abs(dx);
-			float overlapY = halfHeight - std::abs(dy);
-			float overlapZ = halfDepth - std::abs(dz);
+			if (!MyMath::IsCollision(playerOBB, obsOBB)) {
+				continue;
+			}
+
+			const float overlapX = obsOBB.size.x + playerProjection[0] - std::abs(localDistance[0]);
+			const float overlapY = obsOBB.size.y + playerProjection[1] - std::abs(localDistance[1]);
+			const float overlapZ = obsOBB.size.z + playerProjection[2] - std::abs(localDistance[2]);
 
 			if (overlapX > 0.0f && overlapY > 0.0f && overlapZ > 0.0f) {
 				Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 
 				if (overlapX < overlapY && overlapX < overlapZ) {
-					localPushOut.x = (dx > 0.0f) ? overlapX : -overlapX;
+					localPushOut.x = (localDistance[0] > 0.0f) ? overlapX : -overlapX;
 				} else if (overlapY < overlapX && overlapY < overlapZ) {
-					localPushOut.y = (dy > 0.0f) ? overlapY : -overlapY;
+					localPushOut.y = (localDistance[1] > 0.0f) ? overlapY : -overlapY;
 				} else {
-					localPushOut.z = (dz > 0.0f) ? overlapZ : -overlapZ;
+					localPushOut.z = (localDistance[2] > 0.0f) ? overlapZ : -overlapZ;
 				}
 
-				Vector3 worldPushOut = MyMath::Transform(localPushOut, rotMat);
+				Vector3 worldPushOut = ComposeFromAxes(obsOBB, localPushOut);
 				position_.x += worldPushOut.x;
 				position_.y += worldPushOut.y;
 				position_.z += worldPushOut.z;
+				playerOBB.center = Add(playerOBB.center, worldPushOut);
 			}
 		}
 	}

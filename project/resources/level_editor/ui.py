@@ -166,6 +166,16 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         path_row.operator(operators.MYADDON_OT_create_enemy_path.bl_idname, text="敵飛行パスを配置", icon='CURVE_BEZCURVE')
         path_row.operator(operators.MYADDON_OT_assign_selected_enemy_path.bl_idname, text="選択パスを敵に割り当て", icon='LINKED')
 
+        ai_box = layout.box()
+        ai_box.label(text="AI敵プラン")
+        ai_count_row = ai_box.row(align=True)
+        ai_count_row.prop(context.scene, "myaddon_ai_enemy_count", text="敵数")
+        ai_count_row.prop(context.scene, "myaddon_ai_enemy_seed", text="シード")
+        ai_box.prop(context.scene, "myaddon_ai_enemy_style", text="登場スタイル")
+        ai_box.prop(context.scene, "myaddon_ai_enemy_wave_delay", text="増援間隔(F)")
+        ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
+        ai_box.operator(operators.MYADDON_OT_ai_generate_enemy_plan.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+
         # エクスポート用の区切り線、ラベル、実行ボタン
         layout.separator()
         layout.label(text="Export")

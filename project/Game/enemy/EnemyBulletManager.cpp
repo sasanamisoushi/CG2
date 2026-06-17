@@ -6,7 +6,6 @@
 namespace {
     constexpr float kEnemyBulletScale = 0.2f;
     constexpr float kEnemyBulletRadius = 0.2f;
-    constexpr float kPlayerHitRadius = 0.4f;
 }
 
 void EnemyBulletManager::Initialize() {
@@ -66,26 +65,29 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
             continue; // 髫懷ｮｳ迚ｩ縺ｫ蠖薙◆縺｣縺溘ｉ莉･髯阪・蛻､螳壹・繧ｹ繧ｭ繝・・
         }
 
-        // 繝励Ξ繧､繝､繝ｼ縺ｮ蠎ｧ讓吶ｒ蜿門ｾ・
-        Vector3 playerPos = player->GetPosition();
-
         if (!player->IsDead()) {
-            float dx = playerPos.x - bullet.position.x;
-            float dy = playerPos.y - bullet.position.y;
-            float dz = playerPos.z - bullet.position.z;
-            float distSq = dx * dx + dy * dy + dz * dz;
-
-            // 蜊雁ｾ・m莉･蜀・↑繧峨ヲ繝・ヨ
-            if (distSq < kPlayerHitRadius * kPlayerHitRadius) {
+            OBB playerOBB = player->GetOBB();
+            if (MyMath::IsCollision(bulletSphere, playerOBB)) {
                 bullet.isDead = true; // 蠑ｾ繧呈ｶ医☆
 
                 // 繝励Ξ繧､繝､繝ｼ縺ｫ繝繝｡繝ｼ繧ｸ繧剃ｸ弱∴繧具ｼ亥偵☆・会ｼ・
                 player->TakeDamage(1);
 
                 // 蠖薙◆縺｣縺溷ｴ謇・郁・讖溘・蠎ｧ讓呻ｼ峨ｒ辷・匱繝ｪ繧ｹ繝医↓蝣ｱ蜻奇ｼ・
-                hitPositions.push_back(playerPos);
+                hitPositions.push_back(player->GetPosition());
             }
         }
+    }
+}
+
+void EnemyBulletManager::UpdateModels() {
+    for (auto &bullet : bullets_) {
+        if (bullet.isDead || !bullet.object) {
+            continue;
+        }
+
+        bullet.object->SetTranslate(bullet.position);
+        bullet.object->Update();
     }
 }
 

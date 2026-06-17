@@ -216,19 +216,40 @@ public:
 	// これに Object3d の scale を掛けると、ワールド空間での当たり判定サイズになる
 	Vector3 GetHalfExtents() const {
 		if (modelData.vertices.empty()) return { 1.0f, 1.0f, 1.0f };
-		float maxX = 0.0f, maxY = 0.0f, maxZ = 0.0f;
-		for (const auto& v : modelData.vertices) {
-			float ax = v.position.x < 0.0f ? -v.position.x : v.position.x;
-			float ay = v.position.y < 0.0f ? -v.position.y : v.position.y;
-			float az = v.position.z < 0.0f ? -v.position.z : v.position.z;
-			if (ax > maxX) maxX = ax;
-			if (ay > maxY) maxY = ay;
-			if (az > maxZ) maxZ = az;
+		float minX = modelData.vertices[0].position.x;
+		float minY = modelData.vertices[0].position.y;
+		float minZ = modelData.vertices[0].position.z;
+		float maxX = minX;
+		float maxY = minY;
+		float maxZ = minZ;
+		for (const auto &v : modelData.vertices) {
+			if (v.position.x < minX) minX = v.position.x;
+			if (v.position.y < minY) minY = v.position.y;
+			if (v.position.z < minZ) minZ = v.position.z;
+			if (v.position.x > maxX) maxX = v.position.x;
+			if (v.position.y > maxY) maxY = v.position.y;
+			if (v.position.z > maxZ) maxZ = v.position.z;
 		}
-		if (maxX == 0.0f) maxX = 1.0f;
-		if (maxY == 0.0f) maxY = 1.0f;
-		if (maxZ == 0.0f) maxZ = 1.0f;
-		return { maxX, maxY, maxZ };
+		return { (maxX - minX) * 0.5f, (maxY - minY) * 0.5f, (maxZ - minZ) * 0.5f };
+	}
+
+	Vector3 GetBoundsCenter() const {
+		if (modelData.vertices.empty()) return { 0.0f, 0.0f, 0.0f };
+		float minX = modelData.vertices[0].position.x;
+		float minY = modelData.vertices[0].position.y;
+		float minZ = modelData.vertices[0].position.z;
+		float maxX = minX;
+		float maxY = minY;
+		float maxZ = minZ;
+		for (const auto &v : modelData.vertices) {
+			if (v.position.x < minX) minX = v.position.x;
+			if (v.position.y < minY) minY = v.position.y;
+			if (v.position.z < minZ) minZ = v.position.z;
+			if (v.position.x > maxX) maxX = v.position.x;
+			if (v.position.y > maxY) maxY = v.position.y;
+			if (v.position.z > maxZ) maxZ = v.position.z;
+		}
+		return { (minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f };
 	}
 
 private:
