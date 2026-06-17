@@ -5,3 +5,7 @@ PowerShell: コマンド冒頭に [Console]::OutputEncoding = [System.Text.Encod
 CMD: コマンド冒頭に chcp 65001 > nul && を付与
 Python実行時: $env:PYTHONUTF8=1; を前置
 ファイル書き込み(Set-Content等): -Encoding UTF8 を必ず明示
+
+
+
+ビルドを通っているか確認してほしい通らなかったら通るように書き直してほしい

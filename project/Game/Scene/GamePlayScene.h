@@ -1,23 +1,41 @@
 #pragma once
 #include "engine/Camera/Camera.h"
+#include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
 #include "3D/Object3d.h"
 #include "engine/Particle/ParticleManager.h"
 #include "engine/Particle/ParticleEmitter.h"
+#include "engine/Particle/ExplosionManager.h"
 #include "engine/Audio/AudioManager.h"
+#include "engine/Utility/StageLoader.h"
 #include "Game/base/BaseScene.h"
+#include "Game/Player/Player.h"
 #include "3D/Skybox.h"
 #include "3D/primitive.h"
 #include "3D/Animation.h"
 #include "3D/Model.h"
 #include "3D/Trail.h"
+#include "Game/bullet/MissileManager.h"
+#include "Game/enemy/Enemy.h"
+#include "Game/enemy/EnemyBulletManager.h"
+#include "Game/enemy/EnemyEventManager.h"
+#include "Game/obstacle/Obstacle.h"
 #include <memory>
 #include <vector>
+#include <list>
+#include <string>
+#include <filesystem>
 
 
 
 class GamePlayScene :public BaseScene {
 public:
+	enum class Mode {
+		Gameplay,
+		Simulation
+	};
+
+	explicit GamePlayScene(Mode mode = Mode::Gameplay);
 
 	//初期化
 	void Initialize() override;
@@ -33,7 +51,38 @@ public:
 
 	// UIの更新
 	void UpdateUI();
+
 private:
+	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
+	void DrawOverlay();
+	void DrawSimulationScreenUI();
+	void DrawSimulationSaveControls();
+	void DrawGameplayActionControls();
+	void DrawMissileSettingsUI();
+	void SetDebugCameraActive(bool isActive);
+	void ReloadSceneJson();
+	void ResetEditorPreview();
+	MissileTuning MakeMissileTuning(MissileType type) const;
+	void FirePlayerMissile(MissileType type);
+	bool SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath);
+	bool SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName);
+	bool ApplySimulationAction(const std::string &filePath, const std::string &actionName);
+	void RefreshSimulationActionNames();
+	bool SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
+	bool ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
+	void RefreshMissilePresetNames();
+	void SpawnEnemiesFromSpawnPoints();
+	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
+	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
+	void TriggerEnemyReinforcements(const std::string &deadEnemyName);
+	void UpdateEnemyRespawns();
+	bool IsEnemySpawnPointActive(size_t spawnPointIndex) const;
+	void UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame);
+	Enemy *FindLockOnTarget(Camera *activeCamera) const;
+	bool IsLockedEnemyAlive() const;
+	void UpdateGameplayCamera();
+	void UpdateCinematicLockOnCamera();
+	Mode mode_ = Mode::Gameplay;
 
 	//シーンリソース
 	std::unique_ptr<Camera> camera;
@@ -119,22 +168,98 @@ private:
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
 
+	// デバッグ用のコライダー描画
+	std::unique_ptr<Object3d> debugColliderLinesObject;
+	bool showDebugColliders = true;
+
+	// =====================================================
+	// デバッグ用フリーカメラ
+	// フリーカメラ中は WASD: 移動, 矢印: 回転, Q/E: ロール
+	// =====================================================
+	std::unique_ptr<FlyCamera> debugFlyCamera_;
+	bool isDebugCameraActive_ = false;
+	bool isEditorPreviewPlaying_ = true;
+	bool isCinematicLockOnCameraEnabled_ = true;
+	bool isCinematicLockOnCameraInitialized_ = false;
+	Vector3 cinematicLockOnCameraPosition_ = { 0.0f, 0.0f, 0.0f };
+	Quaternion cinematicLockOnCameraRotation_ = { 0.0f, 0.0f, 0.0f, 1.0f };
+	Vector3 cinematicLockOnCameraFocus_ = { 0.0f, 0.0f, 0.0f };
+	Vector3 cinematicLockOnCameraBackDirection_ = { 0.0f, 0.0f, 1.0f };
+	float cinematicLockOnCameraSideSign_ = 1.0f;
+	float cinematicLockOnCameraSeparation_ = 0.0f;
+
 	// UIと状態管理
 	bool showParticles = false;
-	bool showModel = false;
-	bool enableSkinning = false; // スキニング（ガワを動かす）の切り替え
-	float modelScale = 0.01f;
+	bool showModel = true;
+	bool enableSkinning = true; // スキニング（ガワを動かす）の切り替え
+	float modelScale = 1.0f;
 	int currentAnimationIndex = 0;
 
 
 	std::unique_ptr<Trail> missileTrail;        // 軌跡の計算を行うクラス
 	std::unique_ptr<Object3d> trailObject;      // 軌跡を描画する実体
 
-	float missileSpeed = 0.05f;   // 飛ぶスピード
+	float missileNormalSpeed = 1.5f; // 通常弾の速度
+	float missileNormalScale = 0.3f;
+	float missileNormalCollisionRadius = 0.3f;
+	int missileNormalLifeTime = 120;
+	float missileSpeed = 0.75f;   // ホーミングミサイルの速度
 	float missileAmpX = 15.0f;   // X軸の旋回半径（振り幅）
 	float missileAmpZ = 15.0f;   // Z軸の旋回半径
 	float missileAmpY = 3.0f;    // 上下に波打つ高さ
 	float missileFreqY = 4.0f;    // 上下に波打つ細かさ（周波数）
 	float missileBaseY = 5.0f;    // 基準となる飛行高度
-};
+	float missileHomingStrength = 0.085f;
+	float missileHomingScale = 0.5f;
+	float missileHomingCollisionRadius = 0.5f;
+	float missileTrailWidth = 0.5f;
+	int missileLifeTime = 240;
+	float missileMuzzleOffset = 0.8f;
 
+	std::unique_ptr<Player> player_;
+
+	// 画面上に存在するすべてのミサイルを管理するリスト
+	std::unique_ptr<MissileManager> missileManager_;
+
+
+	// 敵
+	std::list<std::unique_ptr<Enemy>> enemies_;
+	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
+	std::vector<EnemySpawnData> enemySpawns_;
+	std::vector<int> enemyRespawnTimers_;
+	EnemyEventManager enemyEventManager_;
+	Enemy *lockedEnemy_ = nullptr;
+
+
+	// 障害物
+	std::list<std::unique_ptr<Obstacle>> obstacles_;
+
+	// ImGuiで敵を出すための座標変数
+	float newEnemyPos[3] = { 0.0f, 0.0f, 50.0f };
+
+	// 爆破エフェクト
+	std::unique_ptr<ExplosionManager> explosionManager_;
+
+	// ゲームオーバー演出用
+	bool isGameOver_ = false;
+	int gameOverTimer_ = 0;
+
+	// シミュレーションツールUI用
+	bool showSimulationWindow_ = false;
+	int currentSimulationTarget_ = 0;
+	std::string simulationSaveMessage_;
+	char simulationActionName_[64] = "Action1";
+	std::vector<std::string> simulationActionNames_;
+	int selectedSimulationActionIndex_ = 0;
+	std::string simulationActionMessage_;
+	int simulationPlaybackMode_ = 0;
+	char missilePresetName_[64] = "MissilePreset1";
+	int missilePresetTypeIndex_ = 0;
+	std::vector<std::string> missilePresetNames_[2];
+	int selectedMissilePresetIndex_[2] = { 0, 0 };
+	std::string missilePresetMessage_;
+
+
+	// JSONファイルが最後に更新された日時を記録する変数
+	std::filesystem::file_time_type lastJsonWriteTime_;
+};

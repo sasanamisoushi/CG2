@@ -4,6 +4,17 @@
 
 class PostEffect {
 public:
+    static PostEffect* GetInstance() { return instance_; }
+
+    int GetEffectType() const { return param_.effectType; }
+    void SetEffectType(int type) { param_.effectType = type; }
+    void SetVignetteSmoothing(float radius, float softness, float blurIntensity) {
+        param_.effectType = 12;
+        param_.vignetteRadius = radius;
+        param_.vignetteSoftness = softness;
+        param_.blurIntensity = blurIntensity;
+    }
+
     // パラメータをまとめた構造体（HLSLと並びを合わせる）
     struct PostEffectParam {
         int effectType;
@@ -53,4 +64,5 @@ private:
         0.0f, 0.0f, 0.0f, 0.0f
     };
 
+    static PostEffect* instance_;
 };

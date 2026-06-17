@@ -96,7 +96,7 @@ void Sprite::Update() {
 	//ViewMatrixを作って単位行列を代入
 	Matrix4x4 viewMatrix = math->MakeIdentity4x4();
 	//ProjectionMatrixを作って並行投影行列を書き込む
-	Matrix4x4 projectionMatrix = math->MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::kClientWidth), float(WinApp::kClientHeight), 0.0f, 100.0f);
+	Matrix4x4 projectionMatrix = math->MakeOrthographicMatrix(0.0f, 0.0f, float(WinApp::GetClientWidth()), float(WinApp::GetClientHeight()), 0.0f, 100.0f);
 
 	transformationMatrixData->WVP = math->Multiply(worldMatrix, math->Multiply(viewMatrix, projectionMatrix));
 	transformationMatrixData->World = worldMatrix;

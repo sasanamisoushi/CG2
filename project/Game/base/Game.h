@@ -23,6 +23,8 @@ public:
 private:
 
 	//シーンファクトリー
+	void HandleResize();
+
 	std::unique_ptr<AbstractSceneFactory> sceneFactory_;
 
 	// オフスクリーンレンダリング用のテクスチャ
@@ -39,5 +41,8 @@ private:
 
 	// ImGuiを表示するかどうか
 	bool showImGui_ = true;
+
+	uint32_t renderWidth_ = 0;
+	uint32_t renderHeight_ = 0;
 };
 

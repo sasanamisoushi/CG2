@@ -1,0 +1,11 @@
+{
+  "count": 48,
+  "color": [1, 0.24, 0.02, 0.9],
+  "speed": 0.06,
+  "speedVariance": 0.025,
+  "scale": 0.32,
+  "scaleVariance": 0.12,
+  "lifeTimeMin": 0.35,
+  "lifeTimeMax": 0.65,
+  "posVariance": 0.45
+}

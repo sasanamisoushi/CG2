@@ -2,6 +2,10 @@
 #include <WinUser.h>
 #include <combaseapi.h>
 #include <cstdint>
+#include <algorithm>
+#include <cwctype>
+#include <filesystem>
+#include <string>
 
 
 #pragma comment(lib,"winmm.lib")
@@ -10,6 +14,9 @@
 #include <strsafe.h>
 #include <DbgHelp.h>
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+int32_t WinApp::currentClientWidth_ = WinApp::kClientWidth;
+int32_t WinApp::currentClientHeight_ = WinApp::kClientHeight;
 
 
 //ウィンドウプロシージャ
@@ -20,6 +27,16 @@ LRESULT CALLBACK WinApp::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 
 	//メッセージに応じてゲーム固有の処理を行う
 	switch (msg) {
+	case WM_SIZE:
+		if (wparam != SIZE_MINIMIZED) {
+			int32_t width = static_cast<int32_t>(LOWORD(lparam));
+			int32_t height = static_cast<int32_t>(HIWORD(lparam));
+			if (width > 0 && height > 0) {
+				currentClientWidth_ = width;
+				currentClientHeight_ = height;
+			}
+		}
+		return 0;
 		//ウィンドウが破棄された
 	case WM_DESTROY:
 		//OSに対して、アプリの終了を伝える
@@ -83,9 +100,20 @@ void WinApp::Initialize() {
 
 
 	//ウィンドウの生成
+	wchar_t modulePath[MAX_PATH] = {};
+	std::wstring windowTitle = L"CG2";
+	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) != 0) {
+		std::wstring exeName = std::filesystem::path(modulePath).stem().wstring();
+		std::transform(exeName.begin(), exeName.end(), exeName.begin(), [](wchar_t c) {
+			return static_cast<wchar_t>(std::towlower(c));
+		});
+		if (exeName.find(L"simulation") != std::wstring::npos) {
+			windowTitle = L"CG2 Simulation";
+		}
+	}
 	hwnd = CreateWindow(
 		wc.lpszClassName,
-		L"CG2",
+		windowTitle.c_str(),
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
@@ -95,6 +123,11 @@ void WinApp::Initialize() {
 		nullptr,
 		wc.hInstance,
 		nullptr);
+
+	RECT clientRect{};
+	GetClientRect(hwnd, &clientRect);
+	currentClientWidth_ = clientRect.right - clientRect.left;
+	currentClientHeight_ = clientRect.bottom - clientRect.top;
 
 	//ウインドウを表示する
 	ShowWindow(hwnd, SW_SHOW);

@@ -37,6 +37,30 @@
     <Filter Include="ソース ファイル\Graphics">
       <UniqueIdentifier>{a1f53c9b-6171-43c1-b31c-02e0b2f1383d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ソース ファイル\Utility">
+      <UniqueIdentifier>{e83b4b88-1234-4bc8-8ae8-2004d2ad90ab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Utility">
+      <UniqueIdentifier>{e83b4b88-1234-4bc8-8ae8-2004d2ad90ac}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Game">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Game\editor">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2fe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game\editor">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ソース ファイル\Game\obstacle">
+      <UniqueIdentifier>{5fc737f1-c7a5-4376-a066-2a32d752a2fd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\Game\obstacle">
+      <UniqueIdentifier>{93995380-89bd-4b04-88eb-625fbe52ebfe}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="engine\base\main.cpp">
@@ -108,6 +132,9 @@
     <ClCompile Include="Game\Scene\TitleScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Scene\GameOverScene.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
     <ClCompile Include="engine\Scene\SceneManager.cpp">
       <Filter>ソース ファイル\scene</Filter>
     </ClCompile>
@@ -158,6 +185,39 @@
     </ClCompile>
     <ClCompile Include="3D\Trail.cpp">
       <Filter>ソース ファイル\3d</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Player\Player.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\bullet\Missile.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\bullet\MissileManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\enemy\Enemy.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Particle\ExplosionManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\enemy\EnemyBulletManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\enemy\EnemyEventManager.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Utility\JsonHelper.cpp">
+      <Filter>ソース ファイル\Utility</Filter>
+    </ClCompile>
+    <ClCompile Include="engine\Utility\StageLoader.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\editor\EditorReceiver.cpp">
+      <Filter>ソース ファイル\Game\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\obstacle\Obstacle.cpp">
+      <Filter>ソース ファイル\Game\obstacle</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -239,6 +299,9 @@
     <ClInclude Include="Game\Scene\TitleScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="Game\Scene\GameOverScene.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
     <ClInclude Include="Game\base\BaseScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
@@ -289,6 +352,42 @@
     </ClInclude>
     <ClInclude Include="3D\Trail.h">
       <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Player\Player.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\bullet\Missile.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\bullet\MissileManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\enemy\Enemy.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Particle\ExplosionManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\enemy\EnemyBulletManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\enemy\EnemyEventManager.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Utility\JsonHelper.h">
+      <Filter>ヘッダー ファイル\Utility</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Utility\StageLoader.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="engine\Utility\StageValidation.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\editor\EditorReceiver.h">
+      <Filter>ヘッダー ファイル\Game\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\obstacle\Obstacle.h">
+      <Filter>ヘッダー ファイル\Game\obstacle</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

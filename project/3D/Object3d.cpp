@@ -38,6 +38,7 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 }
 
 void Object3d::Update() {
+	camera = object3dCommon->GetDefaultCamera();
 
 	//transform.rotate.y += 0.01f;
 
@@ -74,7 +75,7 @@ void Object3d::Update() {
 	}
 
 	//projectionMatrix
-	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::kClientWidth) / float(WinApp::kClientHeight), 0.1f, 100.0f);
+	Matrix4x4 projectionMatrix = math->MakePerspectiveFovMatrix(0.45f, float(WinApp::GetClientWidth()) / float(WinApp::GetClientHeight()), 0.1f, 100.0f);
 
 	//worldViewProjectionMatrix
 	Matrix4x4 worldViewProjectionMatrix;
@@ -97,6 +98,10 @@ void Object3d::Draw() {
 
 	if (model == nullptr) {
 		return;
+	}
+
+	if (model->GetModelData().isLine) {
+		object3dCommon->SetLineDrawSettings();
 	}
 
 	// スキニング実行

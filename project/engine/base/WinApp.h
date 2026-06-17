@@ -26,11 +26,15 @@ public:
 	//getter
 	HWND GetHwnd() const { return hwnd; }
 	HINSTANCE GetHinstance() const { return wc.hInstance; }
+	static int32_t GetClientWidth() { return currentClientWidth_; }
+	static int32_t GetClientHeight() { return currentClientHeight_; }
 
 public: //定数
 	//クライアント領域のサイズ
 	static const int32_t kClientWidth = 1280;
 	static const int32_t kClientHeight = 720;
+	static int32_t currentClientWidth_;
+	static int32_t currentClientHeight_;
 
 private:
 

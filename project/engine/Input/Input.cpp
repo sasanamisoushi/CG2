@@ -32,6 +32,18 @@ void Input::Initialize(WinApp* winApp) {
 	//排他制御レベルのセット
 	result = keyboard->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(result));
+
+	// ===========================
+	// マウスデバイスの初期化
+	// ===========================
+	result = directInput->CreateDevice(GUID_SysMouse, &mouse_, NULL);
+	if (SUCCEEDED(result)) {
+		result = mouse_->SetDataFormat(&c_dfDIMouse);        // 標準マウス形式
+		if (SUCCEEDED(result)) {
+			// DISCL_NONEXCLUSIVE: 他のアプリとマウスを共有する（ImGuiと共存できる）
+			result = mouse_->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+		}
+	}
 }
 
 void Input::Update() {
@@ -43,6 +55,24 @@ void Input::Update() {
 	keyboard->Acquire();
 	//全キーの入力情報を取得する
 	keyboard->GetDeviceState(sizeof(key), key);
+
+	// ===========================
+	// マウス入力の更新
+	// ===========================
+	if (mouse_) {
+		// 前フレームの状態を保存
+		mouseStatePre_ = mouseState_;
+
+		// マウス情報の取得
+		mouse_->Acquire();
+		HRESULT hr = mouse_->GetDeviceState(sizeof(DIMOUSESTATE), &mouseState_);
+		if (FAILED(hr)) {
+			// 取得失敗（フォーカス喪失など）は差分をゼロにする
+			mouseState_.lX = 0;
+			mouseState_.lY = 0;
+			mouseState_.lZ = 0;
+		}
+	}
 
 }
 
@@ -65,4 +95,15 @@ bool Input::TriggerKey(BYTE keyNumber) {
 
 
 	return false;
+}
+
+bool Input::PushMouseButton(int button) const {
+	if (button < 0 || button > 3) return false;
+	return (mouseState_.rgbButtons[button] & 0x80) != 0;
+}
+
+bool Input::TriggerMouseButton(int button) const {
+	if (button < 0 || button > 3) return false;
+	return ((mouseState_.rgbButtons[button] & 0x80) != 0) &&
+	       ((mouseStatePre_.rgbButtons[button] & 0x80) == 0);
 }

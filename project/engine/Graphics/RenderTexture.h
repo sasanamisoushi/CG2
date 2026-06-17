@@ -9,20 +9,25 @@ class RenderTexture {
 public:
     // 初期化：テクスチャの幅と高さを指定
     void Initialize(uint32_t width, uint32_t height);
+    void Resize(uint32_t width, uint32_t height);
 
     // ゲッター
     ID3D12Resource *GetResource() const { return resource_.Get(); }
     D3D12_CPU_DESCRIPTOR_HANDLE GetRtvHandle() const { return rtvHandle_; }
     D3D12_GPU_DESCRIPTOR_HANDLE GetSrvHandle() const { return srvHandleGPU_; }
+    uint32_t GetWidth() const { return width_; }
+    uint32_t GetHeight() const { return height_; }
 
 private:
     Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
 
     // 描画先として使うためのハンドル (RTV)
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle_;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle_{};
 
     // 画像として使うためのハンドル (SRV)
-    D3D12_CPU_DESCRIPTOR_HANDLE srvHandleCPU_;
-    D3D12_GPU_DESCRIPTOR_HANDLE srvHandleGPU_;
+    D3D12_CPU_DESCRIPTOR_HANDLE srvHandleCPU_{};
+    D3D12_GPU_DESCRIPTOR_HANDLE srvHandleGPU_{};
 };
 
