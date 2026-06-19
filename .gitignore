@@ -328,4 +328,14 @@ generated/
 /project/imgui.ini
 .*pdb
 
+# Local secrets
+.env
+.env.*
+*.env
+secrets/
+
+# Blender stage files
+/project/resources/stage.blend
+/project/resources/stage.blend1
+
 

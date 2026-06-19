@@ -224,6 +224,13 @@ bool StageLoader::LoadSceneJson(
 
 				if (category == "PLAYER") {
 					if (player) {
+						if (objData.contains("model") && objData["model"].is_string()) {
+							std::string modelFile = objData["model"].get<std::string>();
+							if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
+								player->Initialize(modelFile);
+							}
+							player->SetScale(scale);
+						}
 						player->SetPosition(position);
 						player->SetRotation(rotation);
 					}

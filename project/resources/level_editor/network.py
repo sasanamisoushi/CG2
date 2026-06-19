@@ -47,7 +47,7 @@ def is_model_export_target(obj):
         return False
 
     category = getattr(obj, "game_obj_type", "NONE")
-    return category not in {"PLAYER", "ENEMY"}
+    return category != "ENEMY"
 
 
 def safe_filename_stem(name):

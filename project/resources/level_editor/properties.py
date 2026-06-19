@@ -48,9 +48,9 @@ def register():
         description="例: 時計回りに一周 / 左右にジグザグしながら上昇 / まっすぐ突撃",
         default="左右に旋回して接近",
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_api_key = bpy.props.StringProperty(
+    bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key = bpy.props.StringProperty(
         name="Gemini APIキー",
-        description="空欄なら環境変数 GEMINI_API_KEY を使います",
+        description="このBlender起動中だけ使う一時入力です。空欄なら環境変数 GEMINI_API_KEY を使います",
         default="",
         subtype='PASSWORD',
         options={'SKIP_SAVE'},
@@ -130,7 +130,7 @@ def unregister():
     del bpy.types.Scene.myaddon_ai_enemy_style
     del bpy.types.Scene.myaddon_ai_enemy_provider
     del bpy.types.Scene.myaddon_ai_enemy_motion_prompt
-    del bpy.types.Scene.myaddon_ai_enemy_gemini_api_key
+    del bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key
     del bpy.types.Scene.myaddon_ai_enemy_gemini_model
     del bpy.types.Scene.myaddon_ai_enemy_gemini_timeout
     del bpy.types.Scene.myaddon_ai_enemy_gemini_fallback

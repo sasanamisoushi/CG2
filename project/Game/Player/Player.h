@@ -47,6 +47,7 @@ public:
     Vector3 GetWorldHalfExtents() const;
     float GetCollisionRadius() const;
     OBB GetOBB() const;
+    const std::string& GetModelName() const { return modelName_; }
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
     // セッター
@@ -60,6 +61,7 @@ public:
         }
     }
     void SetScale(const Vector3 &scale) { 
+        modelScale_ = scale;
         for(int i = 0; i < 3; ++i) {
             if (objects_[i]) objects_[i]->SetScale(scale); 
         }
@@ -82,6 +84,8 @@ public:
 
 private:
     std::unique_ptr<Object3d> objects_[3]; // 0:Fighter, 1:Gerwalk, 2:Battroid
+    std::string modelName_;
+    Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
 
     PlayerMode currentMode_ = PlayerMode::Fighter;
     PlayerModeParams modeParams_[3];

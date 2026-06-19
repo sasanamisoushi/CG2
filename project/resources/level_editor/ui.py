@@ -74,6 +74,9 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         game_box.prop(obj, "game_obj_type", text="種類")
 
         # 敵が選ばれた時だけ、敵のタイプを入力させる！
+        if obj.game_obj_type == 'PLAYER':
+            game_box.prop(obj, "rotation_euler", index=2, text="向き")
+
         if obj.game_obj_type == 'ENEMY':
             game_box.prop(obj, "enemy_type", text="敵のタイプ")
             game_box.prop(obj, "enemy_path_id", text="飛行パスID")
@@ -176,7 +179,7 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         ai_box.prop(context.scene, "myaddon_ai_enemy_motion_prompt", text="動き")
         if getattr(context.scene, "myaddon_ai_enemy_provider", 'BUILTIN') == 'GEMINI':
             gemini_box = ai_box.box()
-            gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
+            gemini_box.prop(context.window_manager, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_model", text="モデル")
             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_timeout", text="待ち時間(秒)")
             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_fallback", text="失敗時は内蔵AI")

@@ -5,6 +5,12 @@
 #include <cmath>
 
 namespace {
+	constexpr const char *kDefaultPlayerBoxModelName = "PlayerBox";
+
+	bool UsesNaturalPlayerModelScale(const std::string &modelName) {
+		return modelName != kDefaultPlayerBoxModelName;
+	}
+
 	float LengthSq(const Vector3 &value) {
 		return value.x * value.x + value.y * value.y + value.z * value.z;
 	}
@@ -111,15 +117,19 @@ namespace {
 }
 
 void Player::Initialize(const std::string &modelName) {
+	modelName_ = modelName;
+	modelScale_ = { 1.0f, 1.0f, 1.0f };
+	const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
+
     for (int i = 0; i < 3; ++i) {
 	    objects_[i] = std::make_unique<Object3d>();
 	    objects_[i]->Initialize(Object3dCommon::GetInstance());
 	    objects_[i]->SetModel(modelName);
 
 	    if (objects_[i]->GetModel()) {
-		    objects_[i]->GetModel()->SetColor({ 0.2f, 0.5f, 1.0f, 1.0f }); // 青色
+		    objects_[i]->GetModel()->SetColor(usesNaturalScale ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 0.2f, 0.5f, 1.0f, 1.0f });
 	    }
-	    objects_[i]->SetScale({ 0.2f, 0.2f, 0.2f });
+	    objects_[i]->SetScale(usesNaturalScale ? Vector3{ 1.0f, 1.0f, 1.0f } : Vector3{ 0.2f, 0.2f, 0.2f });
     }
 
 	position_ = { 0.0f, 0.0f, 0.0f };
@@ -165,10 +175,13 @@ void Player::ChangeMode(PlayerMode newMode) {
 	}
 
     currentMode_ = newMode;
+	const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
     // 形態ごとの見た目の変更（スケールを変えて仮表現する）
     for (int i = 0; i < 3; ++i) {
         if (objects_[i]) {
-            if (i == 0) { // Fighter: 平べったく
+            if (usesNaturalScale) {
+                objects_[i]->SetScale(modelScale_);
+            } else if (i == 0) {
                 objects_[i]->SetScale({0.4f, 0.1f, 0.5f});
             } else if (i == 1) { // Gerwalk: 中間
                 objects_[i]->SetScale({0.2f, 0.2f, 0.2f});

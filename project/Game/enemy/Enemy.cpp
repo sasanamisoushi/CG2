@@ -23,6 +23,7 @@ namespace {
     constexpr float kEnemyBankResponse = 0.12f;
     constexpr float kEnemyMaxBankAngle = 0.75f;
     constexpr float kEnemyBulletSpeed = 0.18f;
+    constexpr float kEnemyMuzzleOffset = 1.2f;
     constexpr float kPi = 3.1415926535f;
     constexpr int kEnemyMaxHp = 2;
 
@@ -153,6 +154,21 @@ namespace {
             return static_cast<int>((spawnPointIndex * 73) % kRetreatCycleFrames);
         }
         return static_cast<int>(std::abs(position.x) * 37.0f) % kRetreatCycleFrames;
+    }
+
+    void ShootAtTarget(EnemyBulletManager *bulletManager, const Vector3 &shooterPosition, const Vector3 &targetPosition, const Vector3 &fallbackDirection) {
+        if (!bulletManager) {
+            return;
+        }
+
+        const Vector3 toTarget = Subtract(targetPosition, shooterPosition);
+        const float distanceToTarget = Length(toTarget);
+        const Vector3 directionToTarget = NormalizeOr(toTarget, fallbackDirection);
+        const float muzzleOffset = (std::min)(kEnemyMuzzleOffset, distanceToTarget * 0.5f);
+        const Vector3 bulletPosition = Add(shooterPosition, Scale(directionToTarget, muzzleOffset));
+        const Vector3 shootDirection = NormalizeOr(Subtract(targetPosition, bulletPosition), directionToTarget);
+        const Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);
+        bulletManager->Shoot(bulletPosition, bulletVelocity);
     }
 }
 
@@ -417,10 +433,7 @@ void Enemy::UpdateAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager
 
     attackTimer_++;
     if (!isRetreating && isInAttackRange && attackTimer_ >= kAttackInterval && bulletManager) {
-        Vector3 shootDirection = NormalizeOr(Add(Scale(directionToPlayer, 0.9f), Scale(forward_, 0.1f)), directionToPlayer);
-        Vector3 bulletPosition = Add(position_, Scale(forward_, 1.2f));
-        Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);
-        bulletManager->Shoot(bulletPosition, bulletVelocity);
+        ShootAtTarget(bulletManager, position_, playerPos, directionToPlayer);
         attackTimer_ = 0;
     }
 }
@@ -482,10 +495,7 @@ void Enemy::UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bul
 
     attackTimer_++;
     if (isInAttackRange && attackTimer_ >= kAttackInterval && bulletManager) {
-        Vector3 shootDirection = NormalizeOr(Add(Scale(directionToPlayer, 0.9f), Scale(forward_, 0.1f)), directionToPlayer);
-        Vector3 bulletPosition = Add(position_, Scale(forward_, 1.2f));
-        Vector3 bulletVelocity = Scale(shootDirection, kEnemyBulletSpeed);
-        bulletManager->Shoot(bulletPosition, bulletVelocity);
+        ShootAtTarget(bulletManager, position_, playerPos, directionToPlayer);
         attackTimer_ = 0;
     }
 }

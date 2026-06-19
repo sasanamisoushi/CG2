@@ -189,7 +189,7 @@ def _is_individual_mesh_export_target(obj):
     if _is_stage_bounds_object(obj):
         return False
 
-    return getattr(obj, "game_obj_type", "NONE") not in {"PLAYER", "ENEMY"}
+    return getattr(obj, "game_obj_type", "NONE") != "ENEMY"
 
 
 def _invalid_filename_reasons(name):

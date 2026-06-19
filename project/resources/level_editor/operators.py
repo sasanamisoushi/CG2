@@ -72,7 +72,7 @@ def _is_individual_model_export_target(obj):
         return False
 
     category = getattr(obj, "game_obj_type", "NONE")
-    return category not in {"PLAYER", "ENEMY"}
+    return category != "ENEMY"
 
 
 def _safe_filename_stem(name):
@@ -620,10 +620,12 @@ def _gemini_enemy_plan_schema():
     }
 
 
-def _resolve_gemini_api_key(scene):
-    configured_key = getattr(scene, "myaddon_ai_enemy_gemini_api_key", "").strip()
-    if configured_key:
-        return configured_key
+def _resolve_gemini_api_key(context):
+    window_manager = getattr(context, "window_manager", None)
+    if window_manager:
+        session_key = getattr(window_manager, "myaddon_ai_enemy_gemini_api_key", "").strip()
+        if session_key:
+            return session_key
     return os.environ.get("GEMINI_API_KEY", "").strip()
 
 
@@ -696,10 +698,10 @@ def _parse_gemini_json_text(text):
         raise
 
 
-def _request_gemini_enemy_plan(scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
-    api_key = _resolve_gemini_api_key(scene)
+def _request_gemini_enemy_plan(context, scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
+    api_key = _resolve_gemini_api_key(context)
     if not api_key:
-        raise ValueError("Gemini APIキーが未設定です。")
+        raise ValueError("Gemini APIキーが未設定です。一時入力欄か環境変数 GEMINI_API_KEY を設定してください。")
 
     model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -1443,6 +1445,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
         if provider == 'GEMINI':
             try:
                 plan_data = _request_gemini_enemy_plan(
+                    context,
                     scene,
                     count,
                     seed,
