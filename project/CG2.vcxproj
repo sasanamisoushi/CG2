@@ -351,8 +351,8 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Target Name="CopyRuntimeFiles" AfterTargets="Build">
-    <Copy SourceFiles="$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" DestinationFiles="$(TargetDir)dxcompiler.dll" SkipUnchangedFiles="false" Condition="Exists('$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll')" />
-    <Copy SourceFiles="$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" DestinationFiles="$(TargetDir)dxil.dll" SkipUnchangedFiles="false" Condition="Exists('$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll')" />
-    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)CG2Simulation.exe" SkipUnchangedFiles="false" />
+    <Copy SourceFiles="$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll" DestinationFiles="$(TargetDir)dxcompiler.dll" SkipUnchangedFiles="true" Condition="Exists('$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxcompiler.dll')" />
+    <Copy SourceFiles="$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" DestinationFiles="$(TargetDir)dxil.dll" SkipUnchangedFiles="true" Condition="Exists('$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll')" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)CG2Simulation.exe" SkipUnchangedFiles="true" />
   </Target>
 </Project>

@@ -35,6 +35,47 @@ def register():
         ],
         default='BALANCED',
     )
+    bpy.types.Scene.myaddon_ai_enemy_provider = bpy.props.EnumProperty(
+        name="生成方式",
+        items=[
+            ('BUILTIN', "内蔵AI", "高速なルールベース生成を使います"),
+            ('GEMINI', "Gemini API", "生成AIに敵配置と飛行ルートを作らせます"),
+        ],
+        default='BUILTIN',
+    )
+    bpy.types.Scene.myaddon_ai_enemy_motion_prompt = bpy.props.StringProperty(
+        name="動きの指定",
+        description="例: 時計回りに一周 / 左右にジグザグしながら上昇 / まっすぐ突撃",
+        default="左右に旋回して接近",
+    )
+    bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key = bpy.props.StringProperty(
+        name="Gemini APIキー",
+        description="このBlender起動中だけ使う一時入力です。空欄なら環境変数 GEMINI_API_KEY を使います",
+        default="",
+        subtype='PASSWORD',
+        options={'SKIP_SAVE'},
+    )
+    bpy.types.Scene.myaddon_ai_enemy_gemini_model = bpy.props.EnumProperty(
+        name="Geminiモデル",
+        items=[
+            ('gemini-3.5-flash', "Gemini 3.5 Flash", "安定版。敵ルート生成の標準候補です"),
+            ('gemini-flash-latest', "Gemini Flash Latest", "Flash系の最新エイリアスを使います"),
+            ('gemini-2.5-flash', "Gemini 2.5 Flash", "低遅延と品質のバランスが良いモデルです"),
+            ('gemini-2.5-flash-lite', "Gemini 2.5 Flash-Lite", "軽く速いモデルです"),
+            ('gemini-2.5-pro', "Gemini 2.5 Pro", "複雑なルート指定をじっくり考えさせたい時向けです"),
+        ],
+        default='gemini-3.5-flash',
+    )
+    bpy.types.Scene.myaddon_ai_enemy_gemini_timeout = bpy.props.IntProperty(
+        name="待ち時間(秒)",
+        default=25,
+        min=5,
+        max=120,
+    )
+    bpy.types.Scene.myaddon_ai_enemy_gemini_fallback = bpy.props.BoolProperty(
+        name="失敗時は内蔵AIで生成",
+        default=True,
+    )
     bpy.types.Scene.myaddon_ai_enemy_wave_delay = bpy.props.IntProperty(
         name="増援間隔(F)",
         default=90,
@@ -87,6 +128,12 @@ def unregister():
     del bpy.types.Scene.myaddon_ai_enemy_count
     del bpy.types.Scene.myaddon_ai_enemy_seed
     del bpy.types.Scene.myaddon_ai_enemy_style
+    del bpy.types.Scene.myaddon_ai_enemy_provider
+    del bpy.types.Scene.myaddon_ai_enemy_motion_prompt
+    del bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key
+    del bpy.types.Scene.myaddon_ai_enemy_gemini_model
+    del bpy.types.Scene.myaddon_ai_enemy_gemini_timeout
+    del bpy.types.Scene.myaddon_ai_enemy_gemini_fallback
     del bpy.types.Scene.myaddon_ai_enemy_wave_delay
     del bpy.types.Scene.myaddon_ai_enemy_clear_existing
     del bpy.types.Object.base_name

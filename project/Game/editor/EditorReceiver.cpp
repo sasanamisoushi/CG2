@@ -292,7 +292,13 @@ bool EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 					if (category == "PLAYER") {
 						// プレイヤーの座標を上書き
 						if (player) {
-							// ※Playerクラスに SetPosition などがあればここで呼ぶ
+							if (objData.contains("model") && objData["model"].is_string()) {
+								std::string modelFile = objData["model"].get<std::string>();
+								if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
+									player->Initialize(modelFile);
+								}
+								player->SetScale(scale);
+							}
 							player->SetPosition(position);
 							player->SetRotation(rotation);
 						}

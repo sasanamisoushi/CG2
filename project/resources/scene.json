@@ -121,10 +121,6 @@
                 "type": "VF1"
             },
             "path_id": "EnemyPath",
-            "reinforcement": {
-                "trigger": "EnemyV",
-                "delay": 60
-            },
             "vertices_count": 8
         },
         {
@@ -191,21 +187,17 @@
                     -137.14968872070312
                 ],
                 "scale": [
-                    1.0,
-                    1.0,
-                    1.0
+                    1.8971567153930664,
+                    1.8971563577651978,
+                    1.8971565961837769
                 ]
             },
-            "category": "ENEMY",
-            "enemy": {
-                "type": "VF1"
-            },
-            "path_id": "EnemyPath001",
-            "vertices_count": 0
+            "category": "PLAYER",
+            "vertices_count": 738
         },
         {
             "type": "EMPTY",
-            "name": "AIEnemy_02",
+            "name": "AIEnemy_01",
             "transform": {
                 "translation": [
                     -22.723819732666016,
@@ -40832,7 +40824,7 @@
         }
     ],
     "validation": {
-        "status": "警告 36件",
+        "status": "警告 11件",
         "errors": [],
         "warnings": [
             "名前のベースが重複しています: 立方体 (立方体, 立方体.001, 立方体.003, 立方体.004)",

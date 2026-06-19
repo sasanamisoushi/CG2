@@ -40,6 +40,7 @@ namespace {
 	constexpr size_t kInvalidSceneObjectIndex = static_cast<size_t>(-1);
 	const char *kSimulationActionsFilePath = "resources/simulation_actions.json";
 	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
+	const char *kPlayerModelName = "PlayerBox";
 
 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -280,7 +281,7 @@ namespace {
 
 		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
 		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
-		return MyMath::Normalize(MyMath::Multiply(qPitch, qYaw));
+		return MyMath::Normalize(MyMath::Multiply(qYaw, qPitch));
 	}
 
 	bool IsImGuiKeyboardCaptureActive() {
@@ -727,7 +728,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->CreateBoxModel("ObstacleBox");
 
 	player_ = std::make_unique<Player>();
-	player_->Initialize("PlayerBox");
+	player_->Initialize(kPlayerModelName);
 
 	// 弾
 	missileManager_ = std::make_unique<MissileManager>();
@@ -820,7 +821,7 @@ void GamePlayScene::ResetEditorPreview() {
 	}
 
 	if (player_) {
-		player_->Initialize("PlayerBox");
+		player_->Initialize(kPlayerModelName);
 	}
 	if (missileManager_) {
 		missileManager_->Initialize();
@@ -1981,7 +1982,7 @@ void GamePlayScene::UpdateCinematicLockOnCamera() {
 
 	if (!isCinematicLockOnCameraInitialized_) {
 		cinematicLockOnCameraPosition_ = camera->GetTranslate();
-		cinematicLockOnCameraRotation_ = player_->GetQuaternion();
+		cinematicLockOnCameraRotation_ = MakeLookQuaternion(playerForward);
 		cinematicLockOnCameraFocus_ = rawFocus;
 		cinematicLockOnCameraBackDirection_ = rawCameraBackDirection;
 		cinematicLockOnCameraSeparation_ = separation;
@@ -2286,7 +2287,7 @@ void GamePlayScene::Update() {
 	// 敵
 	// ==========================================
 	// プレイヤーの最新座標を取得する
-	Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+	Vector3 playerPos = player_ ? player_->GetOBB().center : Vector3{ 0.0f, 0.0f, 0.0f };
 
 	if (updateSelectedEnemies) {
 		// 敵の弾の更新（被弾時の爆発座標を受け取る）
