@@ -65,10 +65,19 @@ def _is_obj_export_target(obj):
         return not obj.hide_get()
 
 
+def _external_model_file(obj):
+    model_file = str(getattr(obj, "game_model_file", "")).strip()
+    if model_file:
+        return model_file.replace("\\", "/")
+    return ""
+
+
 def _is_individual_model_export_target(obj):
     if not _is_obj_export_target(obj):
         return False
     if obj.name.startswith("StageBounds"):
+        return False
+    if _external_model_file(obj):
         return False
 
     category = getattr(obj, "game_obj_type", "NONE")
@@ -1207,7 +1216,10 @@ def _build_object_data(obj, model_filenames=None):
     if hasattr(obj, "game_obj_type") and obj.game_obj_type != 'NONE':
         obj_data["category"] = obj.game_obj_type
 
-    if obj.type == 'MESH' and model_filenames and obj.name in model_filenames:
+    external_model = _external_model_file(obj)
+    if external_model:
+        obj_data["model"] = external_model
+    elif obj.type == 'MESH' and model_filenames and obj.name in model_filenames:
         obj_data["model"] = model_filenames[obj.name]
 
     if hasattr(obj, "enemy_type") and obj.enemy_type != "None":
@@ -1633,6 +1645,7 @@ class MYADDON_OT_apply_active_properties_to_selection(bpy.types.Operator):
 
         property_names = [
             "game_obj_type",
+            "game_model_file",
             "enemy_type",
             "enemy_path_id",
         ]

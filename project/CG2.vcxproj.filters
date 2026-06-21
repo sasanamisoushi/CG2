@@ -187,7 +187,10 @@
       <Filter>ソース ファイル\3d</Filter>
     </ClCompile>
     <ClCompile Include="Game\Player\Player.cpp">
-      <Filter>ソース ファイル</Filter>
+      <Filter>Game\Player</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Player\BoosterEffect.cpp">
+      <Filter>Game\Player</Filter>
     </ClCompile>
     <ClCompile Include="Game\bullet\Missile.cpp">
       <Filter>ソース ファイル</Filter>
@@ -354,7 +357,10 @@
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
     <ClInclude Include="Game\Player\Player.h">
-      <Filter>ヘッダー ファイル</Filter>
+      <Filter>Game\Player</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Player\BoosterEffect.h">
+      <Filter>Game\Player</Filter>
     </ClInclude>
     <ClInclude Include="Game\bullet\Missile.h">
       <Filter>ヘッダー ファイル</Filter>

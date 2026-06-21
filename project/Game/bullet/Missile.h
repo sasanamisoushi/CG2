@@ -61,6 +61,11 @@ private:
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 1フレームに進む量
     float collisionRadius_ = 0.3f;
 
+    // うねり軌道用パラメータ
+    float phaseOffset_ = 0.0f;
+    float waveSign_ = 1.0f;
+    float spiralSpeed_ = 0.15f;
+
     // 寿命（画面外に飛び去った弾をメモリから消すため）
     int lifeTimer_ = 0;
     static const int kLifeTime = 120; // 120フレーム（約2秒）で消滅

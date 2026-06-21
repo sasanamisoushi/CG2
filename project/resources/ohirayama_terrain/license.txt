@@ -1,0 +1,11 @@
+Model Information:
+* title:	大平山元Ⅰ遺跡付近デジタル標高地形図　地理院地図3Dモデル
+* source:	https://sketchfab.com/3d-models/i-3d-9b599d8266474b84963ce36e76f73907
+* author:	arakiminoru (https://sketchfab.com/arakiminoru)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "大平山元Ⅰ遺跡付近デジタル標高地形図　地理院地図3Dモデル" (https://sketchfab.com/3d-models/i-3d-9b599d8266474b84963ce36e76f73907) by arakiminoru (https://sketchfab.com/arakiminoru) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

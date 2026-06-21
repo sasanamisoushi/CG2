@@ -3,6 +3,7 @@
 #include "ModelCommon.h"
 #include "engine/Resource/TextureManager.h"
 #include "engine/Graphics/SrvManager.h"
+#include <algorithm>
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -19,7 +20,7 @@
 #include <assimp/scene.h>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
-
+#include "engine/base/Logger.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -70,7 +71,7 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 	}
 
 	if (modelData.material.textureFilePath.empty()) {
-		modelData.material.textureFilePath = "resources/uvChecker.png";
+		modelData.material.textureFilePath = "resources/white1x1.png";
 	}
 
 
@@ -94,6 +95,8 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 	//textureFilePath_= filename;
 
 	textureFilePath_ = modelData.material.textureFilePath;
+	RecalculateBounds();
+	logger.Log(" [Model] Loaded: " + filename + " | isSkinned: " + (modelData.isSkinned ? "true" : "false") + " | vertices: " + std::to_string(modelData.vertices.size()) + " | center: (" + std::to_string(cachedBoundsCenter_.x) + ", " + std::to_string(cachedBoundsCenter_.y) + ", " + std::to_string(cachedBoundsCenter_.z) + ") | extents: (" + std::to_string(cachedHalfExtents_.x) + ", " + std::to_string(cachedHalfExtents_.y) + ", " + std::to_string(cachedHalfExtents_.z) + ")");
 }
 
 
@@ -314,6 +317,42 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 	const aiScene* scene = importer.ReadFile(filePath.c_str(), aiProcess_Triangulate | aiProcess_GenNormals);
 	assert(scene && scene->HasMeshes());
 
+	// メッシュインデックスからノード名へのマッピング用
+	std::vector<std::string> meshNodeNames(scene->mNumMeshes);
+	auto lambdaFindMeshNodes = [&](auto& self, aiNode* node) -> void {
+		for (uint32_t i = 0; i < node->mNumMeshes; ++i) {
+			uint32_t mIdx = node->mMeshes[i];
+			if (mIdx < meshNodeNames.size()) {
+				meshNodeNames[mIdx] = node->mName.C_Str();
+			}
+		}
+		for (uint32_t i = 0; i < node->mNumChildren; ++i) {
+			self(self, node->mChildren[i]);
+		}
+	};
+	lambdaFindMeshNodes(lambdaFindMeshNodes, scene->mRootNode);
+
+	// 全ノード名の収集とノード名からボーンインデックスへの変換マップ
+	std::vector<std::string> allNodeNames;
+	auto lambdaCollectNodeNames = [&](auto& self, aiNode* node) -> void {
+		allNodeNames.push_back(node->mName.C_Str());
+		for (uint32_t i = 0; i < node->mNumChildren; ++i) {
+			self(self, node->mChildren[i]);
+		}
+	};
+	lambdaCollectNodeNames(lambdaCollectNodeNames, scene->mRootNode);
+
+	std::map<std::string, uint32_t> nodeNameToBoneIndex;
+	for (uint32_t i = 0; i < allNodeNames.size(); ++i) {
+		nodeNameToBoneIndex[allNodeNames[i]] = i;
+	}
+
+	struct MeshRange {
+		uint32_t baseVertex;
+		uint32_t vertexCount;
+	};
+	std::vector<MeshRange> meshRanges(scene->mNumMeshes);
+
 	for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
 		aiMesh* mesh = scene->mMeshes[meshIndex];
 		assert(mesh->HasNormals());
@@ -321,6 +360,7 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 
 		uint32_t baseVertex = (uint32_t)modelData.vertices.size();
 		modelData.vertices.resize(baseVertex + mesh->mNumVertices);
+		meshRanges[meshIndex] = { baseVertex, mesh->mNumVertices };
 
 		for (uint32_t vertexIndex = 0; vertexIndex < mesh->mNumVertices; ++vertexIndex) {
 			aiVector3D& position = mesh->mVertices[vertexIndex];
@@ -416,6 +456,128 @@ ModelData Model::LoadGltfFile(const std::string &directoryPath, const std::strin
 			}
 		}
 	}
+
+	// 自然なスキンウェイトを持たないが、ノード階層とアニメーションが存在する場合にプログラム側でウェイトを自動設定する
+	if (scene->HasAnimations() && !modelData.isSkinned && !allNodeNames.empty()) {
+		modelData.isSkinned = true;
+		modelData.boneNames = allNodeNames;
+
+		modelData.rootNode = ReadNode(scene->mRootNode);
+		std::map<std::string, Matrix4x4> nodeGlobalMatrices;
+		auto lambdaComputeGlobalMatrices = [&](auto& self, const Node& node, const Matrix4x4& parentGlobal) -> void {
+			Matrix4x4 globalMat = node.localMatrix * parentGlobal;
+			nodeGlobalMatrices[node.name] = globalMat;
+			for (const auto& child : node.children) {
+				self(self, child, globalMat);
+			}
+		};
+		Matrix4x4 identity = MyMath::MakeIdentity4x4();
+		lambdaComputeGlobalMatrices(lambdaComputeGlobalMatrices, modelData.rootNode, identity);
+
+		// Compute initial uncentered global bounds center
+		Vector3 totalMin = { 1e10f, 1e10f, 1e10f };
+		Vector3 totalMax = { -1e10f, -1e10f, -1e10f };
+		bool hasVertices = false;
+
+		for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
+			std::string nodeName = meshNodeNames[meshIndex];
+			Matrix4x4 globalMat = MyMath::MakeIdentity4x4();
+			if (!nodeName.empty() && nodeGlobalMatrices.find(nodeName) != nodeGlobalMatrices.end()) {
+				globalMat = nodeGlobalMatrices[nodeName];
+			}
+			const auto& range = meshRanges[meshIndex];
+			for (uint32_t v = 0; v < range.vertexCount; ++v) {
+				VertexData& vertex = modelData.vertices[range.baseVertex + v];
+				Vector3 pos3 = { vertex.position.x, vertex.position.y, vertex.position.z };
+				pos3 = MyMath::Transform(pos3, globalMat);
+
+				totalMin.x = (std::min)(totalMin.x, pos3.x);
+				totalMin.y = (std::min)(totalMin.y, pos3.y);
+				totalMin.z = (std::min)(totalMin.z, pos3.z);
+
+				totalMax.x = (std::max)(totalMax.x, pos3.x);
+				totalMax.y = (std::max)(totalMax.y, pos3.y);
+				totalMax.z = (std::max)(totalMax.z, pos3.z);
+				hasVertices = true;
+			}
+		}
+
+		Vector3 centerOffset = { 0.0f, 0.0f, 0.0f };
+		if (hasVertices) {
+			centerOffset = {
+				(totalMin.x + totalMax.x) * 0.5f,
+				(totalMin.y + totalMax.y) * 0.5f,
+				(totalMin.z + totalMax.z) * 0.5f
+			};
+		}
+
+		// Subtract centerOffset to center the model around origin (0, 0, 0)
+		modelData.rootNode.transform.translate.x -= centerOffset.x;
+		modelData.rootNode.transform.translate.y -= centerOffset.y;
+		modelData.rootNode.transform.translate.z -= centerOffset.z;
+
+		// Rebuild rootNode local matrix and clear/recompute global matrices
+		modelData.rootNode.localMatrix = MyMath::MakeAffineMatrix(
+			modelData.rootNode.transform.scale,
+			modelData.rootNode.transform.rotate,
+			modelData.rootNode.transform.translate
+		);
+
+		nodeGlobalMatrices.clear();
+		lambdaComputeGlobalMatrices(lambdaComputeGlobalMatrices, modelData.rootNode, identity);
+
+		for (const auto& name : allNodeNames) {
+			JointWeightData jointWeightData;
+			Matrix4x4 globalMat = MyMath::MakeIdentity4x4();
+			if (nodeGlobalMatrices.find(name) != nodeGlobalMatrices.end()) {
+				globalMat = nodeGlobalMatrices[name];
+			}
+			jointWeightData.inverseBindMatrix = MyMath::Inverse(globalMat);
+			modelData.skinClusterData[name] = jointWeightData;
+		}
+
+		for (uint32_t meshIndex = 0; meshIndex < scene->mNumMeshes; ++meshIndex) {
+			std::string nodeName = meshNodeNames[meshIndex];
+			uint32_t boneIndex = 0;
+			if (!nodeName.empty() && nodeNameToBoneIndex.find(nodeName) != nodeNameToBoneIndex.end()) {
+				boneIndex = nodeNameToBoneIndex[nodeName];
+			}
+
+			Matrix4x4 globalMat = MyMath::MakeIdentity4x4();
+			if (!nodeName.empty() && nodeGlobalMatrices.find(nodeName) != nodeGlobalMatrices.end()) {
+				globalMat = nodeGlobalMatrices[nodeName];
+			}
+
+			const auto& range = meshRanges[meshIndex];
+			for (uint32_t v = 0; v < range.vertexCount; ++v) {
+				VertexData& vertex = modelData.vertices[range.baseVertex + v];
+				
+				// Transform position and normal to initial global space
+				Vector3 pos3 = { vertex.position.x, vertex.position.y, vertex.position.z };
+				pos3 = MyMath::Transform(pos3, globalMat);
+				vertex.position = { pos3.x, pos3.y, pos3.z, 1.0f };
+
+				Vector3 normal3 = { vertex.normal.x, vertex.normal.y, vertex.normal.z };
+				Matrix4x4 normalMat = globalMat;
+				normalMat.m[3][0] = 0.0f;
+				normalMat.m[3][1] = 0.0f;
+				normalMat.m[3][2] = 0.0f;
+				normal3 = MyMath::Transform(normal3, normalMat);
+				normal3 = MyMath::Normalize(normal3);
+				vertex.normal = { normal3.x, normal3.y, normal3.z, 0.0f };
+
+				vertex.index[0] = (int32_t)boneIndex;
+				vertex.weight[0] = 1.0f;
+				vertex.index[1] = 0; vertex.weight[1] = 0.0f;
+				vertex.index[2] = 0; vertex.weight[2] = 0.0f;
+				vertex.index[3] = 0; vertex.weight[3] = 0.0f;
+			}
+		}
+	} else {
+		// ルートノード情報を保存しておく
+		modelData.rootNode = ReadNode(scene->mRootNode);
+	}
+
 	return modelData;
 }
 
@@ -552,10 +714,11 @@ void Model::InitializeSphere(ModelCommon *modelCommon, int subdivision) {
 	CreateMaterialData();
 
 	// テクスチャの設定（これが無いと透明・黒になって見えなくなる）
-	textureFilePath_ = "resources/uvChecker.png";
+	textureFilePath_ = "resources/white1x1.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::InitializePlane(ModelCommon *modelCommon) {
@@ -600,10 +763,11 @@ void Model::InitializePlane(ModelCommon *modelCommon) {
 	CreateMaterialData();
 
 	// テクスチャの設定
-	textureFilePath_ = "resources/uvChecker.png";
+	textureFilePath_ = "resources/white1x1.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::InitializeBox(ModelCommon *modelCommon) {
@@ -662,10 +826,11 @@ void Model::InitializeBox(ModelCommon *modelCommon) {
 	CreateMaterialData();
 
 	// テクスチャの設定
-	textureFilePath_ = "resources/uvChecker.png";
+	textureFilePath_ = "resources/white1x1.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float outerRadius, float innerRadius,
@@ -757,6 +922,7 @@ void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float oute
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::InitializeCylinder(ModelCommon *modelCommon,
@@ -847,6 +1013,7 @@ void Model::InitializeCylinder(ModelCommon *modelCommon,
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::InitializeLine(ModelCommon *modelCommon) {
@@ -876,10 +1043,11 @@ void Model::InitializeLine(ModelCommon *modelCommon) {
 		materialData->enableLighting = 0; // ラインはライティング不要
 	}
 
-	textureFilePath_ = "resources/uvChecker.png";
+	textureFilePath_ = "resources/white1x1.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::UpdateLineVertices(const std::vector<VertexData>& lines) {
@@ -897,6 +1065,7 @@ void Model::UpdateLineVertices(const std::vector<VertexData>& lines) {
 		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 		vertexResource->Unmap(0, nullptr);
 	}
+	RecalculateBounds();
 }
 
 SkinCluster Model::CreateSkinCluster(const Skeleton& skeleton) {
@@ -1085,10 +1254,11 @@ void Model::InitializeTrail(ModelCommon *modelCommon) {
 	}
 
 	// とりあえず既存の画像を割り当てておく（後で煙の画像に変えられます）
-	textureFilePath_ = "resources/uvChecker.png";
+	textureFilePath_ = "resources/white1x1.png";
 	modelData.material.textureFilePath = textureFilePath_;
 	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 	modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(textureFilePath_);
+	RecalculateBounds();
 }
 
 void Model::UpdateTrailVertices(const std::vector<VertexData> &vertices) {
@@ -1107,4 +1277,39 @@ void Model::UpdateTrailVertices(const std::vector<VertexData> &vertices) {
 		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
 		vertexResource->Unmap(0, nullptr);
 	}
+	RecalculateBounds();
 }
+
+void Model::RecalculateBounds() {
+	if (modelData.vertices.empty()) {
+		cachedBoundsCenter_ = { 0.0f, 0.0f, 0.0f };
+		cachedHalfExtents_ = { 1.0f, 1.0f, 1.0f };
+		return;
+	}
+
+	Vector3 minPos = { modelData.vertices[0].position.x, modelData.vertices[0].position.y, modelData.vertices[0].position.z };
+	Vector3 maxPos = minPos;
+
+	for (const auto& vertex : modelData.vertices) {
+		minPos.x = (std::min)(minPos.x, vertex.position.x);
+		minPos.y = (std::min)(minPos.y, vertex.position.y);
+		minPos.z = (std::min)(minPos.z, vertex.position.z);
+
+		maxPos.x = (std::max)(maxPos.x, vertex.position.x);
+		maxPos.y = (std::max)(maxPos.y, vertex.position.y);
+		maxPos.z = (std::max)(maxPos.z, vertex.position.z);
+	}
+
+	cachedBoundsCenter_ = {
+		(minPos.x + maxPos.x) * 0.5f,
+		(minPos.y + maxPos.y) * 0.5f,
+		(minPos.z + maxPos.z) * 0.5f
+	};
+
+	cachedHalfExtents_ = {
+		(maxPos.x - minPos.x) * 0.5f,
+		(maxPos.y - minPos.y) * 0.5f,
+		(maxPos.z - minPos.z) * 0.5f
+	};
+}
+

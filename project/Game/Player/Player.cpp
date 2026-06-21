@@ -1,5 +1,6 @@
 #include "Player.h"
 #include "3D/Object3dCommon.h"
+#include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
 #include <algorithm>
 #include <cmath>
@@ -118,25 +119,56 @@ namespace {
 
 void Player::Initialize(const std::string &modelName) {
 	modelName_ = modelName;
-	modelScale_ = { 1.0f, 1.0f, 1.0f };
+	
+	if (modelName.find("vf-15c") != std::string::npos) {
+		modelScale_ = { 0.08f, 0.08f, 0.08f }; // スケールを0.08に調整
+	} else {
+		modelScale_ = { 1.0f, 1.0f, 1.0f };
+	}
+	
+	// モデルマネージャに読み込みを指示
+	ModelManager::GetInstance()->LoadModel(modelName);
+	
 	const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
 
-    for (int i = 0; i < 3; ++i) {
-	    objects_[i] = std::make_unique<Object3d>();
-	    objects_[i]->Initialize(Object3dCommon::GetInstance());
-	    objects_[i]->SetModel(modelName);
+	object_ = std::make_unique<Object3d>();
+	object_->Initialize(Object3dCommon::GetInstance());
+	object_->SetModel(modelName);
 
-	    if (objects_[i]->GetModel()) {
-		    objects_[i]->GetModel()->SetColor(usesNaturalScale ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 0.2f, 0.5f, 1.0f, 1.0f });
-	    }
-	    objects_[i]->SetScale(usesNaturalScale ? Vector3{ 1.0f, 1.0f, 1.0f } : Vector3{ 0.2f, 0.2f, 0.2f });
-    }
+	if (object_->GetModel()) {
+		object_->GetModel()->SetColor(usesNaturalScale ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 0.2f, 0.5f, 1.0f, 1.0f });
+	}
+	currentDrawScale_ = modelScale_;
+	targetDrawScale_ = modelScale_;
+	object_->SetScale(currentDrawScale_);
 
 	position_ = { 0.0f, 0.0f, 0.0f };
 	velocity_ = { 0.0f, 0.0f, 0.0f };
 	quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
 	hp_ = 3;
 	isDead_ = false;
+
+	// アニメーションデータのロード
+	if (modelName.find("vf-15c") != std::string::npos) {
+		std::string dir = "resources/vf-15c";
+		std::string file = "scene.gltf";
+		animationData_ = LoadAnimationFile(dir, file);
+		
+		Node rootNode;
+		if (object_ && object_->GetModel()) {
+			rootNode = object_->GetModel()->GetModelData().rootNode;
+		} else {
+			rootNode = Model::LoadNodeHierarchy(dir, file);
+		}
+		skeleton_ = CreateSkeleton(rootNode);
+		
+		if (!skeleton_.joints.empty()) {
+			enableSkinning_ = true;
+			if (object_ && object_->GetModel()) {
+				object_->skinCluster = object_->GetModel()->CreateSkinCluster(skeleton_);
+			}
+		}
+	}
 
     // 形態ごとの初期パラメータ設定
     // 0: Fighter
@@ -165,6 +197,9 @@ void Player::Initialize(const std::string &modelName) {
 
     // 初期形態
     ChangeMode(PlayerMode::Fighter);
+
+    boosterEffect_ = std::make_unique<BoosterEffect>();
+    boosterEffect_->Initialize();
 }
 
 void Player::ChangeMode(PlayerMode newMode) {
@@ -175,20 +210,21 @@ void Player::ChangeMode(PlayerMode newMode) {
 	}
 
     currentMode_ = newMode;
-	const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
-    // 形態ごとの見た目の変更（スケールを変えて仮表現する）
-    for (int i = 0; i < 3; ++i) {
-        if (objects_[i]) {
-            if (usesNaturalScale) {
-                objects_[i]->SetScale(modelScale_);
-            } else if (i == 0) {
-                objects_[i]->SetScale({0.4f, 0.1f, 0.5f});
-            } else if (i == 1) { // Gerwalk: 中間
-                objects_[i]->SetScale({0.2f, 0.2f, 0.2f});
-            } else { // Battroid: 縦長
-                objects_[i]->SetScale({0.15f, 0.4f, 0.15f});
-            }
-        }
+    const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
+    
+    // 形態ごとの見た目の変更（スケールを変えて滑らかに変形させる）
+    if (usesNaturalScale) {
+        // vf-15cのようなちゃんとしたモデルの場合は、勝手にスケールを歪ませて形を崩さない
+        targetDrawScale_ = modelScale_;
+    } else {
+        // 仮モデルの場合はスケールで形態を表現
+	    if (currentMode_ == PlayerMode::Fighter) {
+	        targetDrawScale_ = { modelScale_.x * 1.0f, modelScale_.y * 0.5f, modelScale_.z * 1.5f };
+	    } else if (currentMode_ == PlayerMode::Gerwalk) {
+	        targetDrawScale_ = { modelScale_.x * 1.0f, modelScale_.y * 1.0f, modelScale_.z * 1.0f };
+	    } else if (currentMode_ == PlayerMode::Battroid) {
+	        targetDrawScale_ = { modelScale_.x * 0.8f, modelScale_.y * 1.5f, modelScale_.z * 0.8f };
+	    }
     }
 }
 
@@ -198,33 +234,86 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 	Move();
 	CheckCollision(obstacles);
 
+	if (boosterEffect_) {
+		auto input = Input::GetInstance();
+		PlayerModeParams& p = modeParams_[static_cast<int>(currentMode_)];
+		float speedVal = Length(velocity_);
+		float speedRatio = speedVal / (std::max)(0.0001f, p.maxMoveSpeed);
+		bool isAccelerating = input->PushKey(DIK_W);
+		boosterEffect_->Update(position_, quaternion_, static_cast<int>(currentMode_), speedRatio, isAccelerating);
+	}
+
     UpdateModel();
 }
 
 void Player::UpdateModel() {
-    int idx = static_cast<int>(currentMode_);
-    if (objects_[idx]) {
-	    objects_[idx]->SetTranslate(position_);
-	    objects_[idx]->SetQuaternionRotate(quaternion_);
-	    objects_[idx]->Update();
+    // アニメーションの更新と適用
+    if (animationData_.duration > 0.0f && !skeleton_.joints.empty()) {
+        if (!isAnimDebugActive_) {
+            if (currentMode_ == PlayerMode::Fighter) {
+                targetAnimationTime_ = 0.0f;
+            } else if (currentMode_ == PlayerMode::Gerwalk) {
+                targetAnimationTime_ = 1.71f;  // Frame 41 (Gerwalk pose matching 02:11 in Sketchfab)
+            } else {
+                targetAnimationTime_ = 5.0f;   // Frame 120 (Battroid)
+            }
+
+            // 補間でなめらかに変形させる
+            float diff = targetAnimationTime_ - animationTime_;
+            animationTime_ += diff * 0.1f; // 毎フレーム10%ずつ近づく
+        } else {
+            // デバッグ時は直接指定
+            animationTime_ = targetAnimationTime_;
+        }
+
+        ApplyAnimation(skeleton_, animationData_, animationTime_);
+        ::Update(skeleton_);
+
+        if (enableSkinning_ && object_ && object_->GetModel()) {
+            object_->GetModel()->UpdateSkinCluster(object_->skinCluster, skeleton_);
+        }
+    }
+
+    // スケールの滑らかな補間（アニメーション変形のように見せる）
+    currentDrawScale_.x += (targetDrawScale_.x - currentDrawScale_.x) * 0.2f;
+    currentDrawScale_.y += (targetDrawScale_.y - currentDrawScale_.y) * 0.2f;
+    currentDrawScale_.z += (targetDrawScale_.z - currentDrawScale_.z) * 0.2f;
+
+    if (object_) {
+	    object_->SetScale(currentDrawScale_);
+	    object_->SetTranslate(position_);
+	    object_->SetQuaternionRotate(quaternion_);
+	    object_->Update();
     }
 }
 
 void Player::Draw() {
-    int idx = static_cast<int>(currentMode_);
-	if (objects_[idx]) {
-		objects_[idx]->Draw();
+	if (object_) {
+		object_->Draw();
+	}
+	if (boosterEffect_) {
+		boosterEffect_->Draw();
 	}
 }
 
 Vector3 Player::GetWorldHalfExtents() const {
-	const int idx = static_cast<int>(currentMode_);
-	if (!objects_[idx] || !objects_[idx]->GetModel()) {
+	if (!object_ || !object_->GetModel()) {
 		return { 0.2f, 0.2f, 0.2f };
 	}
 
-	const Vector3 localHalf = objects_[idx]->GetModel()->GetHalfExtents();
-	const Vector3 scale = AbsVector(objects_[idx]->GetScale());
+	if (modelName_.find("vf-15c") != std::string::npos) {
+		const float scale = modelScale_.x; // 0.08f
+		if (currentMode_ == PlayerMode::Fighter) {
+			return { 2.8f * scale, 0.8f * scale, 3.0f * scale }; // { 0.224f, 0.064f, 0.24f }
+		} else if (currentMode_ == PlayerMode::Gerwalk) {
+			return { 2.8f * scale, 2.8f * scale, 2.8f * scale }; // { 0.224f, 0.224f, 0.224f }
+		} else {
+			return { 2.2f * scale, 4.5f * scale, 2.2f * scale }; // { 0.176f, 0.36f, 0.176f }
+		}
+	}
+
+	const Vector3 localHalf = object_->GetModel()->GetHalfExtents();
+	const Vector3 scale = AbsVector(object_->GetScale());
 	return { localHalf.x * scale.x, localHalf.y * scale.y, localHalf.z * scale.z };
 }
 
@@ -246,10 +335,21 @@ OBB Player::GetOBB() const {
 	obb.orientations[1] = MyMath::Normalize(Vector3{ rotationMatrix.m[1][0], rotationMatrix.m[1][1], rotationMatrix.m[1][2] });
 	obb.orientations[2] = MyMath::Normalize(Vector3{ rotationMatrix.m[2][0], rotationMatrix.m[2][1], rotationMatrix.m[2][2] });
 
-	const int idx = static_cast<int>(currentMode_);
-	if (objects_[idx] && objects_[idx]->GetModel()) {
-		const Vector3 localCenter = objects_[idx]->GetModel()->GetBoundsCenter();
-		const Vector3 scale = objects_[idx]->GetScale();
+	if (object_ && object_->GetModel()) {
+		Vector3 localCenter = object_->GetModel()->GetBoundsCenter();
+		
+		// vf-15cモデルの場合はアニメーションによる変形を考慮して、形態ごとの適切なオフセットを設定する
+		if (modelName_.find("vf-15c") != std::string::npos) {
+			if (currentMode_ == PlayerMode::Fighter) {
+				localCenter.y -= 0.0f;
+			} else if (currentMode_ == PlayerMode::Gerwalk) {
+				localCenter.y -= 0.8f; // 中心を下げて脚部をカバーする
+			} else {
+				localCenter.y -= 1.2f; // 中心を下げて人型の長身をカバーする
+			}
+		}
+
+		const Vector3 scale = object_->GetScale();
 		const Vector3 scaledCenter = { localCenter.x * scale.x, localCenter.y * scale.y, localCenter.z * scale.z };
 		const Vector3 rotatedCenter = MyMath::Transform(scaledCenter, rotationMatrix);
 		obb.center = Add(position_, rotatedCenter);
@@ -258,7 +358,7 @@ OBB Player::GetOBB() const {
 	return obb;
 }
 
-void Player::UpdateCamera(Camera *camera) {
+void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	Vector3 playerForward = NormalizeOrZero(GetForwardVector());
 	if (LengthSq(playerForward) <= 0.0001f) {
 		playerForward = { 0.0f, 0.0f, 1.0f };
@@ -267,29 +367,89 @@ void Player::UpdateCamera(Camera *camera) {
 	if (LengthSq(flatForward) <= 0.0001f) {
 		flatForward = { 0.0f, 0.0f, 1.0f };
 	}
-	Vector3 cameraDirection = {
-		playerForward.x,
-		std::clamp(playerForward.y, -0.75f, 0.75f),
-		playerForward.z
-	};
-	if (LengthSq({ cameraDirection.x, 0.0f, cameraDirection.z }) <= 0.0001f) {
-		cameraDirection.x = flatForward.x * 0.35f;
-		cameraDirection.z = flatForward.z * 0.35f;
-	}
-	cameraDirection = NormalizeOrZero(cameraDirection);
-	if (LengthSq(cameraDirection) <= 0.0001f) {
-		cameraDirection = flatForward;
+
+	Vector3 cameraDirection;
+	Vector3 lookTarget = GetOBB().center;
+
+	if (targetPos) {
+		// ロックオン中の場合
+		Vector3 toTarget = { targetPos->x - lookTarget.x, targetPos->y - lookTarget.y, targetPos->z - lookTarget.z };
+		Vector3 flatToTarget = { toTarget.x, 0.0f, toTarget.z };
+		float distToTargetSq = LengthSq(flatToTarget);
+		
+		Vector3 targetDir;
+		if (distToTargetSq > 0.0001f) {
+			targetDir = NormalizeOrZero(flatToTarget);
+		} else {
+			targetDir = flatForward;
+		}
+
+		// 急激なカメラ回転を防ぐため、プレイヤーの前方方向とターゲットへの方向をブレンドする
+		cameraDirection = {
+			flatForward.x * 0.5f + targetDir.x * 0.5f,
+			0.0f,
+			flatForward.z * 0.5f + targetDir.z * 0.5f
+		};
+		cameraDirection = NormalizeOrZero(cameraDirection);
+		if (LengthSq(cameraDirection) <= 0.0001f) {
+			cameraDirection = flatForward;
+		}
+
+		// 高低差の追従
+		float pitchBlend = std::clamp(toTarget.y / 50.0f, -0.5f, 0.5f);
+		cameraDirection.y = pitchBlend;
+		cameraDirection = NormalizeOrZero(cameraDirection);
+
+		// 注視点をプレイヤーとターゲットの中間点にする
+		float t = 0.35f;
+		Vector3 blendTarget = {
+			lookTarget.x + toTarget.x * t,
+			lookTarget.y + toTarget.y * t,
+			lookTarget.z + toTarget.z * t
+		};
+		
+		// 最大注視距離制限
+		float maxLookAhead = 15.0f;
+		Vector3 toBlend = { blendTarget.x - lookTarget.x, blendTarget.y - lookTarget.y, blendTarget.z - lookTarget.z };
+		if (LengthSq(toBlend) > maxLookAhead * maxLookAhead) {
+			toBlend = NormalizeOrZero(toBlend);
+			lookTarget = {
+				lookTarget.x + toBlend.x * maxLookAhead,
+				lookTarget.y + toBlend.y * maxLookAhead,
+				lookTarget.z + toBlend.z * maxLookAhead
+			};
+		} else {
+			lookTarget = blendTarget;
+		}
+	} else {
+		// ロックオンしていない場合
+		Vector3 rawDirection = {
+			playerForward.x,
+			std::clamp(playerForward.y, -0.75f, 0.75f),
+			playerForward.z
+		};
+		if (LengthSq({ rawDirection.x, 0.0f, rawDirection.z }) <= 0.0001f) {
+			rawDirection.x = flatForward.x * 0.35f;
+			rawDirection.z = flatForward.z * 0.35f;
+		}
+		cameraDirection = NormalizeOrZero(rawDirection);
+		if (LengthSq(cameraDirection) <= 0.0001f) {
+			cameraDirection = flatForward;
+		}
 	}
 
 	const float backDistance = 12.0f;
 	const float heightOffset = 2.5f;
-	const Vector3 lookTarget = GetOBB().center;
+	
+	// カメラの配置
 	Vector3 cameraBackOffset = Scale(cameraDirection, -backDistance);
+	Vector3 playerOBBCenter = GetOBB().center;
 	Vector3 camPos = {
-		lookTarget.x + cameraBackOffset.x,
-		lookTarget.y + heightOffset,
-		lookTarget.z + cameraBackOffset.z
+		playerOBBCenter.x + cameraBackOffset.x,
+		playerOBBCenter.y + heightOffset,
+		playerOBBCenter.z + cameraBackOffset.z
 	};
+
 	Vector3 lookForward = NormalizeOrZero({
 		lookTarget.x - camPos.x,
 		lookTarget.y - camPos.y,
@@ -330,21 +490,17 @@ void Player::SetRotation(const Vector3 &eulerRotation) {
 		quaternion_ = MakeYawQuaternionFromForward(currentForward);
 	}
 
-    for (int i = 0; i < 3; ++i) {
-	    if (objects_[i]) {
-		    objects_[i]->SetQuaternionRotate(quaternion_);
-		    objects_[i]->Update();
-	    }
-    }
+	if (object_) {
+		object_->SetQuaternionRotate(quaternion_);
+		object_->Update();
+	}
 }
 
 void Player::OnCollision() {
 	isDead_ = true;
-    for (int i = 0; i < 3; ++i) {
-	    if (objects_[i]) {
-		    objects_[i].reset();
-	    }
-    }
+	if (object_) {
+		object_.reset();
+	}
 }
 
 void Player::TakeDamage(int damage) {
@@ -553,12 +709,10 @@ void Player::UpdateLockOnRotation(const Vector3& targetPos) {
 			quaternion_ = MyMath::Multiply(quaternion_, qDiff);
 			quaternion_ = MyMath::Normalize(quaternion_);
 			
-            for (int i = 0; i < 3; ++i) {
-			    if (objects_[i]) {
-				    objects_[i]->SetQuaternionRotate(quaternion_);
-				    objects_[i]->Update();
-			    }
-            }
+			if (object_) {
+				object_->SetQuaternionRotate(quaternion_);
+				object_->Update();
+			}
 		}
 	}
 }
@@ -567,7 +721,128 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 	OBB playerOBB = GetOBB();
 
 	for (const auto &obstacle : obstacles) {
-		if (!obstacle) {
+		if (!obstacle || !obstacle->IsCollisionEnabled()) {
+			continue;
+		}
+
+		if (obstacle->IsUseMeshCollider() && !obstacle->IsStageBounds()) {
+			const std::vector<Triangle>& triangles = obstacle->GetWorldTriangles();
+			
+			std::vector<Sphere> playerSpheres;
+			const float scale = modelScale_.x; // 0.08f
+			
+			if (modelName_.find("vf-15c") != std::string::npos) {
+				if (currentMode_ == PlayerMode::Fighter) {
+					Sphere s;
+					s.center = playerOBB.center;
+					s.radius = 1.2f * scale;
+					playerSpheres.push_back(s);
+				} else if (currentMode_ == PlayerMode::Gerwalk) {
+					// ガウォーク形態: 2つの球を縦に並べる（上部と足元）
+					float r = 2.0f * scale;
+					Sphere sTop;
+					sTop.center = playerOBB.center;
+					sTop.center.y += 1.2f * scale;
+					sTop.radius = r;
+					playerSpheres.push_back(sTop);
+					
+					Sphere sBottom;
+					sBottom.center = playerOBB.center;
+					sBottom.center.y -= 0.8f * scale;
+					sBottom.radius = r;
+					playerSpheres.push_back(sBottom);
+				} else {
+					// バトロイド形態（人型）: 3つの球を縦に並べてカプセルを表現（頭/胸、腰/腿、足元）
+					float r = 2.2f * scale;
+					Sphere sTop;
+					sTop.center = playerOBB.center;
+					sTop.center.y += 1.5f * scale;
+					sTop.radius = r;
+					playerSpheres.push_back(sTop);
+					
+					Sphere sMid;
+					sMid.center = playerOBB.center;
+					sMid.center.y -= 0.5f * scale;
+					sMid.radius = r;
+					playerSpheres.push_back(sMid);
+					
+					Sphere sBottom;
+					sBottom.center = playerOBB.center;
+					sBottom.center.y -= 2.5f * scale;
+					sBottom.radius = r;
+					playerSpheres.push_back(sBottom);
+				}
+			} else {
+				Sphere s;
+				s.center = playerOBB.center;
+				s.radius = GetCollisionRadius();
+				playerSpheres.push_back(s);
+			}
+
+			for (auto& playerSphere : playerSpheres) {
+				for (const auto& tri : triangles) {
+					float minX = tri.p[0].x;
+					if (tri.p[1].x < minX) minX = tri.p[1].x;
+					if (tri.p[2].x < minX) minX = tri.p[2].x;
+
+					float maxX = tri.p[0].x;
+					if (tri.p[1].x > maxX) maxX = tri.p[1].x;
+					if (tri.p[2].x > maxX) maxX = tri.p[2].x;
+
+					float minY = tri.p[0].y;
+					if (tri.p[1].y < minY) minY = tri.p[1].y;
+					if (tri.p[2].y < minY) minY = tri.p[2].y;
+
+					float maxY = tri.p[0].y;
+					if (tri.p[1].y > maxY) maxY = tri.p[1].y;
+					if (tri.p[2].y > maxY) maxY = tri.p[2].y;
+
+					float minZ = tri.p[0].z;
+					if (tri.p[1].z < minZ) minZ = tri.p[1].z;
+					if (tri.p[2].z < minZ) minZ = tri.p[2].z;
+
+					float maxZ = tri.p[0].z;
+					if (tri.p[1].z > maxZ) maxZ = tri.p[1].z;
+					if (tri.p[2].z > maxZ) maxZ = tri.p[2].z;
+
+					if (playerSphere.center.x + playerSphere.radius < minX || playerSphere.center.x - playerSphere.radius > maxX ||
+						playerSphere.center.y + playerSphere.radius < minY || playerSphere.center.y - playerSphere.radius > maxY ||
+						playerSphere.center.z + playerSphere.radius < minZ || playerSphere.center.z - playerSphere.radius > maxZ) {
+						continue;
+					}
+
+					Vector3 pushVector;
+					if (MyMath::IsCollision(playerSphere, tri, pushVector)) {
+						// 地面（上向きの面）との衝突で、裏側に回り込んで下に押し下げられるのを防止
+						if (tri.normal.y > 0.3f && pushVector.y < 0.0f) {
+							float pushLen = MyMath::Length(pushVector);
+							pushVector = MyMath::Multiply(pushLen, tri.normal);
+						}
+
+						position_.x += pushVector.x;
+						position_.y += pushVector.y;
+						position_.z += pushVector.z;
+						
+						for (auto& otherSphere : playerSpheres) {
+							otherSphere.center.x += pushVector.x;
+							otherSphere.center.y += pushVector.y;
+							otherSphere.center.z += pushVector.z;
+						}
+						
+						playerOBB.center.x += pushVector.x;
+						playerOBB.center.y += pushVector.y;
+						playerOBB.center.z += pushVector.z;
+
+						Vector3 pushNormal = MyMath::Normalize(pushVector);
+						float dot = MyMath::Dot(velocity_, pushNormal);
+						if (dot < 0.0f) {
+							velocity_.x -= dot * pushNormal.x;
+							velocity_.y -= dot * pushNormal.y;
+							velocity_.z -= dot * pushNormal.z;
+						}
+					}
+				}
+			}
 			continue;
 		}
 

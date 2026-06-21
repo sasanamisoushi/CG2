@@ -67,6 +67,11 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	lifeTimer_ = (std::max)(1, tuning_.lifeTime);
 	isDead_ = false;
 
+	// うねり用パラメータのランダム初期化
+	phaseOffset_ = (float)(rand() % 360) * 0.0174532925f;
+	waveSign_ = (rand() % 2 == 0) ? 1.0f : -1.0f;
+	spiralSpeed_ = 0.12f + (float)(rand() % 8) * 0.01f;
+
 	// ミサイルタイプのみトレイルを準備
 	if (type_ == MissileType::MissileWithTrail) {
 		trail_ = std::make_unique<Trail>();
@@ -81,16 +86,68 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 	if (isDead_) return;
 
 
-	// ホーミング（追尾）処理
-	if (type_ == MissileType::MissileWithTrail && enemy) {
-		const Vector3 targetPos = enemy->GetPosition();
-		const Vector3 desiredDirection = NormalizeOr(Subtract(targetPos, position_), NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }));
-		const Vector3 currentDirection = NormalizeOr(velocity_, desiredDirection);
-		const Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, std::clamp(tuning_.homingStrength, 0.0f, 1.0f));
-		const float homingSpeed = (std::max)(0.01f, tuning_.speed);
-		velocity_ = Scale(homingDirection, homingSpeed);
-	} else if (type_ == MissileType::MissileWithTrail) {
-		velocity_ = Scale(NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f }), (std::max)(0.01f, tuning_.speed));
+	// ホーミング（追尾）処理と板野サーカス風うねり軌道
+	if (type_ == MissileType::MissileWithTrail) {
+		Vector3 targetPos = position_;
+		bool hasTarget = false;
+
+		if (enemy) {
+			targetPos = enemy->GetPosition();
+			hasTarget = true;
+		}
+
+		if (hasTarget) {
+			// ターゲットへの方向
+			Vector3 toTarget = Subtract(targetPos, position_);
+			float distToTarget = Length(toTarget);
+			Vector3 desiredDirection = NormalizeOr(toTarget, { 0.0f, 0.0f, 1.0f });
+			Vector3 currentDirection = NormalizeOr(velocity_, desiredDirection);
+			
+			// 基本のホーミングブレンド
+			Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, std::clamp(tuning_.homingStrength, 0.0f, 1.0f));
+
+			// 螺旋揺らぎ（板野サーカス効果）の計算
+			// 進行方向に垂直な基準軸を作成
+			Vector3 rightVec = NormalizeOr(MyMath::Cross(homingDirection, { 0.0f, 1.0f, 0.0f }), { 1.0f, 0.0f, 0.0f });
+			if (LengthSq(rightVec) < 0.001f) {
+				rightVec = { 1.0f, 0.0f, 0.0f };
+			}
+			Vector3 upVec = NormalizeOr(MyMath::Cross(rightVec, homingDirection), { 0.0f, 1.0f, 0.0f });
+
+			// 時間経過による螺旋回転
+			float time = (float)(tuning_.lifeTime - lifeTimer_);
+			float theta = time * spiralSpeed_ + phaseOffset_;
+			
+			// ターゲットに近づくにつれて揺らぎを減衰（収束）
+			float fade = std::clamp(distToTarget / 40.0f, 0.0f, 1.0f);
+			if (lifeTimer_ < 60) {
+				fade *= (lifeTimer_ / 60.0f);
+			}
+
+			// 揺らぎの大きさ（振幅）
+			float amplitude = 1.3f * fade; 
+			Vector3 wave = Add(Scale(rightVec, std::cos(theta) * amplitude), Scale(upVec, std::sin(theta) * waveSign_ * amplitude));
+
+			// 最終的な進行ベクトル
+			Vector3 finalDirection = NormalizeOr(Add(homingDirection, wave), homingDirection);
+			float homingSpeed = (std::max)(0.01f, tuning_.speed);
+			velocity_ = Scale(finalDirection, homingSpeed);
+		} else {
+			// ターゲットがいない場合でも少しうねりながら直進する
+			Vector3 currentDirection = NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f });
+			Vector3 rightVec = NormalizeOr(MyMath::Cross(currentDirection, { 0.0f, 1.0f, 0.0f }), { 1.0f, 0.0f, 0.0f });
+			if (LengthSq(rightVec) < 0.001f) rightVec = { 1.0f, 0.0f, 0.0f };
+			Vector3 upVec = NormalizeOr(MyMath::Cross(rightVec, currentDirection), { 0.0f, 1.0f, 0.0f });
+
+			float time = (float)(tuning_.lifeTime - lifeTimer_);
+			float theta = time * spiralSpeed_ + phaseOffset_;
+			
+			float amplitude = 0.5f; // 非ターゲット時は弱めのうねり
+			Vector3 wave = Add(Scale(rightVec, std::cos(theta) * amplitude), Scale(upVec, std::sin(theta) * waveSign_ * amplitude));
+			
+			Vector3 finalDirection = NormalizeOr(Add(currentDirection, wave), currentDirection);
+			velocity_ = Scale(finalDirection, (std::max)(0.01f, tuning_.speed));
+		}
 	}
 	// 基本の移動処理
 	position_.x += velocity_.x;

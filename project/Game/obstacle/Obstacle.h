@@ -20,13 +20,18 @@ public:
     Vector3 GetRotation() const { return rotation_; }
     Vector3 GetScale() const { return scale_; }
     bool IsStageBounds() const { return isStageBounds_; }
+    Vector3 GetCollisionOffset() const { return collisionOffset_; }
+    Vector3 GetCollisionScale() const { return collisionScale_; }
+    bool IsCollisionEnabled() const { return isCollisionEnabled_; }
+    bool IsUseMeshCollider() const { return useMeshCollider_; }
 
-    // モデルのローカルバウンディングボックス半径 × scale = ワールド当たり判定の AABB extents
+    // モデルの頂点からワールド座標系の三角形リストを生成して返す（キャッシュ版）
+    const std::vector<Triangle>& GetWorldTriangles() const { return worldTriangles_; }
     Vector3 GetWorldHalfExtents() const {
         auto absf = [](float value) { return value < 0.0f ? -value : value; };
-        Vector3 absScale = { absf(scale_.x), absf(scale_.y), absf(scale_.z) };
+        Vector3 absScale = { absf(scale_.x * collisionScale_.x), absf(scale_.y * collisionScale_.y), absf(scale_.z * collisionScale_.z) };
 
-        if (object_ && object_->GetModel()) {
+        if (!isStageBounds_ && object_ && object_->GetModel()) {
             Vector3 localHalf = object_->GetModel()->GetHalfExtents();
             return { localHalf.x * absScale.x, localHalf.y * absScale.y, localHalf.z * absScale.z };
         }
@@ -41,11 +46,27 @@ public:
     void SetRotation(const Vector3& rotation) { rotation_ = rotation; }
     void SetScale(const Vector3& scale) { scale_ = scale; }
     void SetStageBounds(bool isStageBounds) { isStageBounds_ = isStageBounds; }
+    void SetCollisionOffset(const Vector3& offset) { collisionOffset_ = offset; }
+    void SetCollisionScale(const Vector3& scale) { collisionScale_ = scale; }
+    void SetCollisionEnabled(bool enabled) { isCollisionEnabled_ = enabled; }
+    void SetUseMeshCollider(bool use) { useMeshCollider_ = use; }
 
 private:
     std::unique_ptr<Object3d> object_;
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Vector3 rotation_ = { 0.0f, 0.0f, 0.0f };
     Vector3 scale_ = { 1.0f, 1.0f, 1.0f };
+    Vector3 collisionOffset_ = { 0.0f, 0.0f, 0.0f };
+    Vector3 collisionScale_ = { 1.0f, 1.0f, 1.0f };
     bool isStageBounds_ = false;
+    bool isCollisionEnabled_ = true;
+    bool useMeshCollider_ = false;
+
+    // メッシュコライダー用キャッシュ
+    std::vector<Triangle> worldTriangles_;
+    Vector3 prevPosition_ = { 0,0,0 };
+    Vector3 prevRotation_ = { 0,0,0 };
+    Vector3 prevScale_ = { 0,0,0 };
+
+    void UpdateMeshCollider();
 };

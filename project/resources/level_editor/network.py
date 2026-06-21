@@ -45,9 +45,18 @@ def is_model_export_target(obj):
         return False
     if obj.name.startswith("StageBounds"):
         return False
+    if external_model_file(obj):
+        return False
 
     category = getattr(obj, "game_obj_type", "NONE")
     return category != "ENEMY"
+
+
+def external_model_file(obj):
+    model_file = str(getattr(obj, "game_model_file", "")).strip()
+    if model_file:
+        return model_file.replace("\\", "/")
+    return ""
 
 
 def safe_filename_stem(name):
@@ -177,7 +186,10 @@ def build_scene_data(scene):
         if hasattr(obj, "game_obj_type") and obj.game_obj_type != "NONE":
             obj_data["category"] = obj.game_obj_type
 
-        if obj.type == "MESH" and obj.name in model_filenames:
+        external_model = external_model_file(obj)
+        if external_model:
+            obj_data["model"] = external_model
+        elif obj.type == "MESH" and obj.name in model_filenames:
             obj_data["model"] = model_filenames[obj.name]
 
         if hasattr(obj, "enemy_type") and obj.enemy_type != "None":

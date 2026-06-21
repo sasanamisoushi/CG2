@@ -5371,7 +5371,7 @@ ImDrawList* ImGui::GetForegroundDrawList(ImGuiViewport* viewport)
 {
     if (viewport == NULL)
         viewport = GImGui->CurrentWindow->Viewport;
-    return GetViewportBgFgDrawList((ImGuiViewportP*)viewport, 1, "##Foreground");
+return GetViewportBgFgDrawList((ImGuiViewportP*)viewport, 1, "##Foreground");
 }
 
 ImDrawListSharedData* ImGui::GetDrawListSharedData()

@@ -36,67 +36,115 @@ void TextureManager::LoadTexture(const std::string &filePath) {
 		return;
 	}
 
-	
-	//テクスチャファイルを読んでプログラムで扱えるようにする
 	DirectX::ScratchImage image{};
-	std::wstring filePathW = su.ConvertString(filePath);
-	HRESULT hr = S_FALSE;
-		
-	// 拡張子によって読み込み処理を分岐する
-	std::filesystem::path path(filePath);
-	if (path.extension() == ".dds") {
-		// スカイボックスなどで使うDDｓファイルの読み込み
-		hr = DirectX::LoadFromDDSFile(filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
-	} else {
-		// 従来のPNGやJPGなどのWICファイルの読み込み
-		hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
-	}
-	assert(SUCCEEDED(hr));
-
-
-	//ミップマップの作成(DDS等の圧縮フォーマット時はスキップする対応)
 	DirectX::ScratchImage mipImages{};
-	if (DirectX::IsCompressed(image.GetMetadata().format)) {
-		mipImages = std::move(image);
+	std::wstring filePathW = su.ConvertString(filePath);
+	HRESULT hr = E_FAIL;
+		
+	if (filePath == "resources/white1x1.png") {
+		hr = image.Initialize2D(DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 1, 1, 1, 1);
+		if (SUCCEEDED(hr)) {
+			uint8_t* pixels = image.GetPixels();
+			if (pixels) {
+				pixels[0] = 0xFF; // R
+				pixels[1] = 0xFF; // G
+				pixels[2] = 0xFF; // B
+				pixels[3] = 0xFF; // A
+			}
+			mipImages = std::move(image);
+		}
 	} else {
-		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
-		assert(SUCCEEDED(hr));
+		try {
+			std::filesystem::path path(filePath);
+			if (path.extension() == ".dds") {
+				hr = DirectX::LoadFromDDSFile(filePathW.c_str(), DirectX::DDS_FLAGS_NONE, nullptr, image);
+			} else {
+				hr = DirectX::LoadFromWICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+			}
+
+			if (SUCCEEDED(hr)) {
+				if (DirectX::IsCompressed(image.GetMetadata().format)) {
+					mipImages = std::move(image);
+				} else {
+					hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetadata(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
+					if (FAILED(hr)) {
+						mipImages = std::move(image);
+					}
+				}
+			}
+		} catch (const std::exception& e) {
+			char buf[512];
+			sprintf_s(buf, "Exception in LoadTexture for %s: %s\n", filePath.c_str(), e.what());
+			OutputDebugStringA(buf);
+			hr = E_FAIL;
+		} catch (...) {
+			char buf[512];
+			sprintf_s(buf, "Unknown exception in LoadTexture for %s\n", filePath.c_str());
+			OutputDebugStringA(buf);
+			hr = E_FAIL;
+		}
 	}
 
-	//追加したテクスチャデータの参照を取得する
-	TextureData &textureData = textureDatas[filePath];
+	if (FAILED(hr) || !mipImages.GetImages()) {
+		char buf[1024];
+		std::filesystem::path absolutePath = std::filesystem::absolute(filePath);
+		sprintf_s(buf, "[TextureManager] Failed to load texture: %s, HRESULT: 0x%08X, Absolute Path: %s\n", 
+			filePath.c_str(), (unsigned int)hr, absolutePath.string().c_str());
+		OutputDebugStringA(buf);
+
+		std::string fallbackPath = "resources/white1x1.png";
+		if (filePath != fallbackPath) {
+			LoadTexture(fallbackPath);
+			if (textureDatas.contains(fallbackPath)) {
+				textureDatas[filePath] = textureDatas[fallbackPath];
+				return;
+			}
+		}
+		return;
+	}
+
+	TextureData textureData;
+	textureData.filePath = filePath;
 	textureData.metadata = mipImages.GetMetadata();
 	textureData.resource = dxCommon->CreateTextureResource(textureData.metadata);
 
-	//テクスチャデータの要素数番号をSRVのインデックスとする
-	uint32_t srvIndex = static_cast<uint32_t>(textureDatas.size() - 1) + kSRVIndexTop;
+	if (textureData.resource == nullptr) {
+		std::string fallbackPath = "resources/white1x1.png";
+		if (filePath != fallbackPath) {
+			LoadTexture(fallbackPath);
+			if (textureDatas.contains(fallbackPath)) {
+				textureDatas[filePath] = textureDatas[fallbackPath];
+				return;
+			}
+		}
+		std::string errorMsg = "Fatal: CreateTextureResource failed for texture: " + filePath;
+		OutputDebugStringA((errorMsg + "\n").c_str());
+		return;
+	}
+
 	textureData.srvIndex = srvManager->Allocate();
 	textureData.srvHandleCPU = srvManager->GetCPUDescriptorHandle(textureData.srvIndex);
 	textureData.srvHandleGPU = srvManager->GetGPUDescriptorHandle(textureData.srvIndex);
 
-	//転送用に生成した中間リソースをテクスチャデータ構造体に格納
 	textureData.intermediateResource = dxCommon->UploadTextureData(textureData.resource, mipImages);
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
 	srvDesc.Format = textureData.metadata.format;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	
-	// メタデータからキューブマップかどうか判定してSRVの次元を変える
 	if (textureData.metadata.IsCubemap()) {
-		// スカイボックス用のキューブマップテクスチャとして設定
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
 		srvDesc.TextureCube.MostDetailedMip = 0;
 		srvDesc.TextureCube.MipLevels = UINT(textureData.metadata.mipLevels);
 		srvDesc.TextureCube.ResourceMinLODClamp = 0.0f;
 	} else {
-		// 通常の2Dテクスチャとして設定
 		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 		srvDesc.Texture2D.MipLevels = UINT(textureData.metadata.mipLevels);
 	}
 
-	
-	//SRVの生成
 	dxCommon->GetDevice()->CreateShaderResourceView(textureData.resource.Get(), &srvDesc, textureData.srvHandleCPU);
+
+	textureDatas[filePath] = std::move(textureData);
 }
 
 uint32_t TextureManager::GetTextureIndexByFilePath(const std::string &filePath) {

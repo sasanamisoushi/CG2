@@ -3,7 +3,9 @@
 #include "engine/Input/Input.h"
 #include "engine/Camera/Camera.h"
 #include "engine/math/MyMath.h"
+#include "3D/Animation.h"
 #include <memory>
+#include "BoosterEffect.h"
 #include <string>
 #include <list>
 
@@ -39,7 +41,7 @@ public:
     void UpdateModel();
 
     // カメラへの追従（Debug用のカメラではなく、本番用カメラをプレイヤーの後ろに置く処理）
-    void UpdateCamera(Camera *camera);
+    void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr);
 
     // ゲッター
     Vector3 GetPosition() const { return position_; }
@@ -53,18 +55,14 @@ public:
     // セッター
     void SetPosition(const Vector3 &position) {
         position_ = position;
-        for (int i = 0; i < 3; ++i) {
-            if (objects_[i]) {
-                objects_[i]->SetTranslate(position_);
-                objects_[i]->Update();
-            }
+        if (object_) {
+            object_->SetTranslate(position_);
+            object_->Update();
         }
     }
     void SetScale(const Vector3 &scale) { 
         modelScale_ = scale;
-        for(int i = 0; i < 3; ++i) {
-            if (objects_[i]) objects_[i]->SetScale(scale); 
-        }
+        if (object_) object_->SetScale(scale); 
     }
     void SetRotation(const Vector3 &eulerRotation);
 
@@ -82,10 +80,21 @@ public:
     PlayerMode GetCurrentMode() const { return currentMode_; }
     PlayerModeParams& GetModeParams(PlayerMode mode) { return modeParams_[static_cast<int>(mode)]; }
 
+    // アニメーション関連デバッグ用ゲッターセッター
+    float GetAnimationTime() const { return animationTime_; }
+    void SetAnimationTime(float time) { animationTime_ = time; }
+    float GetTargetAnimationTime() const { return targetAnimationTime_; }
+    void SetTargetAnimationTime(float time) { targetAnimationTime_ = time; }
+    float GetAnimationDuration() const { return animationData_.duration; }
+    bool IsAnimDebugActive() const { return isAnimDebugActive_; }
+    void SetAnimDebugActive(bool active) { isAnimDebugActive_ = active; }
+
 private:
-    std::unique_ptr<Object3d> objects_[3]; // 0:Fighter, 1:Gerwalk, 2:Battroid
-    std::string modelName_;
-    Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
+	std::unique_ptr<Object3d> object_;
+	std::string modelName_;
+	Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
+    Vector3 currentDrawScale_ = { 1.0f, 1.0f, 1.0f };
+    Vector3 targetDrawScale_ = { 1.0f, 1.0f, 1.0f };
 
     PlayerMode currentMode_ = PlayerMode::Fighter;
     PlayerModeParams modeParams_[3];
@@ -97,5 +106,15 @@ private:
 
     bool isDead_ = false;
     int hp_ = 3;
+
+    Animation animationData_;
+    Skeleton skeleton_;
+    float animationTime_ = 0.0f;
+    float targetAnimationTime_ = 0.0f;
+    bool enableSkinning_ = false;
+    bool isAnimDebugActive_ = false;
+
+    std::unique_ptr<BoosterEffect> boosterEffect_;
 };
+
 

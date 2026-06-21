@@ -225,12 +225,12 @@ bool StageLoader::LoadSceneJson(
 				if (category == "PLAYER") {
 					if (player) {
 						if (objData.contains("model") && objData["model"].is_string()) {
-							std::string modelFile = objData["model"].get<std::string>();
-							if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
-								player->Initialize(modelFile);
-							}
-							player->SetScale(scale);
+							// std::string modelFile = objData["model"].get<std::string>();
+							// if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
+							// 	player->Initialize(modelFile);
+							// }
 						}
+						// player->SetScale(scale); // Playerは自身でスケールを管理するため、scene.json のスケールで上書きしない
 						player->SetPosition(position);
 						player->SetRotation(rotation);
 					}
@@ -255,6 +255,28 @@ bool StageLoader::LoadSceneJson(
 					auto newObstacle = std::make_unique<Obstacle>();
 					std::string modelName = ResolveObstacleModelName(objData);
 					newObstacle->Initialize(modelName, position, rotation, scale);
+
+					if (objData.contains("useMeshCollider") && objData["useMeshCollider"].is_boolean()) {
+						newObstacle->SetUseMeshCollider(objData["useMeshCollider"].get<bool>());
+					}
+					if (objData.contains("isCollisionEnabled") && objData["isCollisionEnabled"].is_boolean()) {
+						newObstacle->SetCollisionEnabled(objData["isCollisionEnabled"].get<bool>());
+					}
+					if (objData.contains("collisionOffset") && objData["collisionOffset"].is_array()) {
+						auto &arr = objData["collisionOffset"];
+						if (arr.size() == 3) newObstacle->SetCollisionOffset({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
+					}
+					if (objData.contains("collisionScale") && objData["collisionScale"].is_array()) {
+						auto &arr = objData["collisionScale"];
+						if (arr.size() == 3) newObstacle->SetCollisionScale({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
+					}
+
+					// 地形モデルは強制的にメッシュコライダーを使用する
+					std::string objectName = GetObjectBaseName(objData);
+					if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
+						newObstacle->SetUseMeshCollider(true);
+					}
+
 					if (modelName.find("StageBounds") != std::string::npos) {
 						newObstacle->SetStageBounds(true);
 						OutputDebugStringA((" StageBounds Spawned at: " + std::to_string(position.x) + "\n").c_str());
@@ -281,23 +303,7 @@ bool StageLoader::LoadSceneJson(
 
 				OutputDebugStringA((" Enemy Spawned at: " + std::to_string(position.x) + "\n").c_str());
 			}
-			// 3. 「障害物」のデータなら、生成してリストに追加！
-			else if (objData.contains("type") && objData["type"].get<std::string>() == "MESH") {
-				std::string modelName = ResolveObstacleModelName(objData);
 
-				auto newObstacle = std::make_unique<Obstacle>();
-				newObstacle->Initialize(modelName, position, rotation, scale);
-
-				// ブレンダーで「StageBounds」という名前にした場合はステージの枠として扱う
-				if (modelName.find("StageBounds") != std::string::npos) {
-					newObstacle->SetStageBounds(true);
-					OutputDebugStringA((" StageBounds Spawned at: " + std::to_string(position.x) + "\n").c_str());
-				} else {
-					OutputDebugStringA((" Obstacle Spawned at: " + std::to_string(position.x) + "\n").c_str());
-				}
-
-				obstacles.push_back(std::move(newObstacle));
-			}
 		}
 	}
 	return true;

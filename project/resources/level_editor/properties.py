@@ -90,6 +90,11 @@ def register():
     bpy.types.Object.collider = bpy.props.StringProperty(name="タイプ", default="None")
     bpy.types.Object.collider_center = bpy.props.FloatVectorProperty(name="中心", size=3, default=(0.0, 0.0, 0.0))
     bpy.types.Object.collider_size = bpy.props.FloatVectorProperty(name="サイズ", size=3, default=(2.0, 2.0, 2.0))
+    bpy.types.Object.game_model_file = bpy.props.StringProperty(
+        name="外部モデル",
+        description="Blender上は軽い代理形状にして、ゲーム側では resources 内の指定OBJ/GLTFを読み込みます",
+        default="",
+    )
     bpy.types.Object.enemy_type = bpy.props.StringProperty(name="敵タイプ", default="None")
     bpy.types.Object.enemy_path_id = bpy.props.StringProperty(name="飛行パスID", default="None")
     bpy.types.Object.enemy_path_loop = bpy.props.BoolProperty(name="ループ", default=False)
@@ -140,6 +145,7 @@ def unregister():
     del bpy.types.Object.collider
     del bpy.types.Object.collider_center
     del bpy.types.Object.collider_size
+    del bpy.types.Object.game_model_file
     del bpy.types.Object.enemy_type
     del bpy.types.Object.enemy_path_id
     del bpy.types.Object.enemy_path_loop

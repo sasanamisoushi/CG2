@@ -40,7 +40,7 @@ namespace {
 	constexpr size_t kInvalidSceneObjectIndex = static_cast<size_t>(-1);
 	const char *kSimulationActionsFilePath = "resources/simulation_actions.json";
 	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
-	const char *kPlayerModelName = "PlayerBox";
+	const char *kPlayerModelName = "vf-15c/scene.gltf";
 
 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -111,7 +111,16 @@ namespace {
 		if (IsScenePlayerObject(objectData) || IsSceneEnemyObject(objectData)) {
 			return false;
 		}
-		return IsSceneCategory(objectData, "OBSTACLE") || GetJsonString(objectData, "type") == "MESH";
+		if (IsSceneCategory(objectData, "OBSTACLE")) {
+			return true;
+		}
+		if (GetJsonString(objectData, "type") == "MESH") {
+			std::string name = GetJsonString(objectData, "name");
+			if (name.find("Terrain") != std::string::npos || name.find("terrain") != std::string::npos) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	json ToBlenderPositionJson(const Vector3 &position) {
@@ -362,7 +371,10 @@ namespace {
 			return;
 		}
 
-		ImDrawList *drawList = ImGui::GetForegroundDrawList();
+		if (!ImGui::GetCurrentContext()) {
+			return;
+		}
+		ImDrawList *drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
 		const ImVec2 center(minX + screenPosition.x, minY + screenPosition.y);
 		const float radius = 24.0f;
 		const float corner = 10.0f;
@@ -555,7 +567,10 @@ namespace {
 
 		const float width = maxX - minX;
 		const float height = maxY - minY;
-		ImDrawList *drawList = ImGui::GetForegroundDrawList();
+		if (!ImGui::GetCurrentContext()) {
+			return;
+		}
+		ImDrawList *drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
 		std::vector<ValidationLabelRect> usedRects;
 
 		for (const StageValidation::ValidationMarker &marker : report.markers) {
@@ -1103,6 +1118,10 @@ bool GamePlayScene::SaveNamedSimulationAction(const std::string &filePath, const
 		obstacleData["position"] = ToVector3Json(obstacle->GetPosition());
 		obstacleData["rotation"] = ToVector3Json(obstacle->GetRotation());
 		obstacleData["scale"] = ToVector3Json(obstacle->GetScale());
+		obstacleData["collisionOffset"] = ToVector3Json(obstacle->GetCollisionOffset());
+		obstacleData["collisionScale"] = ToVector3Json(obstacle->GetCollisionScale());
+		obstacleData["isCollisionEnabled"] = obstacle->IsCollisionEnabled();
+		obstacleData["useMeshCollider"] = obstacle->IsUseMeshCollider();
 		obstacleData["stageBounds"] = obstacle->IsStageBounds();
 		obstaclesData.push_back(obstacleData);
 	}
@@ -1268,6 +1287,10 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 			(*obstacleIt)->SetPosition(ReadVector3Json(obstacleData.value("position", json::array()), (*obstacleIt)->GetPosition()));
 			(*obstacleIt)->SetRotation(ReadVector3Json(obstacleData.value("rotation", json::array()), (*obstacleIt)->GetRotation()));
 			(*obstacleIt)->SetScale(ReadVector3Json(obstacleData.value("scale", json::array()), (*obstacleIt)->GetScale()));
+			(*obstacleIt)->SetCollisionOffset(ReadVector3Json(obstacleData.value("collisionOffset", json::array()), (*obstacleIt)->GetCollisionOffset()));
+			(*obstacleIt)->SetCollisionScale(ReadVector3Json(obstacleData.value("collisionScale", json::array()), (*obstacleIt)->GetCollisionScale()));
+			(*obstacleIt)->SetCollisionEnabled(obstacleData.value("isCollisionEnabled", (*obstacleIt)->IsCollisionEnabled()));
+			(*obstacleIt)->SetUseMeshCollider(obstacleData.value("useMeshCollider", (*obstacleIt)->IsUseMeshCollider()));
 			(*obstacleIt)->Update();
 			++obstacleIt;
 		}
@@ -1944,7 +1967,14 @@ void GamePlayScene::UpdateGameplayCamera() {
 	isCinematicLockOnCameraInitialized_ = false;
 	camera->SetFovY(kNormalCameraFovY);
 	camera->SetFarClip(kNormalCameraFarClip);
-	player_->UpdateCamera(camera.get());
+
+	const Vector3 *targetPos = nullptr;
+	Vector3 targetPositionVal;
+	if (lockedEnemy_ && !lockedEnemy_->IsDead()) {
+		targetPositionVal = lockedEnemy_->GetPosition();
+		targetPos = &targetPositionVal;
+	}
+	player_->UpdateCamera(camera.get(), targetPos);
 }
 
 void GamePlayScene::UpdateCinematicLockOnCamera() {
@@ -2711,10 +2741,20 @@ void GamePlayScene::Draw() {
 		enemy->Draw();
 	}
 
+	Vector4 frustumPlanes[6];
+	MyMath::ExtractFrustumPlanes(camera->GetViewProjectionMatrix(), frustumPlanes);
+
 	// 障害物の描画
 	for (const auto &obstacle : obstacles_) {
-		obstacle->Draw();
-		Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		Sphere obsSphere;
+		obsSphere.center = obstacle->GetPosition();
+		obsSphere.radius = MyMath::Length(obstacle->GetWorldHalfExtents());
+
+		// 画面外の場合は描画しない（カリング）
+		if (MyMath::IsInFrustum(obsSphere, frustumPlanes)) {
+			obstacle->Draw();
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
@@ -2880,6 +2920,23 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			ImGui::SliderFloat("ピッチ回転速度", &p.pitchSpeed, 0.001f, 0.1f);
 			ImGui::SliderFloat("ヨー回転速度", &p.yawSpeed, 0.001f, 0.1f);
 			ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
+
+			ImGui::Separator();
+			ImGui::Text("アニメーションデバッグ");
+			bool isDebug = player_->IsAnimDebugActive();
+			if (ImGui::Checkbox("デバッグ時間を強制", &isDebug)) {
+				player_->SetAnimDebugActive(isDebug);
+			}
+			if (isDebug) {
+				float t = player_->GetTargetAnimationTime();
+				float duration = player_->GetAnimationDuration();
+				if (ImGui::SliderFloat("アニメーション時間 (秒)", &t, 0.0f, duration, "%.3f秒")) {
+					player_->SetTargetAnimationTime(t);
+				}
+				ImGui::Text("対応フレーム (24fps換算): %.1f", t * 24.0f);
+			} else {
+				ImGui::Text("アニメーション時間: %.3f秒 (目標: %.3f秒)", player_->GetAnimationTime(), player_->GetTargetAnimationTime());
+			}
 		} else {
 			ImGui::Text("プレイヤーが初期化されていません。");
 		}
@@ -3518,10 +3575,39 @@ void GamePlayScene::UpdateUI() {
 
 		ImGui::Separator();
 		ImGui::Text("=== 障害物のリスト (総数: %d) ===", (int)obstacles_.size());
+		
+		if (ImGui::Button("障害物の設定をJSONに保存")) {
+			SaveCurrentSimulationLayoutToSceneJson("resources/scene.json");
+		}
+		if (!simulationSaveMessage_.empty()) {
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s", simulationSaveMessage_.c_str());
+		}
+
 		int obsIndex = 0;
 		for (const auto& obstacle : obstacles_) {
 			Vector3 pos = obstacle->GetPosition();
+			Vector3 colOff = obstacle->GetCollisionOffset();
+			Vector3 colScale = obstacle->GetCollisionScale();
+			bool colEnabled = obstacle->IsCollisionEnabled();
+			bool useMeshCol = obstacle->IsUseMeshCollider();
+
+			ImGui::PushID(obsIndex);
 			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", obsIndex, pos.x, pos.y, pos.z);
+			
+			if (ImGui::Checkbox("Collision Enabled", &colEnabled)) {
+				obstacle->SetCollisionEnabled(colEnabled);
+			}
+			if (ImGui::Checkbox("Use Mesh Collider", &useMeshCol)) {
+				obstacle->SetUseMeshCollider(useMeshCol);
+			}
+			if (ImGui::DragFloat3("Collision Offset", &colOff.x, 0.1f)) {
+				obstacle->SetCollisionOffset(colOff);
+			}
+			if (ImGui::DragFloat3("Collision Scale", &colScale.x, 0.05f)) {
+				obstacle->SetCollisionScale(colScale);
+			}
+			ImGui::PopID();
+			
 			obsIndex++;
 		}
 		if (obstacles_.empty()) {

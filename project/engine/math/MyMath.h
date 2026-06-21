@@ -67,6 +67,12 @@ struct Sphere {
 	float radius;   // 半径
 };
 
+// 当たり判定用の三角形
+struct Triangle {
+	Vector3 p[3];
+	Vector3 normal;
+};
+
 // 当たり判定用のOBB（有向境界ボックス）
 struct OBB {
 	Vector3 center;          // 中心座標
@@ -155,5 +161,19 @@ public:
 
 	// 2. 球とOBBの判定（ミサイル vs 機体 などで大活躍します！）
 	static bool IsCollision(const Sphere &sphere, const OBB &obb);
+
+	// 3. 球と三角形の判定（地形との当たり判定用。outPushOutに押し出しベクトルが入る）
+	static bool IsCollision(const Sphere &sphere, const Triangle &triangle, Vector3 &outPushOut);
+	
+	// ベクトルの長さなどユーティリティ
+	static float Length(const Vector3& v);
+	static Vector3 Subtract(const Vector3& v1, const Vector3& v2);
+	static Vector3 Add(const Vector3& v1, const Vector3& v2);
+	static Vector3 Multiply(float scalar, const Vector3& v);
+	static Vector3 ClosestPointOnTriangle(const Vector3& point, const Triangle& triangle);
+
+	// フラスタムカリング用
+	static void ExtractFrustumPlanes(const Matrix4x4& vpMatrix, Vector4 outPlanes[6]);
+	static bool IsInFrustum(const Sphere& sphere, const Vector4 planes[6]);
 };
 

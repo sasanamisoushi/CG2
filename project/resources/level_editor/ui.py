@@ -72,6 +72,8 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         game_box = layout.box()
         game_box.label(text="Game Settings")
         game_box.prop(obj, "game_obj_type", text="種類")
+        if obj.type == 'MESH':
+            game_box.prop(obj, "game_model_file", text="外部モデル")
 
         # 敵が選ばれた時だけ、敵のタイプを入力させる！
         if obj.game_obj_type == 'PLAYER':

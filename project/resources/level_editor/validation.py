@@ -183,10 +183,19 @@ def _is_stage_bounds_object(obj):
     return _base_name(obj).startswith("StageBounds")
 
 
+def _external_model_file(obj):
+    model_file = str(getattr(obj, "game_model_file", "")).strip()
+    if model_file:
+        return model_file.replace("\\", "/")
+    return ""
+
+
 def _is_individual_mesh_export_target(obj):
     if obj.type != "MESH":
         return False
     if _is_stage_bounds_object(obj):
+        return False
+    if _external_model_file(obj):
         return False
 
     return getattr(obj, "game_obj_type", "NONE") != "ENEMY"
