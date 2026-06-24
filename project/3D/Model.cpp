@@ -838,6 +838,8 @@ void Model::InitializeRing(ModelCommon *modelCommon, int subdivision, float oute
 	float startAngleDegree, float endAngleDegree, float fadeAngleDegree) {
 	this->modelCommon_ = modelCommon;
 	modelData.vertices.clear();
+	textureFilePath_ = "resources/white1x1.png";
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 
 	const float pi = 3.1415926535f;
 	
@@ -935,6 +937,8 @@ void Model::InitializeCylinder(ModelCommon *modelCommon,
 	bool isUvFlipped) {
 	this->modelCommon_ = modelCommon;
 	modelData.vertices.clear();
+	textureFilePath_ = "resources/white1x1.png";
+	TextureManager::GetInstance()->LoadTexture(textureFilePath_);
 
 	const float pi = 3.1415926535f;
 	if (endAngleDegree <= startAngleDegree) endAngleDegree += 360.0f;

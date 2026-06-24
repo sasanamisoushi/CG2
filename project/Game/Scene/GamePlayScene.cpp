@@ -628,6 +628,7 @@ void GamePlayScene::Initialize() {
 	// スカイボックスの生成と初期化
 	skybox = std::make_unique<Skybox>();
 	skybox->Initialize("resources/SkyBox.dds");
+	showSkybox = true;
 
 
 	//モデル・パーティクル
@@ -2068,10 +2069,8 @@ void GamePlayScene::UpdateCinematicLockOnCamera() {
 }
 
 void GamePlayScene::Finalize() {
-	if (pVoice1) {
-		pVoice1->Stop();
-		pVoice2->DestroyVoice();
-	}
+	if (pVoice1) { pVoice1->Stop(); pVoice1->DestroyVoice(); }
+	if (pVoice2) { pVoice2->Stop(); pVoice2->DestroyVoice(); }
 
 	AudioManager::GetInstance()->UnloadWave(soundData1);
 	AudioManager::GetInstance()->UnloadWave(soundData2);
@@ -2145,21 +2144,29 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ゲームオーバー判定と演出進行
 	// ==========================================
-	//if (!isGameOver_ && player_ && player_->IsDead()) {
-	//	isGameOver_ = true;
-	//	gameOverTimer_ = 0;
+	if (!isGameOver_ && player_ && player_->IsDead()) {
+		isGameOver_ = true;
+		gameOverTimer_ = 0;
 
-	//	// 💥 自機がやられた時の大爆発パーティクルを生成！
-	//	std::vector<Vector3> playerHitPos = { player_->GetPosition() };
-	//	if (explosionManager_) {
-	//		explosionManager_->CreateExplosions(playerHitPos);
-	//	}
+		std::vector<Vector3> playerHitPos = { player_->GetPosition() };
+		if (explosionManager_) {
+			explosionManager_->CreateExplosions(playerHitPos);
+		}
 
-	//	// 🎵 BGMを停止して絶望感を演出
-	//	if (pVoice2) {
-	//		pVoice2->Stop();
-	//	}
-	//}
+		if (pVoice2) {
+			pVoice2->Stop();
+		}
+	}
+
+	if (!isGameOver_ && !IsSimulationMode()) {
+		bool hasPendingSpawns = false;
+		for (int timer : enemyRespawnTimers_) {
+			if (timer != kNoRespawnTimer) { hasPendingSpawns = true; break; }
+		}
+		if (!hasPendingSpawns && enemyEventManager_.GetEvents().empty() && enemies_.empty()) {
+			SceneManager::GetInstance()->ChangeScene("CLEAR");
+		}
+	}
 
 	bool shouldUpdateGame = true;
 

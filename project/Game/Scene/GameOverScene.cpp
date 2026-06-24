@@ -4,6 +4,7 @@
 #include "engine/Scene/SceneManager.h"
 #include "engine/Graphics/PostEffect.h"
 #include "3D/Object3dCommon.h"
+#include "engine/base/WinApp.h"
 
 void GameOverScene::Initialize() {
 	// カメラの生成と初期化
@@ -22,7 +23,7 @@ void GameOverScene::Initialize() {
 	gameOverSprite_->Initialize(SpriteCommon::GetInstance(), "resources/gameover.png");
 	gameOverSprite_->SetPosition({ 640.0f, 360.0f });
 	gameOverSprite_->SetAnchorPoint({ 0.5f, 0.5f });
-	gameOverSprite_->SetSize({ 600.0f, 600.0f });
+	gameOverSprite_->SetSize({ 1280.0f, 720.0f });
 }
 
 void GameOverScene::Finalize() {
@@ -38,6 +39,10 @@ void GameOverScene::Update() {
 
 	// スプライトの更新
 	if (gameOverSprite_) {
+		float width = static_cast<float>(WinApp::GetClientWidth());
+		float height = static_cast<float>(WinApp::GetClientHeight());
+		gameOverSprite_->SetPosition({ width / 2.0f, height / 2.0f });
+		gameOverSprite_->SetSize({ width, height });
 		gameOverSprite_->Update();
 	}
 
