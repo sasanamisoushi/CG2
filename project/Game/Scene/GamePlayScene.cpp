@@ -646,6 +646,11 @@ void GamePlayScene::Initialize() {
 	myPlane->SetTranslate({ 0.0f, 2.0f, 0.0f }); // 元の上の方の配置
 	objects.push_back(myPlane.get());
 
+	// 警告ホログラム用平面
+	boundaryAlertPlane_ = std::make_unique<Primitive>();
+	boundaryAlertPlane_->Initialize(Object3dCommon::GetInstance(), PrimitiveType::BoundaryAlertPlane);
+	boundaryAlertPlane_->SetScale({ 2.0f, 2.0f, 1.0f }); // プレイヤーサイズに合わせて縮小
+
 	// 球体
 	myShere = std::make_unique<Primitive>();
 	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
@@ -1698,7 +1703,19 @@ void GamePlayScene::FirePlayerMissile(MissileType type) {
 
 	const MissileTuning tuning = MakeMissileTuning(type);
 	const Vector3 playerPos = player_->GetPosition();
-	const Vector3 forward = player_->GetForwardVector();
+	Vector3 forward = player_->GetForwardVector();
+
+	// ガンウォークモードとバトロイドモードの時は、通常弾をロックオンした敵に向かって撃つ
+	if (type == MissileType::Normal && lockedEnemy_ && !lockedEnemy_->IsDead()) {
+		PlayerMode currentMode = player_->GetCurrentMode();
+		if (currentMode == PlayerMode::Gerwalk || currentMode == PlayerMode::Battroid) {
+			Vector3 toEnemy = MyMath::Subtract(lockedEnemy_->GetPosition(), playerPos);
+			if (MyMath::Length(toEnemy) > 0.0001f) {
+				forward = MyMath::Normalize(toEnemy);
+			}
+		}
+	}
+
 	const float muzzleOffset = (std::max)(0.0f, missileMuzzleOffset);
 	const Vector3 muzzlePos = {
 		playerPos.x + forward.x * muzzleOffset,
@@ -2386,6 +2403,42 @@ void GamePlayScene::Update() {
 		skybox->Update(camera.get());
 	}
 
+	// アラートの更新
+	if (player_ && player_->IsNearBoundary() && boundaryAlertPlane_) {
+		boundaryAlertPlane_->SetTranslate(player_->GetBoundaryAlertPosition());
+
+		// 法線方向から回転を計算
+		Vector3 normal = player_->GetBoundaryAlertNormal();
+		
+		// 平面(Plane)はデフォルトで-Z軸方向を向いているが、画像が反転してしまうため +Z軸(0,0,1) を基準にして180度反転させる
+		Vector3 forward = {0.0f, 0.0f, 1.0f};
+		float dot = MyMath::Dot(forward, normal);
+		Quaternion q;
+		if (dot < -0.999f) {
+			q = MyMath::MakeAxisAngle({0.0f, 1.0f, 0.0f}, 3.1415926535f);
+		} else if (dot > 0.999f) {
+			q = {0.0f, 0.0f, 0.0f, 1.0f}; // Identity quaternion
+		} else {
+			Vector3 crossResult = MyMath::Cross(forward, normal);
+			Vector3 axis = {0.0f, 0.0f, 1.0f};
+			if (MyMath::Length(crossResult) > 0.0001f) {
+				axis = MyMath::Normalize(crossResult);
+			}
+			float angle = std::acos(dot);
+			q = MyMath::MakeAxisAngle(axis, angle);
+		}
+
+		// ホログラムの色と透明度（点滅なしで、近づくほど濃くなる）
+		float intensity = player_->GetBoundaryWarningIntensity();
+		float alpha = intensity;
+		if (boundaryAlertPlane_->GetModel()) {
+			boundaryAlertPlane_->GetModel()->SetColor({1.0f, 1.0f, 1.0f, alpha});
+		}
+		
+		boundaryAlertPlane_->SetQuaternionRotate(q);
+		boundaryAlertPlane_->Update();
+	}
+
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (isSelectedOnlyPreview) {
 		for (auto &enemy : enemies_) {
@@ -2802,6 +2855,13 @@ void GamePlayScene::Draw() {
 	if (myPartialRing && showPartialRing) myPartialRing->Draw();
 	if (myCylinder && showCylinder) myCylinder->Draw();
 	if (explosionManager_) explosionManager_->Draw();
+
+	// 警告表示
+	if (player_ && player_->IsNearBoundary() && boundaryAlertPlane_) {
+		Object3dCommon::GetInstance()->SetAlphaBlendDrawSettings();
+		boundaryAlertPlane_->Draw();
+		Object3dCommon::GetInstance()->SetEffectDrawSettings(); // 元に戻す
+	}
 
 
 	//Spriteの描画基準

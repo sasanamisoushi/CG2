@@ -231,6 +231,9 @@ void Player::ChangeMode(PlayerMode newMode) {
 void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 	if (isDead_) return;
 
+	isNearBoundary_ = false;
+	boundaryWarningIntensity_ = 0.0f;
+
 	Move();
 	CheckCollision(obstacles);
 
@@ -865,9 +868,27 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 
 		if (obstacle->IsStageBounds()) {
 			Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
+			
+			float warningThreshold = 50.0f; // 50 units away starts the warning
+			float minDistanceToWall = 99999.0f;
+			Vector3 closestNormal = {0.0f, 0.0f, 1.0f};
 
 			for (int axis = 0; axis < 3; ++axis) {
 				const float limit = (std::max)(0.0f, GetAxisSize(obsOBB.size, axis) - playerProjection[axis]);
+				
+				// 警告判定用の距離計算
+				float distPositive = limit - localDistance[axis];
+				if (distPositive < minDistanceToWall) {
+					minDistanceToWall = distPositive;
+					closestNormal = obsOBB.orientations[axis];
+				}
+				
+				float distNegative = limit + localDistance[axis];
+				if (distNegative < minDistanceToWall) {
+					minDistanceToWall = distNegative;
+					closestNormal = {-obsOBB.orientations[axis].x, -obsOBB.orientations[axis].y, -obsOBB.orientations[axis].z};
+				}
+
 				if (localDistance[axis] > limit) {
 					if (axis == 0) localPushOut.x = limit - localDistance[axis];
 					if (axis == 1) localPushOut.y = limit - localDistance[axis];
@@ -877,6 +898,20 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 					if (axis == 1) localPushOut.y = -limit - localDistance[axis];
 					if (axis == 2) localPushOut.z = -limit - localDistance[axis];
 				}
+			}
+
+			// 警告フラグの更新
+			if (minDistanceToWall < warningThreshold) {
+				isNearBoundary_ = true;
+				boundaryWarningIntensity_ = 1.0f - (std::max)(0.0f, minDistanceToWall) / warningThreshold;
+				boundaryAlertNormal_ = closestNormal;
+				
+				// プレイヤーの位置から壁の方向（closestNormal）へ距離分進んだ位置
+				boundaryAlertPosition_ = {
+					playerOBB.center.x + closestNormal.x * minDistanceToWall,
+					playerOBB.center.y + closestNormal.y * minDistanceToWall,
+					playerOBB.center.z + closestNormal.z * minDistanceToWall
+				};
 			}
 
 			if (localPushOut.x != 0.0f || localPushOut.y != 0.0f || localPushOut.z != 0.0f) {

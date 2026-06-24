@@ -1,6 +1,7 @@
 #pragma once
 #include "ModelCommon.h"
 #include "MyMath.h"
+#include "engine/Resource/TextureManager.h"
 #include <memory>
 #include <optional>
 #include <map>
@@ -184,6 +185,13 @@ public:
 		}
 	}
 
+	void SetTextureFilePath(const std::string& path) {
+		textureFilePath_ = path;
+		modelData.material.textureFilePath = path;
+		TextureManager::GetInstance()->LoadTexture(path);
+		modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(path);
+	}
+
 	void SetAlphaReference(float alphaRef) {
 		if (materialData) {
 			materialData->alphaReference = alphaRef;
@@ -197,6 +205,12 @@ public:
 	void SetColor(const Vector4& color) {
 		if (materialData) {
 			materialData->color = color;
+		}
+	}
+
+	void SetEnableLighting(bool enable) {
+		if (materialData) {
+			materialData->enableLighting = enable ? 1 : 0;
 		}
 	}
 

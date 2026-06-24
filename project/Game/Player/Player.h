@@ -52,6 +52,12 @@ public:
     const std::string& GetModelName() const { return modelName_; }
     Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
+    // 境界接近警告用ゲッター
+    bool IsNearBoundary() const { return isNearBoundary_; }
+    float GetBoundaryWarningIntensity() const { return boundaryWarningIntensity_; }
+    Vector3 GetBoundaryAlertPosition() const { return boundaryAlertPosition_; }
+    Vector3 GetBoundaryAlertNormal() const { return boundaryAlertNormal_; }
+
     // セッター
     void SetPosition(const Vector3 &position) {
         position_ = position;
@@ -114,7 +120,11 @@ private:
     bool enableSkinning_ = false;
     bool isAnimDebugActive_ = false;
 
+    // 境界接近警告用
+    bool isNearBoundary_ = false;
+    float boundaryWarningIntensity_ = 0.0f;
+    Vector3 boundaryAlertPosition_ = {0.0f, 0.0f, 0.0f};
+    Vector3 boundaryAlertNormal_ = {0.0f, 0.0f, 1.0f};
+
     std::unique_ptr<BoosterEffect> boosterEffect_;
 };
-
-

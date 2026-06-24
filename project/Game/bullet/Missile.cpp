@@ -103,8 +103,14 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 			Vector3 desiredDirection = NormalizeOr(toTarget, { 0.0f, 0.0f, 1.0f });
 			Vector3 currentDirection = NormalizeOr(velocity_, desiredDirection);
 			
+			// 基本のホーミング強さ。敵に近いほど必中させるために強くする
+			float actualHomingStrength = tuning_.homingStrength;
+			if (distToTarget < 30.0f) {
+				actualHomingStrength = (std::max)(actualHomingStrength, 1.0f - (distToTarget / 30.0f));
+			}
+
 			// 基本のホーミングブレンド
-			Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, std::clamp(tuning_.homingStrength, 0.0f, 1.0f));
+			Vector3 homingDirection = BlendDirection(currentDirection, desiredDirection, std::clamp(actualHomingStrength, 0.0f, 1.0f));
 
 			// 螺旋揺らぎ（板野サーカス効果）の計算
 			// 進行方向に垂直な基準軸を作成
@@ -124,8 +130,8 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 				fade *= (lifeTimer_ / 60.0f);
 			}
 
-			// 揺らぎの大きさ（振幅）
-			float amplitude = 1.3f * fade; 
+			// 揺らぎの大きさ（振幅）を大幅に抑えてスマートに
+			float amplitude = 0.15f * fade; 
 			Vector3 wave = Add(Scale(rightVec, std::cos(theta) * amplitude), Scale(upVec, std::sin(theta) * waveSign_ * amplitude));
 
 			// 最終的な進行ベクトル

@@ -36,6 +36,15 @@ void Object3dCommon::SetEffectDrawSettings() {
 	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
+void Object3dCommon::SetAlphaBlendDrawSettings() {
+	//ルートシグネチャをセットするコマンド
+	dxCommon_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
+	//アルファブレンド用のグラフィックスパイプラインをセットするコマンド
+	dxCommon_->GetCommandList()->SetPipelineState(alphaBlendPipelineState_.Get());
+	//プリミティブトポロジーをセットするコマンド
+	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
 void Object3dCommon::SetLineDrawSettings() {
 	dxCommon_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
 	dxCommon_->GetCommandList()->SetPipelineState(linePipelineState_.Get());
@@ -238,5 +247,12 @@ void Object3dCommon::CreateGraphicsPipeline() {
 	
 	effectPipelineState_ = nullptr;
 	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&effectPipelineState_));
-	assert(SUCCEEDED(hr) && "エフェクト用パイプラインの作成に失敗しました！");
+	assert(SUCCEEDED(hr) && "エフェクト用パイプラインの作成に失敗しました。");
+
+	// アルファブレンド（半透明）用
+	graphicsPipelineStateDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	
+	alphaBlendPipelineState_ = nullptr;
+	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&alphaBlendPipelineState_));
+	assert(SUCCEEDED(hr) && "アルファブレンド用パイプラインの作成に失敗しました。");
 }

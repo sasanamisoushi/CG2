@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "engine/Camera/Camera.h"
 #include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
@@ -107,6 +107,7 @@ private:
 
 	// 繝励Μ繝溘ユ繧｣繝・
 	std::unique_ptr<Primitive> myPlane;
+	std::unique_ptr<Primitive> boundaryAlertPlane_;
 	std::unique_ptr<Primitive> myShere;
 	std::unique_ptr<Primitive> myBox;
 	std::unique_ptr<Primitive> myRing;
