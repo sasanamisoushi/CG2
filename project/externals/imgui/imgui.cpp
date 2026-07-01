@@ -5254,7 +5254,7 @@ void ImGui::DebugAllocHook(ImGuiDebugAllocInfo* info, int frame_count, void* ptr
     IM_UNUSED(ptr);
     if (entry->FrameCount != frame_count)
     {
-        info->LastEntriesIdx = (info->LastEntriesIdx + 1) % IM_COUNTOF(info->LastEntriesBuf);
+   info->LastEntriesIdx = (info->LastEntriesIdx + 1) % IM_COUNTOF(info->LastEntriesBuf);
         entry = &info->LastEntriesBuf[info->LastEntriesIdx];
         entry->FrameCount = frame_count;
         entry->AllocCount = entry->FreeCount = 0;

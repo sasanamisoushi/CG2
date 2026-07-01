@@ -1,0 +1,1243 @@
+0001: import sys
+0002: 
+0003: op_file = r'c:\Users\k024g\OneDrive\デスクトップ\2年\2年前期\CG2\CG2\project\resources\level_editor\operators.py'
+0004: 
+0005: with open(op_file, 'r', encoding='utf-8') as f:
+0006:     text = f.read()
+0007: 
+0008: # Replace _sanitize_gemini_enemy_plan
+0009: old_sanitize = '''def _sanitize_gemini_enemy_plan(plan_data, count, center, extents, player):
+0010:     enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
+0011:     if not isinstance(enemies, list) or not enemies:
+0012:         raise ValueError("Geminiから敵データが返ってきませんでした。")
+0013: 
+0014:     blueprints = []
+0015:     margin = Vector((1.0, 1.0, 0.8))
+0016:     for index, enemy in enumerate(enemies[:count]):
+0017:         if not isinstance(enemy, dict):
+0018:             continue
+0019: 
+0020:         raw_path = enemy.get("path", [])
+0021:         points = []
+0022:         if isinstance(raw_path, list):
+0023:             for raw_point in raw_path[:12]:
+0024:                 point = _coerce_ai_point(raw_point)
+0025:                 if point is not None:
+0026:                     points.append(_clamp_point_to_box(point, center, extents, margin))
+0027: 
+0028:         spawn = _coerce_ai_point(enemy.get("spawn"))
+0029:         if spawn is None and points:
+0030:             spawn = points[0]
+0031:         if spawn is None:
+0032:             continue
+0033:         spawn = _clamp_point_to_box(spawn, center, extents, margin)
+0034: 
+0035:         if points:
+0036:             if (points[0] - spawn).length > 0.05:
+0037:                 points.insert(0, spawn)
+0038:             else:
+0039:                 points[0] = spawn
+0040:         else:
+0041:             points = [spawn]
+0042: 
+0043:         if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
+0044:             points.append(_fallback_second_path_point(spawn, player, center, extents))'''
+0045: 
+0046: new_sanitize = '''def _sanitize_gemini_enemy_plan(plan_data, count, center, extents, player):
+0047:     import bpy
+0048:     scene = bpy.context.scene
+0049:     enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
+0050:     if not isinstance(enemies, list) or not enemies:
+0051:         raise ValueError("Geminiから敵データが返ってきませんでした。")
+0052: 
+0053:     blueprints = []
+0054:     margin = Vector((1.0, 1.0, 0.8))
+0055:     for index, enemy in enumerate(enemies[:count]):
+0056:             lines = lines[1:]\r\n957:         if lines and lines[-1].startswith(\"```\"):\r\n958:             lines
+0057:             continue
+0058: 
+0059:         raw_path = enemy.get("path", [])
+0060:         points = []
+0061:         if isinstance(raw_path, list):
+0062:             for raw_point in raw_path[:12]:
+0063:                 point = _coerce_ai_point(raw_point)
+0064:                 if point is not None:
+0065:                     point = _clamp_point_to_box(point, center, extents, margin)
+0066:                     point = _push_out_of_obstacles(point, scene)
+0067:                     points.append(point)
+0068: 
+0069:         spawn = _coerce_ai_point(enemy.get("spawn"))
+0070:         if spawn is None and points:
+0071:             spawn = points[0]
+0072:         if spawn is None:
+0073:             continue
+0074:             
+0075:         spawn = _clamp_point_to_box(spawn, center, extents, margin)
+0076:         spawn = _push_out_of_obstacles(spawn, scene)
+0077: 
+0078:         if points:
+0079:             if (points[0] - spawn).length > 0.05:
+0080:                 points.insert(0, spawn)
+0081:             else:
+0082:                 points[0] = spawn
+0083:         else:
+0084:             points = [spawn]
+0085: 
+0086:         points = _sanitize_path_distances(points)
+0087:         if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
+0088:             points.append(_fallback_second_path_point(spawn, player, center, extents))'''
+0089: 
+0090: text = text.replace(old_sanitize, new_sanitize)
+0091: 
+0092: with open(op_file, 'w', encoding='utf-8') as f:
+0093:     f.write(text)
+0094: 
+0095:         batch_row = game_box.row()
+0096:         batch_row.operator(
+0097:             operators.MYADDON_OT_apply_active_properties_to_selection.bl_idname,
+0098:             text="選択中へ一括適用",
+0099:         },\r\n1000:         method=\"POST\",\r\nThe above content does NOT show the entire file contents. If you ne
+0100:         )
+0101: 
+0102:         if obj.type == 'CURVE' and (obj.name.startswith("EnemyPath") or getattr(obj, "enemy_path_id", "None") != "None"):
+0103:             path_box = layout.box()
+0104:             path_box.label(text="Enemy Flight Path")
+0105:             path_box.prop(obj, "enemy_path_id", text="パスID")
+0106:             path_box.prop(obj, "enemy_path_loop", text="ループ")
+0107:             path_box.prop(obj, "enemy_path_speed", text="速度")
+0108: 
+0109:         validation_box = layout.box()
+0110:         validation_box.label(text="Auto Validation")
+0111:         validation_box.prop(context.scene, "myaddon_auto_validation", text="自動チェック")
+0112:         validation_box.operator(operators.MYADDON_OT_validate_scene.bl_idname, text="今すぐチェック", icon='FILE_REFRESH')
+0113: 
+0114:         validation_status = getattr(context.scene, "myaddon_validation_status", "未チェック")
+0115:         validation_errors = getattr(context.scene, "myaddon_validation_errors", "").strip()
+0116:         validation_warnings = getattr(context.scene, "myaddon_validation_warnings", "").strip()
+0117:         validation_checks = getattr(context.scene, "myaddon_validation_checks", "").strip()
+0118:         status_icon = 'CHECKBOX_HLT'
+0119:         if validation_errors:
+0120:             status_icon = 'ERROR'
+0121:         elif validation_warnings:
+0122:             status_icon = 'INFO'
+0123: 
+0124:         validation_box.label(text=validation_status, icon=status_icon)
+0125: 
+0126:         if validation_checks:
+0127:             validation_box.separator()
+0128:             validation_box.label(text="Check Items")
+0129:             for line in validation_checks.splitlines():
+0130:                 parts = line.split("\t", 2)
+0131:                 if len(parts) < 3:
+0132:                     continue
+0133: 
+0134:                 level, label, detail = parts
+0135:                 icon = 'CHECKBOX_HLT'
+0136:                 status_text = "OK"
+0137:                 if level == "ERROR":
+0138:                     icon = 'ERROR'
+0139:                     status_text = "エラー"
+0140:                 elif level == "WARNING":
+0141:                     icon = 'INFO'
+0142:                     status_text = "警告"
+0143: 
+0144:                 validation_box.label(text=f"{status_text}: {label}", icon=icon)
+0145:                 if detail:
+0146:                     validation_box.label(text=f"  {detail}")
+0147:         else:
+0148:             for message in validation_errors.splitlines():
+0149:                 validation_box.label(text=message, icon='ERROR')
+0150: 
+0151:             for message in validation_warnings.splitlines():
+0152:                 validation_box.label(text=message, icon='INFO')
+0153: 
+0154:         # ★修正1：区切り線のインデント（字下げ）を左に戻しました！
+0155:         layout.separator()
+0156:         layout.label(text="=== レベル構築ツール ===")
+0157:         
+0158:         # ★修正2：アイコンを 'WIRE' から 'SHADING_WIRE' に直しました！
+0159:         layout.operator(operators.MYADDON_OT_create_stage_bounds.bl_idname, text="ステージ範囲 (ワイヤーフレーム) を配置", icon='SHADING_WIRE')
+0160:         layout.prop(context.scene, "myaddon_show_spawn_forward", text="スポーン向き表示")
+0161: 
+0162:         # スポーン地点配置ボタン（横に2つ並べる）
+0163:         row = layout.row()
+0164:         op_player = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="自機スポーン", icon='OUTLINER_OB_ARMATURE')
+0165:         op_player.spawn_type = "PLAYER" # 引数として PLAYER を渡す
+0166:         
+0167:         op_enemy = row.operator(operators.MYADDON_OT_create_spawn_point.bl_idname, text="敵リスポーン地点", icon='OUTLINER_OB_ARMATURE')
+0168:         op_enemy.spawn_type = "ENEMY"   # 引数として ENEMY を渡す
+0169: 
+0170:         path_row = layout.row()
+0171:         path_row.operator(operators.MYADDON_OT_create_enemy_path.bl_idname, text="敵飛行パスを配置", icon='CURVE_BEZCURVE')
+0172:         path_row.operator(operators.MYADDON_OT_assign_selected_enemy_path.bl_idname, text="選択パスを敵に割り当て", icon='LINKED')
+0173: 
+0174:         ai_box = layout.box()
+0175:         ai_box.label(text="AI敵プラン")
+0176:         ai_count_row = ai_box.row(align=True)
+0177:         ai_count_row.prop(context.scene, "myaddon_ai_enemy_count", text="敵数")
+0178:         ai_count_row.prop(context.scene, "myaddon_ai_enemy_seed", text="シード")
+0179:         ai_box.prop(context.scene, "myaddon_ai_enemy_provider", text="生成方式")
+0180:         ai_box.prop(context.scene, "myaddon_ai_enemy_style", text="登場スタイル")
+0181:         ai_box.prop(context.scene, "myaddon_ai_enemy_motion_prompt", text="動き")
+0182:         if getattr(context.scene, "myaddon_ai_enemy_provider", 'BUILTIN') == 'GEMINI':
+0183:             gemini_box = ai_box.box()
+0184:             gemini_box.prop(context.window_manager, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
+0185:             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_model", text="モデル")
+0186:             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_timeout", text="待ち時間(秒)")
+0187:             gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_fallback", text="失敗時は内蔵AI")
+0188:         ai_box.prop(context.scene, "myaddon_ai_enemy_wave_delay", text="増援間隔(F)")
+0189:         ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
+0190:         ai_box.operator(operators.MYADDON_OT_ai_generate_enemy_plan.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+0191:         ai_box.operator(operators.MYADDON_OT_ai_edit_selected_enemy_path.bl_idname, text="選択したパスだけをAIで再生成（編集）", icon='GREASEPENCIL')
+0192: 
+0193:         level_box = layout.box()
+0194:         level_box.label(text="AIレベルジェネレーター")
+0195:         level_box.prop(context.scene, "myaddon_ai_level_prompt", text="コンセプト")
+0196:         level_box.prop(context.scene, "myaddon_ai_level_seed", text="シード")
+0197:         level_box.prop(context.scene, "myaddon_ai_level_clear_existing", text="前回生成の障害物を削除")
+0198:         level_box.operator(operators.MYADDON_OT_ai_generate_level_obstacles.bl_idname, text="AIで障害物を自動配置", icon='MESH_CUBE')
+0199: 
+0200:         # エクスポート用の区切り線、ラベル、実行ボタン
+0201:         layout.separator()
+0202:         layout.label(text="Export")
+0203:         layout.label(text="Blender保存時にscene.json / 個別OBJ / MTLが自動出力されます", icon='INFO')
+0204:         export_row = layout.row()
+0205:         export_row.operator(operators.MYADDON_OT_export_scene.bl_idname, text="Scene Export", icon='EXPORT')
+0206:         export_row.operator(operators.MYADDON_OT_playtest_game.bl_idname, text="ゲームをプレイ", icon='PLAY')
+0207:         layout.prop(context.scene, "myaddon_game_exe_path", text="ゲームEXE")
+0208: 
+0209: 
+0210: classes = (
+0211:     TOPBAR_MT_my_menu,
+0212:     OBJECT_PT_file_name,
+0213: )
+0214: 
+0215: def register():
+0216:     for cls in classes:
+0217:         bpy.utils.register_class(cls)
+0218:     _cleanup_old_topbar_menu_handlers()
+0219:     bpy.types.TOPBAR_MT_editor_menus.append(TOPBAR_MT_my_menu.submenu)
+0220:     bpy.app.driver_namespace[_MENU_HANDLER_KEY] = TOPBAR_MT_my_menu.submenu
+0221: 
+0222: def unregister():
+0223:     _cleanup_old_topbar_menu_handlers()
+0224:     for cls in reversed(classes):
+0225:         bpy.utils.unregister_class(cls)
+0226: 
+0227:         extents = Vector((
+0228:             max(1.0, abs(dimensions.x) * 0.5),
+0229:             max(1.0, abs(dimensions.y) * 0.5),
+0230:             max(1.0, abs(dimensions.z) * 0.5),
+0231:         ))
+0232:         return center, extents
+0233: 
+0234:     return Vector((0.0, 0.0, 0.0)), Vector((18.0, 22.0, 10.0))
+0235: 
+0236: 
+0237: def _find_player_spawn_position(scene, fallback_center, fallback_extents):
+0238:     for obj in scene.objects:
+0239:         if getattr(obj, "game_obj_type", "NONE") == "PLAYER":
+0240:             return obj.matrix_world.translation.copy()
+0241: 
+0242:     return fallback_center + Vector((0.0, -fallback_extents.y * 0.55, 0.0))
+0243: 
+0244: 
+0245: def _find_goal_position(scene, fallback_center, fallback_extents):
+0246:     for obj in scene.objects:
+0247:         if getattr(obj, "game_obj_type", "NONE") == "GOAL" or obj.name.startswith("Goal"):
+0248:             return obj.matrix_world.translation.copy()
+0249: 
+0250:     return fallback_center + Vector((0.0, fallback_extents.y * 0.55, 0.0))
+0251: 
+0252: 
+0253: def _safe_normalized(vector, fallback):
+0254:     if vector.length <= 0.0001:
+0255:         return fallback.copy()
+0256:     return vector.normalized()
+0257: 
+0258: 
+0259: def _clamp_point_to_box(point, center, extents, margin):
+0260:     def clamp_axis(value, center_value, extent_value, margin_value):
+0261: 
+0262: 
+0263: def _prompt_has(prompt, *keywords):
+0264:     return any(keyword.casefold() in prompt for keyword in keywords)
+0265: 
+0266: 
+0267: def _parse_ai_motion_prompt(prompt, style):
+0268:     normalized = str(prompt or "").casefold()
+0269:     motion = {
+0270:         "pattern": "DEFAULT",
+0271:         "vertical": "NONE",
+0272:         "turn_sign": 1.0,
+0273:         "loop": True,
+0274:         "speed_multiplier": 1.0,
+0275:         "amplitude_multiplier": 1.0,
+0276:         "opener": None,
+0277:         "keep_formation": False,
+0278:         "respect_bounds": True,
+0279:         "edge_margin": 2.0,
+0280:     }
+0281: 
+0282:     if _prompt_has(normalized, "反時計", "左回り", "counter", "ccw"):
+0283:         motion["turn_sign"] = -1.0
+0284:     elif _prompt_has(normalized, "時計", "右回り", "clockwise", "cw"):
+0285:         motion["turn_sign"] = 1.0
+0286: 
+0287:     wants_edge = _prompt_has(normalized, "フィールド", "外周", "端", "端沿い", "ぎりぎり", "ギリギリ", "境界", "枠", "場外", "edge", "border", "boundary")
+0288:     wants_orbit = _prompt_has(normalized, "回る", "旋回", "円", "一周", "一週", "1周", "1週", "周回", "巡回", "ループ", "orbit", "circle", "loop")
+0289:     if _prompt_has(normalized, "群れ", "隊列", "編隊", "フォーメーション", "まとま", "崩さ", "一団", "formation", "swarm"):
+0290:         motion["keep_formation"] = True
+0291:         motion["opener"] = "ALL"
+0292:     if _prompt_has(normalized, "外に出ない", "外へ出ない", "はみ出", "出ない", "収め", "範囲内", "inside", "bounds"):
+0293:         motion["respect_bounds"] = True
+0294:     if _prompt_has(normalized, "ぎりぎり", "ギリギリ", "端沿い", "外周", "境界", "edge", "border"):
+0295:         motion["edge_margin"] = 1.0
+0296: 
+0297:     if _prompt_has(normalized, "板野サーカス", "マクロス", "macross"):
+0298:         motion["pattern"] = "SPIRAL"
+0299:         motion["speed_multiplier"] = 1.8
+0300:         motion["amplitude_multiplier"] = 1.5
+0301:     elif _prompt_has(normalized, "ファンネル", "ドラグーン", "funnel", "dragoon"):
+0302:         motion["pattern"] = "ORBIT"
+0303:         motion["keep_formation"] = False
+0304:         motion["opener"] = "ALL"
+0305:         motion["speed_multiplier"] = 1.5
+0306:         motion["amplitude_multiplier"] = 1.3
+0307:     elif _prompt_has(normalized, "トランザム", "ゼロシステム", "trans-am", "transam"):
+0308:         motion["pattern"] = "ZIGZAG"
+0309:         motion["speed_multiplier"] = 2.0
+0310:         motion["amplitude_multiplier"] = 1.4
+0311:     elif _prompt_has(normalized, "超スピード", "神速", "超光速"):
+0312:         motion["speed_multiplier"] = 2.5
+0313: 
+0314:     if wants_edge and wants_orbit:
+0315:         motion["pattern"] = "EDGE_ORBIT"
+0316:     elif _prompt_has(normalized, "螺旋", "スパイラル", "spiral"):
+0317:         motion["pattern"] = "SPIRAL"
+0318:         motion["amplitude_multiplier"] = max(motion["amplitude_multiplier"], 1.15)
+0319:     elif _prompt_has(normalized, "ジグザグ", "蛇行", "左右", "s字", "s-字", "zigzag", "zig-zag"):
+0320:         motion["pattern"] = "ZIGZAG"
+0321:         motion["amplitude_multiplier"] = max(motion["amplitude_multiplier"], 1.25)
+0322:     elif wants_orbit:
+0323:         motion["pattern"] = "ORBIT"
+0324:     elif _prompt_has(normalized, "突撃", "直線", "まっすぐ", "正面", "接近", "rush", "charge", "straight"):
+0325:         motion["pattern"] = "STRAIGHT"
+0326:         motion["loop"] = False
+0327: 
+0328:     if _prompt_has(normalized, "上昇", "上に", "上が", "登", "高く", "climb", "up"):
+0329:         motion["vertical"] = "UP"
+0330:     elif _prompt_has(normalized, "下降", "下に", "下が", "降下", "低く", "dive", "down"):
+0331:         motion["vertical"] = "DOWN"
+0332:     elif _prompt_has(normalized, "上下", "波", "ウェーブ", "wave", "up and down"):
+0333:         motion["vertical"] = "WAVE"
+0334:     elif _prompt_has(normalized, "急降下", "ダイブ", "dive", "drop"):
+0335:         motion["vertical"] = "DIVE"
+0336: 
+0337:     if _prompt_has(normalized, "速", "猛", "ダッシュ", "fast", "speed", "quick", "rapid") and motion["speed_multiplier"] == 1.0:
+0338:         motion["speed_multiplier"] = 1.6
+0339:     elif _prompt_has(normalized, "遅", "ゆっくり", "緩やか", "slow"):
+0340:         motion["speed_multiplier"] = 0.5
+0341:         
+0342:     return motion
+0343: 
+0344: 
+0345: def _apply_vertical_motion(points, motion, extents):
+0346:     vertical = motion.get("vertical", "NONE")
+0347:     if vertical == "NONE" or len(points) <= 1:
+0348:         return points
+0349: 
+0350:     max_offset = min(extents.z * 0.28, 4.0)
+0351:     adjusted = []
+0352:     for index, point in enumerate(points):
+0353:         t = index / (len(points) - 1)
+0354:         z_offset = 0.0
+0355:         if vertical == "UP":
+0356:             z_offset = max_offset * t
+0357:         elif vertical == "DOWN":
+0358:             z_offset = -max_offset * t
+0359:         elif vertical == "WAVE":
+0360:             z_offset = max_offset * (1.0 if index % 2 == 1 else -0.55)
+0361:         adjusted.append(point + Vector((0.0, 0.0, z_offset)))
+0362:     return adjusted
+0363: 
+0364: 
+0365: def _build_ai_formation_offsets(count, extents, motion):
+0366:     if not motion.get("keep_formation"):
+0367:         return [Vector((0.0, 0.0, 0.0)) for _ in range(count)]
+0368: 
+0369:     columns = max(1, math.ceil(math.sqrt(count)))
+0370:     rows = max(1, math.ceil(count / columns))
+0371:     max_spacing_x = (extents.x * 0.60) / max(1, columns - 1)
+0372:     max_spacing_y = (extents.y * 0.60) / max(1, rows - 1)
+0373:     spacing = min(2.0, max_spacing_x, max_spacing_y)
+0374:     spacing = max(0.65, spacing)
+0375: 
+0376:     offsets = []
+0377:     for index in range(count):
+0378:         col = index % columns
+0379:         row = index // columns
+0380:         offsets.append(Vector((
+0381:             (col - (columns - 1) * 0.5) * spacing,
+0382:             (row - (rows - 1) * 0.5) * spacing,
+0383:             0.0,
+0384:         )))
+0385: 
+0386:     motion["formation_extent_x"] = max((abs(offset.x) for offset in offsets), default=0.0)
+0387:     motion["formation_extent_y"] = max((abs(offset.y) for offset in offsets), default=0.0)
+0388:     return offsets
+0389: 
+0390: 
+0391: def _build_edge_orbit_points(motion, center, extents, formation_offset):
+0392:     edge_margin = float(motion.get("edge_margin", 2.0))
+0393:     formation_extent_x = float(motion.get("formation_extent_x", 0.0))
+0394:     formation_extent_y = float(motion.get("formation_extent_y", 0.0))
+0395:     radius_x = max(1.0, extents.x - edge_margin - formation_extent_x)
+0396:     radius_y = max(1.0, extents.y - edge_margin - formation_extent_y)
+0397: 
+0398:     if float(motion.get("turn_sign", 1.0)) < 0.0:
+0399:         corners = [
+0400:             (radius_x, -radius_y),
+0401:             (0.0, -radius_y),
+0402:             (-radius_x, -radius_y),
+0403:             (-radius_x, 0.0),
+0404:             (-radius_x, radius_y),
+0405:             (0.0, radius_y),
+0406:             (radius_x, radius_y),
+0407:             (radius_x, 0.0),
+0408:         ]
+0409:     else:
+0410:         corners = [
+0411:             (-radius_x, -radius_y),
+0412:             (0.0, -radius_y),
+0413:             (radius_x, -radius_y),
+0414:             (radius_x, 0.0),
+0415:             (radius_x, radius_y),
+0416:             (0.0, radius_y),
+0417:             (-radius_x, radius_y),
+0418:             (-radius_x, 0.0),
+0419:         ]
+0420: 
+0421:     return [
+0422:         center + Vector((x, y, 0.0)) + formation_offset
+0423:         for x, y in corners
+0424:     ]
+0425: 
+0426: 
+0427: def _create_ai_enemy_path(collection, path_id, points, loop, speed, handle_type='AUTO'):
+0428:     curve = bpy.data.curves.new(path_id, 'CURVE')
+0429:     curve.dimensions = '3D'
+0430:     curve.resolution_u = 24
+0431:     curve.bevel_depth = 0.04
+0432:     curve.bevel_resolution = 2
+0433: 
+0434:     spline = curve.splines.new('BEZIER')
+0435:     spline.bezier_points.add(len(points) - 1)
+0436:     spline.use_cyclic_u = loop
+0437: 
+0438:     for point, co in zip(spline.bezier_points, points):
+0439:         point.co = co
+0440:         point.handle_left_type = handle_type
+0441:         point.handle_right_type = handle_type
+0442: 
+0443:     obj = bpy.data.objects.new(path_id, curve)
+0444:     collection.objects.link(obj)
+0445:     obj.enemy_path_id = path_id
+0446:     obj.enemy_path_loop = loop
+0447:     obj.enemy_path_speed = speed
+0448:     obj[_AI_GENERATED_MARKER] = True
+0449:     return obj
+0450: 
+0451: 
+0452: def _create_ai_enemy_spawn(collection, name, location, facing, enemy_type, path_id, trigger_name, delay_frames):
+0453:     obj = bpy.data.objects.new(name, None)
+0454:     collection.objects.link(obj)
+0455:     obj.empty_display_type = 'SINGLE_ARROW'
+0456:     obj.empty_display_size = 2.0
+0457:     obj.location = location
+0458: 
+0459:     facing_xy = Vector((facing.x, facing.y, 0.0))
+0460:     if facing_xy.length > 0.0001:
+0461:         obj.rotation_euler = (0.0, 0.0, math.atan2(facing_xy.y, facing_xy.x) - math.pi * 0.5)
+0462: 
+0463:     obj.game_obj_type = 'ENEMY'
+0464:     obj.enemy_type = enemy_type
+0465:     obj.enemy_path_id = path_id
+0466:     obj.enemy_reinforcement_trigger_name = trigger_name
+0467:     obj.enemy_reinforcement_delay_frames = delay_frames
+0468:     obj[_AI_GENERATED_MARKER] = True
+0469:     return obj
+0470: 
+0471: 
+0472: def _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, pair_index, rng, formation_offset=None):
+0473:     if formation_offset is None:
+0474:         formation_offset = Vector((0.0, 0.0, 0.0))
+0475: 
+0476:     margin = Vector((1.5, 1.5, 1.0))
+0477:     to_player = player - spawn
+0478:     flat_to_player = Vector((to_player.x, to_player.y, 0.0))
+0479:     forward = _safe_normalized(flat_to_player, Vector((0.0, -1.0, 0.0)))
+0480:     right = Vector((forward.y, -forward.x, 0.0))
+0481:     amplitude = float(motion.get("amplitude_multiplier", 1.0))
+0482:     turn_side = side * float(motion.get("turn_sign", 1.0))
+0483:     lateral = min(extents.x * 0.45, 8.0) * side * amplitude
+0484:     z_swing = min(extents.z * 0.18, 2.5)
+0485:     pattern = motion.get("pattern", "DEFAULT")
+0486: 
+0487:     if pattern == "EDGE_ORBIT":
+0488:         raw_points = _build_edge_orbit_points(motion, center, extents, formation_offset)
+0489:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0490:         edge_margin = float(motion.get("edge_margin", 2.0))
+0491:         return [_clamp_point_to_box(point, center, extents, Vector((edge_margin, edge_margin, 1.0))) for point in raw_points]
+0492: 
+0493:     if pattern == "SPIRAL":
+0494:         focus = player + forward * min(extents.y * 0.12, 3.0)
+0495:         radius_x = min(extents.x * (0.22 + pair_index * 0.025), 7.5) * amplitude
+0496:         radius_y = min(extents.y * (0.16 + pair_index * 0.025), 7.5) * amplitude
+0497:         raw_points = [
+0498:             spawn,
+0499:             focus + right * (radius_x * turn_side) + Vector((0.0, 0.0, -z_swing)),
+0500:             focus + forward * radius_y - right * (radius_x * turn_side * 0.45),
+0501:             focus - right * (radius_x * turn_side) + Vector((0.0, 0.0, z_swing)),
+0502:             focus - forward * radius_y + right * (radius_x * turn_side * 0.45),
+0503:         ]
+0504:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0505:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0506: 
+0507:     if pattern == "ORBIT":
+0508:         focus = player + forward * min(extents.y * 0.08, 2.5)
+0509:         radius_x = min(extents.x * (0.24 + pair_index * 0.03), 8.0) * amplitude
+0510:         radius_y = min(extents.y * (0.18 + pair_index * 0.025), 8.0) * amplitude
+0511:         raw_points = [
+0512:             spawn,
+0513:             focus + right * (radius_x * turn_side),
+0514:             focus + forward * radius_y + Vector((0.0, 0.0, z_swing)),
+0515:             focus - right * (radius_x * turn_side),
+0516:             focus - forward * radius_y + Vector((0.0, 0.0, -z_swing)),
+0517:         ]
+0518:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0519:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0520: 
+0521:     if pattern == "ZIGZAG":
+0522:         step = min(max((player - spawn).length / 4.0, 3.0), extents.y * 0.28)
+0523:         zigzag_width = min(extents.x * 0.28, 6.0) * amplitude * side
+0524:         raw_points = [spawn]
+0525:         for point_index in range(1, 5):
+0526:             direction = -1.0 if point_index % 2 == 0 else 1.0
+0527:             raw_points.append(
+0528:                 spawn
+0529:                 + forward * (step * point_index)
+0530:                 + right * (zigzag_width * direction)
+0531:                 + Vector((0.0, 0.0, z_swing * direction * 0.7))
+0532:             )
+0533:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0534:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0535: 
+0536:     if pattern == "STRAIGHT":
+0537:         overshoot = min(extents.y * 0.24, 6.0)
+0538:         raw_points = [
+0539:             spawn,
+0540:             spawn + forward * min(extents.y * 0.24, 6.0) + Vector((0.0, 0.0, z_swing * 0.25)),
+0541:             player + forward * overshoot,
+0542:         ]
+0543:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0544:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0545: 
+0546:     if style == 'PATROL':
+0547:         radius_x = min(extents.x * 0.25 + pair_index * 0.4, 7.0)
+0548:         radius_y = min(extents.y * 0.18 + pair_index * 0.3, 8.0)
+0549:         raw_points = [
+0550:             spawn,
+0551:             spawn + forward * radius_y + right * (radius_x * side),
+0552:             spawn + forward * (radius_y * 0.2) - right * (radius_x * side),
+0553:             spawn - forward * radius_y,
+0554:         ]
+0555:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0556:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0557: 
+0558:     if style == 'SWARM':
+0559:         lateral *= 0.45
+0560:         raw_points = [
+0561:             spawn,
+0562:             player + forward * min(extents.y * 0.22, 5.0) + right * lateral + Vector((0.0, 0.0, z_swing)),
+0563:             player - forward * min(extents.y * 0.1, 2.0) - right * lateral + Vector((0.0, 0.0, -z_swing)),
+0564:             spawn + right * (lateral * 0.5) + forward * min(extents.y * 0.1, 2.0),
+0565:         ]
+0566:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0567:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0568: 
+0569:     if style == 'AMBUSH':
+0570:         lateral *= 1.15
+0571:         raw_points = [
+0572:             spawn,
+0573:             center + right * lateral + Vector((0.0, 0.0, z_swing)),
+0574:             player - right * (lateral * 0.65) + Vector((0.0, 0.0, -z_swing)),
+0575:             spawn + right * (lateral * 0.5) + forward * min(extents.y * 0.15, 3.0),
+0576:         ]
+0577:         raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0578:         return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0579: 
+0580:     raw_points = [
+0581:         spawn,
+0582:         center + right * lateral + Vector((0.0, 0.0, z_swing)),
+0583:         player + forward * min(extents.y * 0.2, 6.0) - right * (lateral * 0.45),
+0584:         spawn + right * (lateral * 0.5) + forward * min(extents.y * 0.15, 3.0),
+0585:     ]
+0586:     raw_points = _apply_vertical_motion(raw_points, motion, extents)
+0587:     return [_clamp_point_to_box(point, center, extents, margin) for point in raw_points]
+0588: 
+0589: 
+0590: def _gemini_enemy_plan_schema():
+0591:     point_schema = {
+0592:         "type": "object",
+0593:         "properties": {
+0594:             "x": {"type": "number"},
+0595:             "y": {"type": "number"},
+0596:             "z": {"type": "number"},
+0597:         },
+0598:         "required": ["x", "y", "z"],
+0599:     }
+0600:     return {
+0601:         "type": "object",
+0602:         "properties": {
+0603:             "enemies": {
+0604:                 "type": "array",
+0605:                 "items": {
+0606:                     "type": "object",
+0607:                     "properties": {
+0608:                         "spawn": point_schema,
+0609:                         "path": {
+0610:                             "type": "array",
+0611:                             "items": point_schema,
+0612:                         },
+0613:                         "loop": {"type": "boolean"},
+0614:                         "speed": {"type": "number"},
+0615:                         "enemy_type": {
+0616:                             "type": "string",
+0617:                             "enum": ["VF1", "VF1-1"],
+0618:                         },
+0619:                         "trigger_index": {"type": "integer"},
+0620:                         "delay_frames": {"type": "integer"},
+0621:                         "handle_type": {
+0622:                             "type": "string",
+0623:                             "enum": ["AUTO", "VECTOR"],
+0624:                         },
+0625:                     },
+0626:                     "required": ["spawn", "path", "loop", "speed", "enemy_type"],
+0627:                 },
+0628:             },
+0629:             "notes": {"type": "string"},
+0630:         },
+0631:         "required": ["enemies"],
+0632:     }
+0633: 
+0634: 
+0635: def _resolve_gemini_api_key(scene):
+0636:     configured_key = getattr(scene, "myaddon_ai_enemy_gemini_api_key", "").strip()
+0637:     if configured_key:
+0638:         return configured_key
+0639:     return os.environ.get("GEMINI_API_KEY", "").strip()
+0640: 
+0641: 
+0642: def _gemini_model_name(scene):
+0643:     model = str(getattr(scene, "myaddon_ai_enemy_gemini_model", "gemini-3.5-flash")).strip()
+0644:     if not model:
+0645:         model = "gemini-3.5-flash"
+0646:     if model.startswith("models/"):
+0647:         model = model[len("models/"):]
+0648:     return model
+0649: 
+0650: 
+0651: def _stage_bounds_prompt(center, extents):
+0652:     return {
+0653:         "center": [center.x, center.y, center.z],
+0654:         "extents": [extents.x, extents.y, extents.z],
+0655:         "min": [center.x - extents.x, center.y - extents.y, center.z - extents.z],
+0656:         "max": [center.x + extents.x, center.y + extents.y, center.z + extents.z],
+0657:     }
+0658: 
+0659: 
+0660:     return {
+0661:         "center": [center.x, center.y, center.z],
+0662:         "extents": [extents.x, extents.y, extents.z],
+0663:         "min": [center.x - extents.x, center.y - extents.y, center.z - extents.z],
+0664:         "max": [center.x + extents.x, center.y + extents.y, center.z + extents.z],
+0665:     }
+0666: 
+0667: 
+0668: def _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, center, extents, player, goal):
+0669:     style_label = {
+0670:         'BALANCED': "バランス",
+0671:         'AMBUSH': "挟み撃ち",
+0672:         'SWARM': "群れ",
+0673:         'PATROL': "巡回",
+0674:     }.get(style, style)
+0675:     bounds = _stage_bounds_prompt(center, extents)
+0676:     player_data = {"x": player.x, "y": player.y, "z": player.z}
+0677:     goal_data = {"x": goal.x, "y": goal.y, "z": goal.z}
+0678:     return (
+0679:         "You are a level-design route generator for a 3D shooting game.\n"
+0680:         "Return only JSON that matches the provided schema. Do not wrap it in markdown.\n"
+0681:         "Coordinate system: Z-up (X is left/right, Y is forward/backward depth, Z is height). 1 unit = 1 meter in real scale.\n"
+0682:         f"Enemy count must be exactly {count}.\n"
+0683:         f"Seed hint: {seed}. Style: {style_label}. Default reinforcement delay: {wave_delay} frames.\n"
+0684:         f"Stage Bounds (Absolute generation area) JSON: {json.dumps(bounds, ensure_ascii=False)}\n"
+0685:         f"Player spawn JSON (Start point): {json.dumps(player_data, ensure_ascii=False)}\n"
+0686:         f"Goal point JSON (End point): {json.dumps(goal_data, ensure_ascii=False)}\n"
+0687:         f"Designer request: {motion_prompt}\n"
+0688:         "Rules:\n"
+0689:         "- Every spawn and path point must stay inside the field bounds.\n"
+0690:         "- spawn should be the first path point or very close to it.\n"
+0691:         "- Each path must contain 3 to 10 points.\n"
+0692:         "- Use loop=true for patrol, orbit, lap, circle, one-lap, or field-edge movement.\n"
+0693:         "- Use handle_type=VECTOR for paths that must not bulge outside the field.\n"
+0694:         "- Use speed from 0.015 to 0.18. If the request says very fast or explosive speed, use a higher value.\n"
+0695:         "- trigger_index is -1 for enemies that appear immediately. Otherwise use a previous enemy index.\n"
+0696:         "- If the request says to keep a swarm, formation, or group together, keep route shapes similar and offset the points slightly.\n"
+0697:         "- If the request says field edge or one lap, create a route around the inside edge without leaving the field.\n"
+0698:     )
+0699: 
+0700: 
+0701:     try:
+0702:         return json.loads(stripped)
+0703:     except json.JSONDecodeError:
+0704:         start = stripped.find("{")
+0705:         end = stripped.rfind("}")
+0706:         if start >= 0 and end > start:
+0707:             return json.loads(stripped[start:end + 1])
+0708:         raise
+0709: 
+0710: 
+0711: def _request_gemini_enemy_plan(scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
+0712:     api_key = _resolve_gemini_api_key(scene)
+0713:     if not api_key:
+0714:         raise ValueError("Gemini APIキーが未設定です。")
+0715: 
+0716:     model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
+0717:     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+0718:     prompt = _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, center, extents, player)
+0719:     payload = {
+0720:         "contents": [
+0721:             {
+0722:                 "parts": [
+0723:                     {"text": prompt},
+0724:                 ],
+0725:             },
+0726:         ],
+0727:         "generationConfig": {
+0728:             "responseMimeType": "application/json",
+0729:             "responseSchema": _gemini_enemy_plan_schema(),
+0730:             "maxOutputTokens": 4096,
+0731:         },
+0732:     }
+0733:     request = urllib.request.Request(
+0734:         url,
+0735:         data=json.dumps(payload).encode("utf-8"),
+0736:         headers={
+0737:             "Content-Type": "application/json",
+0738:             "x-goog-api-key": api_key,
+0739:         },
+0740:         method="POST",
+0741:     )
+0742: 
+0743:     timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_gemini_timeout", 25)))
+0744:     try:
+0745:         with urllib.request.urlopen(request, timeout=timeout) as response:
+0746:             response_data = json.loads(response.read().decode("utf-8"))
+0747:     except urllib.error.HTTPError as exc:
+0748:         detail = exc.read().decode("utf-8", errors="replace")
+0749:         raise RuntimeError(f"Gemini APIエラー {exc.code}: {detail[:280]}") from exc
+0750:     except urllib.error.URLError as exc:
+0751:         raise RuntimeError(f"Gemini APIへ接続できません: {exc.reason}") from exc
+0752: 
+0753:     candidates = response_data.get("candidates", [])
+0754:     if not candidates:
+0755:         raise RuntimeError("Geminiから候補が返ってきませんでした。")
+0756: 
+0757:     parts = candidates[0].get("content", {}).get("parts", [])
+0758:     text = "".join(part.get("text", "") for part in parts)
+0759:     if not text.strip():
+0760:         raise RuntimeError("Geminiの返答が空でした。")
+0761:     return _parse_gemini_json_text(text)
+0762: 
+0763: 
+0764: def _coerce_ai_point(value):
+0765:     if isinstance(value, dict):
+0766:         raw = (value.get("x"), value.get("y"), value.get("z"))
+0767:     elif isinstance(value, (list, tuple)) and len(value) >= 3:
+0768:         raw = (value[0], value[1], value[2])
+0769:     else:
+0770:         return None
+0771: 
+0772:     try:
+0773:         coords = tuple(float(component) for component in raw)
+0774:     except (TypeError, ValueError):
+0775:         return None
+0776:     if not all(math.isfinite(component) for component in coords):
+0777:         return None
+0778:     return Vector(coords)
+0779: 
+0780: 
+0781: def _clamp_float(value, default, minimum, maximum):
+0782:     try:
+0783:         number = float(value)
+0784:     except (TypeError, ValueError):
+0785:         number = default
+0786:     if not math.isfinite(number):
+0787:         number = default
+0788:     return max(minimum, min(maximum, number))
+0789: 
+0790: 
+0791: def _fallback_second_path_point(spawn, player, center, extents):
+0792:     forward = _safe_normalized(player - spawn, Vector((0.0, 1.0, 0.0)))
+0793:     distance = min(max(extents.y * 0.20, 2.0), 6.0)
+0794:     point = _clamp_point_to_box(spawn + forward * distance, center, extents, Vector((1.0, 1.0, 0.8)))
+0795:     if (point - spawn).length < 0.05:
+0796:         point = _clamp_point_to_box(spawn + Vector((distance, 0.0, 0.0)), center, extents, Vector((1.0, 1.0, 0.8)))
+0797:     return point
+0798: 
+0799: 
+0800: def _sanitize_gemini_enemy_plan(plan_data, count, center, extents, player):
+0801:     import bpy
+0802:     scene = bpy.context.scene
+0803:     enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
+0804:     if not isinstance(enemies, list) or not enemies:
+0805:         raise ValueError("Geminiから敵データが返ってきませんでした。")
+0806: 
+0807:     blueprints = []
+0808:     margin = Vector((1.0, 1.0, 0.8))
+0809:     for index, enemy in enumerate(enemies[:count]):
+0810: 
+0811: def _sanitize_enemy_plan_data(plan_data, count, center, extents, player):
+0812:     import bpy
+0813:     scene = bpy.context.scene
+0814:     enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
+0815:     if not isinstance(enemies, list) or not enemies:
+0816:         raise ValueError("AIから敵データが返ってきませんでした。")
+0817: 
+0818:     blueprints = []
+0819:     margin = Vector((1.0, 1.0, 0.8))
+0820:     for index, enemy in enumerate(enemies[:count]):
+0821:         if not isinstance(enemy, dict):
+0822:             continue
+0823: 
+0824:         raw_path = enemy.get("path", [])
+0825:         points = []
+0826:         if isinstance(raw_path, list):
+0827:             for raw_point in raw_path[:12]:
+0828:                 point = _coerce_ai_point(raw_point)
+0829:                 if point is not None:
+0830:                     point = _clamp_point_to_box(point, center, extents, margin)
+0831:                     point = _push_out_of_obstacles(point, scene)
+0832:                     points.append(point)
+0833: 
+0834:         spawn = _coerce_ai_point(enemy.get("spawn"))
+0835:         if spawn is None and points:
+0836:             spawn = points[0]
+0837:         if spawn is None:
+0838:             continue
+0839:             
+0840:         spawn = _clamp_point_to_box(spawn, center, extents, margin)
+0841:         spawn = _push_out_of_obstacles(spawn, scene)
+0842: 
+0843:         if points:
+0844:             if (points[0] - spawn).length > 0.05:
+0845:                 points.insert(0, spawn)
+0846:             else:
+0847:                 points[0] = spawn
+0848:         else:
+0849:             points = [spawn]
+0850: 
+0851:         points = _sanitize_path_distances(points)
+0852:         if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
+0853:             points.append(_fallback_second_path_point(spawn, player, center, extents))
+0854: 
+0855:         enemy_type = str(enemy.get("enemy_type", "")).strip()
+0856:         if enemy_type not in {"VF1", "VF1-1"}:
+0857:             enemy_type = "VF1-1" if index % 3 == 2 else "VF1"
+0858: 
+0859:         loop = bool(enemy.get("loop", False))
+0860:         speed = _clamp_float(enemy.get("speed", 0.05), 0.05, 0.015, 0.18)
+0861:         trigger_index = int(enemy.get("trigger_index", -1))
+0862:         delay_frames = int(enemy.get("delay_frames", 0))
+0863:         handle_type = str(enemy.get("handle_type", "AUTO")).strip()
+0864:         if handle_type not in {"AUTO", "VECTOR", "ALIGNED", "FREE"}:
+0865:             handle_type = "AUTO"
+0866: 
+0867:         blueprints.append({
+0868:             "spawn": spawn,
+0869:             "path": points,
+0870:             "enemy_type": enemy_type,
+0871:             "loop": loop,
+0872:             "speed": speed,
+0873:             "trigger_index": trigger_index,
+0874:             "delay_frames": delay_frames,
+0875:             "handle_type": handle_type,
+0876:         })
+0877:         
+0878:     return blueprints
+0879: 
+0880: def _gemini_enemy_plan_schema():
+0881:     point_schema = {
+0882:         "type": "object",
+0883:         "properties": {
+0884:             "x": {"type": "number"},
+0885:             "y": {"type": "number"},
+0886:             "z": {"type": "number"},
+0887:         },
+0888:         "required": ["x", "y", "z"],
+0889:     }
+0890:     return {
+0891:         "type": "object",
+0892:         "properties": {
+0893:             "enemies": {
+0894:                 "type": "array",
+0895:                 "items": {
+0896:                     "type": "object",
+0897:                     "properties": {
+0898:                         "spawn": point_schema,
+0899:                         "path": {
+0900:                             "type": "array",
+0901:                             "items": point_schema,
+0902:                         },
+0903:                         "loop": {"type": "boolean"},
+0904:                         "speed": {"type": "number"},
+0905:                         "enemy_type": {
+0906:                             "type": "string",
+0907:                             "enum": ["VF1", "VF1-1"],
+0908:                         },
+0909:                         "trigger_index": {"type": "integer"},
+0910:                         "delay_frames": {"type": "integer"},
+0911:                         "handle_type": {
+0912:                             "type": "string",
+0913:                             "enum": ["AUTO", "VECTOR"],
+0914:                         },
+0915:                     },
+0916:                     "required": ["spawn", "path", "loop", "speed", "enemy_type"],
+0917:                 },
+0918:             },
+0919:             "notes": {"type": "string"},
+0920:         },
+0921:     style_label = {
+0922:         'BALANCED': "バランス",
+0923:         'AMBUSH': "挟み撃ち",
+0924:         'SWARM': "群れ",
+0925:         'PATROL': "巡回",
+0926:     }.get(style, style)
+0927:     bounds = _stage_bounds_prompt(center, extents)
+0928:     player_data = {"x": player.x, "y": player.y, "z": player.z}
+0929:     return (
+0930:         "You are a level-design route generator for a 3D shooting game.\n"
+0931:         "Return only JSON that matches the provided schema. Do not wrap it in markdown.\n"
+0932:         "Coordinate system: X is left/right, Y is field depth, Z is height. Unit is Blender world unit.\n"
+0933:         f"Enemy count must be exactly {count}.\n"
+0934:         f"Seed hint: {seed}. Style: {style_label}. Default reinforcement delay: {wave_delay} frames.\n"
+0935:         f"Field bounds JSON: {json.dumps(bounds, ensure_ascii=False)}\n"
+0936:         f"Player spawn JSON: {json.dumps(player_data, ensure_ascii=False)}\n"
+0937:         f"Designer request: {motion_prompt}\n"
+0938:         "Rules:\n"
+0939:         "- Every spawn and path point must stay inside the field bounds.\n"
+0940:         "- spawn should be the first path point or very close to it.\n"
+0941:         "- Each path must contain 3 to 10 points.\n"
+0942:         "- Use loop=true for patrol, orbit, lap, circle, one-lap, or field-edge movement.\n"
+0943:         "- Use handle_type=VECTOR for paths that must not bulge outside the field.\n"
+0944:         "- Use speed from 0.015 to 0.18. If the request says very fast or explosive speed, use a higher value.\n"
+0945:         "- trigger_index is -1 for enemies that appear immediately. Otherwise use a previous enemy index.\n"
+0946:         "- If the request says to keep a swarm, formation, or group together, keep route shapes similar and offset the points slightly.\n"
+0947:         "- If the request says field edge or one lap, create a route around the inside edge without leaving the field.\n"
+0948:     )
+0949: 
+0950: 
+0951: def _parse_gemini_json_text(text):
+0952:     stripped = str(text or "").strip()
+0953:     if stripped.startswith("```"):
+0954:         lines = stripped.splitlines()
+0955:         if lines and lines[0].startswith("```"):
+0956:             lines = lines[1:]
+0957:         if lines and lines[-1].startswith("```"):
+0958:             lines = lines[:-1]
+0959:         stripped = "\n".join(lines).strip()
+0960: 
+0961:     try:
+0962:         return json.loads(stripped)
+0963:     except json.JSONDecodeError:
+0964:         start = stripped.find("{")
+0965:         end = stripped.rfind("}")
+0966:         if start >= 0 and end > start:
+0967:             return json.loads(stripped[start:end + 1])
+0968:         raise
+0969: 
+0970: 
+0971: def _request_gemini_enemy_plan(context, scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
+0972:     api_key = _resolve_gemini_api_key(context)
+0973:     if not api_key:
+0974:         raise ValueError("Gemini APIキーが未設定です。一時入力欄か環境変数 GEMINI_API_KEY を設定してください。")
+0975: 
+0976:     model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
+0977:     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+0978:     prompt = _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, center, extents, player)
+0979:     payload = {
+0980:         "contents": [
+0981:             {
+0982:                 "parts": [
+0983:                     {"text": prompt},
+0984:                 ],
+0985:             },
+0986:         ],
+0987:         "generationConfig": {
+0988:             \"responseMimeType\": \"application/json\",\r\n989:             \"responseSchema\": _gemini_enemy_plan
+0989:             "responseSchema": _gemini_enemy_plan_schema(),
+0990:             "maxOutputTokens": 4096,
+0991:         },
+0992:     }
+0993:     request = urllib.request.Request(
+0994:         url,
+0995:         data=json.dumps(payload).encode("utf-8"),
+0996:         headers={
+0997:             "Content-Type": "application/json",
+0998:             "x-goog-api-key": api_key,
+0999:         },
+1000:         end = stripped.rfind("}")
+1001:         if start >= 0 and end > start:
+1002:             return json.loads(stripped[start:end + 1])
+1003:         raise
+1004: 
+1005: 
+1006: def _request_gemini_enemy_plan(context, scene, count, seed, style, motion_prompt, wave_delay, center, extents, player, boss):
+1007:     api_key = _resolve_gemini_api_key(context)
+1008:     if not api_key:
+1838:     for obs_data in obstacles_to_create:
+1839:         loc = obs_data["loc"]
+1840:         scale = obs_data["scale"]
+1841:         
+1842:         # 1. 境界内チェック (Clamp to StageBounds)
+1843:         loc = _clamp_point_to_box(loc, center, extents, Vector((scale.x, scale.y, 0.0)))
+1844:         
+1845:         # 2. 衝突回避 (他障害物と被らないように押し出し)
+1846:         loc = _push_out_of_obstacles(loc, scene)
+1847:         
+1848:         if shape_type == "CYLINDER":
+1849:             bpy.ops.mesh.primitive_cylinder_add(location=loc)
+1850:         else:
+1851:             bpy.ops.mesh.primitive_cube_add(location=loc)
+1852:             
+1853:         obj = context.active_object
+1854:         obj.scale = scale
+1855:         obj["ai_generated_obstacle"] = True
+1856:         obj["game_obj_type"] = "OBSTACLE"
+1857:         
+1858:         for c in obj.users_collection:
+1859:             c.objects.unlink(obj)
+1860:         obs_col.objects.link(obj)
+1861:         
+1862:         created_objs.append(obj)
+1863:         
+1864:     return created_objs
+1865: 
+1866:         center = Vector((0,0,0))
+1867:         extents = Vector((20,20,20))
+1868:         try:
+1869:             from . import operators
+1870:             center, extents = operators._stage_bounds_box(scene)
+1871:         except:
+1872:             for obj in scene.objects:
+1873:                 if obj.name == "StageBounds":
+1874:                     center = obj.location
+1875:                     extents = Vector((obj.scale.x * 2.0, obj.scale.y * 2.0, obj.scale.z * 2.0))
+1876:                     break
+1877:         
+1878:         style = plan["style"]
+1879:         shape = plan["shape"]
+1880:         density = plan["density_multiplier"]
+1881:         
+1882:         obstacles_to_create = []
+1883:         
+1884:         if style == "CITY":
+1885:             base_count = int(16 * density)
+1886:             cols = max(2, int(math.sqrt(base_count)))
+1887:             rows = max(2, int(base_count / cols))
+1888:             spacing_x = (extents.x * 2 * 0.8) / cols
+1889:             spacing_y = (extents.y * 2 * 0.8) / rows
+1890:             
+1891:             for r in range(rows):
+1892:                 for c in range(cols):
+1893:                     if rng.random() > 0.3:
+1894:                         lx = center.x - extents.x*0.8 + c * spacing_x + rng.uniform(-2, 2)
+1895:                         ly = center.y - extents.y*0.8 + r * spacing_y + rng.uniform(-2, 2)
+1896:                         obstacles_to_create.append({
+1897:                             "loc": Vector((lx, ly, 0)),
+1898:                             "scale": Vector((rng.uniform(1.0, 3.0), rng.uniform(1.0, 3.0), rng.uniform(4.0, 12.0)))
+1899:                         })
+1900:         elif style == "DEFENSE_LINE":
+1901:             base_count = int(8 * density)
+1902:             spacing = (extents.x * 2 * 0.9) / max(1, base_count)
+1903:             for i in range(base_count):
+1904:                 lx = center.x - extents.x*0.9 + i * spacing
+1905:                 ly = center.y + extents.y * rng.uniform(0.1, 0.3)
+1906:                 obstacles_to_create.append({
+1907:                     "loc": Vector((lx, ly + rng.uniform(-1, 1), 0)),
+1908:                     "scale": Vector((rng.uniform(2.0, 6.0), rng.uniform(1.0, 2.0), rng.uniform(2.0, 4.0)))
+1909:                 })
+1910:         elif style == "MAZE":
+1911:             base_count = int(12 * density)
+1912:             for i in range(base_count):
+1913:                 lx = center.x + rng.uniform(-extents.x*0.8, extents.x*0.8)
+1914:                 ly = center.y + rng.uniform(-extents.y*0.8, extents.y*0.8)
+1915:                 is_horizontal = rng.random() > 0.5
+1916:                 sx = rng.uniform(6.0, 15.0) if is_horizontal else rng.uniform(1.0, 2.0)
+1917:                 sy = rng.uniform(1.0, 2.0) if is_horizontal else rng.uniform(6.0, 15.0)
+1918:                 obstacles_to_create.append({
+1919:                     "loc": Vector((lx, ly, 0)),
+1920:                     "scale": Vector((sx, sy, rng.uniform(3.0, 6.0)))
+1921:                 })
+1922:         elif style == "ARENA":
+1923:             base_count = int(12 * density)
+1924:             for i in range(base_count):
+1925:                 angle = (i / base_count) * 2 * math.pi
+1926:                 r = min(extents.x, extents.y) * 0.7
+1927:                 lx = center.x + math.cos(angle) * r
+1928:                 ly = center.y + math.sin(angle) * r
+1929:                 obstacles_to_create.append({
+1930:                     "loc": Vector((lx, ly, 0)),
+1931:                     "scale": Vector((2.0, 2.0, rng.uniform(3.0, 8.0)))
+1932:                 })
+1933:                 
+1934:         created_objs = _build_ai_level_obstacles(context, obstacles_to_create, shape)
+1935:         self.report({'INFO'}, f"{len(created_objs)}個のAI障害物を配置しました")
+1936:         
+1937:         return {'FINISHED'}
+1938: 
+1939: class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
+1940:     bl_idname = "myaddon.myaddon_ot_ai_generate_enemy_plan"
+1990:     def execute(self, context):
+1991:         import random
+1992:         import bpy
+1993:         from mathutils import Vector
+1994:         scene = context.scene
+1995:         
+1996:         selected_obstacles = [obj for obj in context.selected_objects if getattr(obj, "game_obj_type", "") == 'OBSTACLE' or obj.name.startswith("LevelObstacle")]
+1997:         
+1998:         if not selected_obstacles:
+1999:             self.report({'ERROR'}, "再生成したい障害物を選択してください")
+2000:             return {'CANCELLED'}
+2001: 
+2002:         center = Vector((0,0,0))
+2003:         extents = Vector((20,20,20))
+2004:         try:
+2005:             from . import operators
+2006:             center, extents = operators._stage_bounds_box(scene)
+2007:         except:
+2008:             for obj in scene.objects:
+2009:                 if obj.name == "StageBounds":
+2010:                     center = obj.location
+2011:                     extents = Vector((obj.scale.x * 2.0, obj.scale.y * 2.0, obj.scale.z * 2.0))
+2012:                     break
+2013:         
+2014:         plan = _parse_ai_level_prompt(self.level_prompt)
+2015:         rng = random.Random(self.seed)
+2016:         shape = plan["shape"]
+2017:         
+2018:         col_name = "AI_Obstacles"
+2019:         obs_col = bpy.data.collections.get(col_name)
+2020:         if not obs_col:
+2021:             obs_col = bpy.data.collections.new(col_name)
+2022:             scene.collection.children.link(obs_col)
+2023: 
+2024:         updated_count = 0
+2025:         for obs_obj in selected_obstacles:
+2026:             spawn_loc = obs_obj.location.copy()
+2027:             
+2028:             # Remove old obstacle
+2029:             bpy.data.objects.remove(obs_obj, do_unlink=True)
+2030:             
+2031:             sx = rng.uniform(1.0, 3.0)
+2032:             sy = rng.uniform(1.0, 3.0)
+2033:             sz = rng.uniform(4.0, 12.0)
+2034:             
+2035:             if plan["style"] == "MAZE":
+2036:                 is_horizontal = rng.random() > 0.5
+2037:                 sx = rng.uniform(6.0, 15.0) if is_horizontal else rng.uniform(1.0, 2.0)
+2038:                 sy = rng.uniform(1.0, 2.0) if is_horizontal else rng.uniform(6.0, 15.0)
+2039:             elif plan["style"] == "DEFENSE_LINE":
+2040:                 sx = rng.uniform(2.0, 6.0)
+2041:                 sy = rng.uniform(1.0, 2.0)
+2042:                 sz = rng.uniform(2.0, 4.0)
+2043:             elif plan["style"] == "RANDOM":
+2044:                 sx = rng.uniform(1.0, 10.0)
+2045:                 sy = rng.uniform(1.0, 10.0)
+2250: 
+2251: 
+2252: class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
+2253:     bl_idname = "myaddon.myaddon_ot_ai_edit_selected_enemy_path"
+2254:     bl_label = "選択したパスをAIで再生成"
+2255:     bl_description = "選択中のEnemyPathを、現在のプロンプトを使って再生成します"
+2256:     bl_options = {'REGISTER', 'UNDO'}
+2257: 
+2258:     def execute(self, context):
+2259:         scene = context.scene
+2260:         selected_paths = [obj for obj in context.selected_objects if _is_enemy_path_object(obj)]
+2261:         if not selected_paths:
+2262:             self.report({'ERROR'}, "再生成したいEnemyPathを選択してください")
+2263:             return {'CANCELLED'}
+2264: 
+2265:         center, extents = _stage_bounds_box(scene)
+2266:         player = _find_player_spawn_position(scene, center, extents)
+2267:         
+2268:         style = getattr(scene, "myaddon_ai_enemy_style", 'BALANCED')
+2269:         motion_prompt = getattr(scene, "myaddon_ai_enemy_motion_prompt", "")
+2270:         motion = _parse_ai_motion_prompt(motion_prompt, style)
+2271:         rng = random.Random(int(getattr(scene, "myaddon_ai_enemy_seed", 1)))
+2272:         
+2273:         updated_count = 0
+2274:         for path_obj in selected_paths:
+2275:             path_id = getattr(path_obj, "enemy_path_id", path_obj.name)
+2276:             spawn = None
+2277:             side = 1.0
+2278:             for obj in scene.objects:
+2279:                 if getattr(obj, "game_obj_type", "NONE") == "ENEMY" and getattr(obj, "enemy_path_id", "") == path_id:
+2280:                     spawn = obj.location.copy()
+2281:                     if spawn.x < player.x: side = -1.0
+2282:                     break
+2283:             
+2284:             if not spawn:
+2285:                 spawn = path_obj.location.copy()
+2286:             
+2287:             points = _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, 0, rng)
+2288:             if path_obj.type == 'CURVE' and points:
+2289:                 curve = path_obj.data
+2290:                 spline = curve.splines[0] if curve.splines else curve.splines.new('BEZIER')
+2291:                 if len(spline.bezier_points) < len(points):
+2292:                     spline.bezier_points.add(len(points) - len(spline.bezier_points))
+2293:                 elif len(spline.bezier_points) > len(points):
+2294:                     curve.splines.remove(spline)
+2295:                     spline = curve.splines.new('BEZIER')
+2296:                     spline.bezier_points.add(len(points) - 1)
+2297:                 
+2298:                 loop = motion["loop"] if motion.get("loop") is not None else style == 'PATROL'
+2299:                 spline.use_cyclic_u = loop
+2300:                 
+2301:                 handle_type = 'VECTOR' if motion.get("pattern") == "EDGE_ORBIT" and motion.get("respect_bounds") else 'AUTO'
+2302:                 for point, co in zip(spline.bezier_points, points):
+2303:                     point.co = co
+2304:                     point.handle_left_type = handle_type
+2305:                     point.handle_right_type = handle_type
+2306:                 
+2307:                 speed = 0.050 * motion.get("speed_multiplier", 1.0)
+2308:                 path_obj.enemy_path_loop = loop
+2309:                 path_obj.enemy_path_speed = speed
+2310:                 path_obj["myaddon_ai_motion_prompt"] = motion_prompt
+2311:                 updated_count += 1
+2312:                 
+2313:         self.report({'INFO'}, f"{updated_count}個のパスをAIで再生成しました")
+2314:         return {'FINISHED'}
+2315: 
+2316: classes = (
+2317: 
+2318:     MYADDON_OT_stretch_vertex,
+2319:     MYADDON_OT_create_ico_sphere,
+2320:     MYADDON_OT_export_scene,
+2321:     MYADDON_OT_validate_scene,
+2322:     MYADDON_OT_playtest_game,
+2323:     MYADDON_OT_apply_active_properties_to_selection,
+2324:     MYADDON_OT_ai_generate_level_obstacles,
+2325:     MYADDON_OT_ai_generate_enemy_plan,

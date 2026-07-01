@@ -177,6 +177,10 @@
     <ClCompile Include="engine\Camera\FlyCamera.cpp" />
     <ClCompile Include="Game\base\Game.cpp" />
     <ClCompile Include="Game\Scene\GamePlayScene.cpp" />
+    <ClCompile Include="Game\Scene\GameCameraManager.cpp" />
+    <ClCompile Include="Game\Scene\LevelManager.cpp" />
+    <ClCompile Include="Game\Scene\GamePlayUIManager.cpp" />
+    <ClCompile Include="Game\Scene\EnvironmentRenderer.cpp" />
     <ClCompile Include="engine\Debug\ImGuiManager.cpp" />
     <ClCompile Include="engine\Input\Input.cpp" />
     <ClCompile Include="engine\base\Logger.cpp" />
@@ -306,6 +310,10 @@
     <ClInclude Include="engine\base\Framework.h" />
     <ClInclude Include="Game\base\Game.h" />
     <ClInclude Include="Game\Scene\GamePlayScene.h" />
+    <ClInclude Include="Game\Scene\GameCameraManager.h" />
+    <ClInclude Include="Game\Scene\LevelManager.h" />
+    <ClInclude Include="Game\Scene\GamePlayUIManager.h" />
+    <ClInclude Include="Game\Scene\EnvironmentRenderer.h" />
     <ClInclude Include="engine\Debug\ImGuiManager.h" />
     <ClInclude Include="engine\base\Logger.h" />
     <ClInclude Include="3D\Model.h" />
@@ -363,6 +371,7 @@
     <Copy SourceFiles="$(TargetPath)" DestinationFiles="$(TargetDir)CG2Simulation.exe" SkipUnchangedFiles="true" />
   </Target>
 </Project>
+
 
 
 

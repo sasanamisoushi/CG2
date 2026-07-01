@@ -171,23 +171,7 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         path_row.operator(operators.MYADDON_OT_create_enemy_path.bl_idname, text="敵飛行パスを配置", icon='CURVE_BEZCURVE')
         path_row.operator(operators.MYADDON_OT_assign_selected_enemy_path.bl_idname, text="選択パスを敵に割り当て", icon='LINKED')
 
-        ai_box = layout.box()
-        ai_box.label(text="AI敵プラン")
-        ai_count_row = ai_box.row(align=True)
-        ai_count_row.prop(context.scene, "myaddon_ai_enemy_count", text="敵数")
-        ai_count_row.prop(context.scene, "myaddon_ai_enemy_seed", text="シード")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_provider", text="生成方式")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_style", text="登場スタイル")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_motion_prompt", text="動き")
-        if getattr(context.scene, "myaddon_ai_enemy_provider", 'BUILTIN') == 'GEMINI':
-            gemini_box = ai_box.box()
-            gemini_box.prop(context.window_manager, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
-            gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_model", text="モデル")
-            gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_timeout", text="待ち時間(秒)")
-            gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_fallback", text="失敗時は内蔵AI")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_wave_delay", text="増援間隔(F)")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
-        ai_box.operator(operators.MYADDON_OT_ai_generate_enemy_plan.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+
 
         # エクスポート用の区切り線、ラベル、実行ボタン
         layout.separator()
@@ -199,9 +183,90 @@ class OBJECT_PT_file_name(bpy.types.Panel):
         layout.prop(context.scene, "myaddon_game_exe_path", text="ゲームEXE")
 
 
+class OBJECT_PT_ai_tools(bpy.types.Panel):
+    """AI操作用パネル"""
+    bl_idname = "OBJECT_PT_ai_tools"
+    bl_label = "AI Assistant"
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "object"
+
+    def draw(self, context):
+        layout = self.layout
+
+        gemini_box = layout.box()
+        gemini_box.label(text="Gemini API設定", icon='WORLD')
+        gemini_box.prop(context.window_manager, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
+        gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_model", text="モデル")
+        gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_timeout", text="待ち時間(秒)")
+        
+        ai_box = layout.box()
+        ai_box.label(text="AI敵ジェネレーター", icon='MOD_PARTICLES')
+        
+        enemy_chat_box = ai_box.box()
+        enemy_chat_box.label(text="会話履歴", icon='COMMUNITY')
+        enemy_history = getattr(context.scene, "myaddon_ai_enemy_chat_history", [])
+        if len(enemy_history) == 0:
+            enemy_chat_box.label(text="(履歴なし)")
+        else:
+            for i, msg in enumerate(enemy_history):
+                row = enemy_chat_box.row()
+                if msg.role == "USER":
+                    op = row.operator(operators.MYADDON_OT_ai_enemy_chat_revert.bl_idname, text=f"あなた: {msg.content}", icon='USER')
+                    op.target_index = i
+                else:
+                    row.label(text=f"AI: {msg.content}", icon='MONKEY')
+        enemy_chat_box.operator(operators.MYADDON_OT_ai_enemy_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
+        
+        ai_box.prop(context.scene, "myaddon_ai_enemy_base_type", text="敵のタイプ")
+        ai_box.prop(context.scene, "myaddon_ai_enemy_base_path_id", text="飛行パスID")
+        ai_box.prop(context.scene, "myaddon_ai_enemy_trigger_target", text="倒されたら出現")
+        
+        ai_box.prop(context.scene, "myaddon_ai_enemy_prompt", text="コンセプト")
+        
+        ai_count_row = ai_box.row(align=True)
+        ai_count_row.prop(context.scene, "myaddon_ai_enemy_count", text="敵数")
+        ai_count_row.prop(context.scene, "myaddon_ai_enemy_seed", text="シード")
+        ai_count_row.operator(operators.MYADDON_OT_randomize_ai_seed.bl_idname, text="", icon='FILE_REFRESH')
+        
+        ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
+        ai_box.operator(operators.MYADDON_OT_ai_generate_enemy_plan.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+        ai_box.operator(operators.MYADDON_OT_ai_edit_selected_enemy_path.bl_idname, text="選択したパスだけをAIで再生成（編集）", icon='GREASEPENCIL')
+
+        level_box = layout.box()
+        level_box.label(text="AIレベルジェネレーター", icon='MESH_CUBE')
+        
+        chat_box = level_box.box()
+        chat_box.label(text="会話履歴", icon='COMMUNITY')
+        history = getattr(context.scene, "myaddon_ai_chat_history", [])
+        if len(history) == 0:
+            chat_box.label(text="(履歴なし)")
+        else:
+            for i, msg in enumerate(history):
+                row = chat_box.row()
+                if msg.role == "USER":
+                    op = row.operator(operators.MYADDON_OT_ai_chat_revert.bl_idname, text=f"あなた: {msg.content}", icon='USER')
+                    op.target_index = i
+                else:
+                    row.label(text=f"AI: {msg.content}", icon='MONKEY')
+        chat_box.operator(operators.MYADDON_OT_ai_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
+        
+        level_box.prop(context.scene, "myaddon_ai_level_prompt", text="コンセプト")
+        
+        level_count_row = level_box.row(align=True)
+        level_count_row.prop(context.scene, "myaddon_ai_level_count", text="障害物の数")
+        level_count_row.prop(context.scene, "myaddon_ai_level_seed", text="シード")
+        level_count_row.operator(operators.MYADDON_OT_randomize_ai_level_seed.bl_idname, text="", icon='FILE_REFRESH')
+        
+        level_box.prop(context.scene, "myaddon_ai_level_clear_existing", text="前回生成の障害物を削除")
+        level_box.operator(operators.MYADDON_OT_ai_generate_level_obstacles.bl_idname, text="AIで障害物を自動配置", icon='MESH_CUBE')
+        level_box.operator(operators.MYADDON_OT_ai_edit_selected_obstacle.bl_idname, text="選択した障害物だけを再生成", icon='MOD_BUILD')
+
+
 classes = (
     TOPBAR_MT_my_menu,
     OBJECT_PT_file_name,
+    OBJECT_PT_ai_tools,
 )
 
 def register():
