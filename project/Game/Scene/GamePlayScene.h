@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "engine/Camera/Camera.h"
 #include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
@@ -59,10 +59,10 @@ public:
 private:
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
-	
-	
-	
-	
+	void DrawSimulationScreenUI();
+	void DrawSimulationSaveControls();
+	void DrawGameplayActionControls();
+	void DrawMissileSettingsUI();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
@@ -71,8 +71,10 @@ private:
 	bool SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath);
 	bool SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName);
 	bool ApplySimulationAction(const std::string &filePath, const std::string &actionName);
+	void RefreshSimulationActionNames();
 	bool SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
 	bool ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
+	void RefreshMissilePresetNames();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
 	bool IsEnemySpawnPointActive(size_t spawnPointIndex) const;
 	void UpdateCinematicLockOnCamera();
@@ -81,7 +83,7 @@ private:
 	//繧ｷ繝ｼ繝ｳ繝ｪ繧ｽ繝ｼ繧ｹ
 	std::unique_ptr<Camera> camera;
 	std::unique_ptr<Sprite> sprite;
-	std::unique_ptr<Primitive> myPlane;
+	std::unique_ptr<Object3d> groundModel;
 	std::unique_ptr<Primitive> myShere;
 	std::unique_ptr<Skybox> skybox;
 
