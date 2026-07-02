@@ -1,4 +1,4 @@
-#include "Player.h"
+﻿#include "Player.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -233,6 +233,10 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 
 	isNearBoundary_ = false;
 	boundaryWarningIntensity_ = 0.0f;
+	isNearWallBoundary_ = false;
+	wallBoundaryWarningIntensity_ = 0.0f;
+	isNearCeilingBoundary_ = false;
+	ceilingBoundaryWarningIntensity_ = 0.0f;
 
 	Move();
 	CheckCollision(obstacles);
@@ -870,23 +874,34 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 			Vector3 localPushOut = { 0.0f, 0.0f, 0.0f };
 			
 			float warningThreshold = 50.0f; // 50 units away starts the warning
-			float minDistanceToWall = 99999.0f;
-			Vector3 closestNormal = {0.0f, 0.0f, 1.0f};
+			float minDistanceToSideWall = 99999.0f;
+			Vector3 closestSideWallNormal = {0.0f, 0.0f, 1.0f};
+			float distanceToCeiling = 99999.0f;
+			Vector3 ceilingNormal = {0.0f, 1.0f, 0.0f};
 
 			for (int axis = 0; axis < 3; ++axis) {
 				const float limit = (std::max)(0.0f, GetAxisSize(obsOBB.size, axis) - playerProjection[axis]);
 				
 				// 警告判定用の距離計算
-				float distPositive = limit - localDistance[axis];
-				if (distPositive < minDistanceToWall) {
-					minDistanceToWall = distPositive;
-					closestNormal = obsOBB.orientations[axis];
-				}
-				
-				float distNegative = limit + localDistance[axis];
-				if (distNegative < minDistanceToWall) {
-					minDistanceToWall = distNegative;
-					closestNormal = {-obsOBB.orientations[axis].x, -obsOBB.orientations[axis].y, -obsOBB.orientations[axis].z};
+				if (axis != 1) {
+					float distPositive = limit - localDistance[axis];
+					if (distPositive < minDistanceToSideWall) {
+						minDistanceToSideWall = distPositive;
+						closestSideWallNormal = obsOBB.orientations[axis];
+					}
+
+					float distNegative = limit + localDistance[axis];
+					if (distNegative < minDistanceToSideWall) {
+						minDistanceToSideWall = distNegative;
+						closestSideWallNormal = {-obsOBB.orientations[axis].x, -obsOBB.orientations[axis].y, -obsOBB.orientations[axis].z};
+					}
+				} else {
+					// Ceiling only. The negative Y side is the floor, so keep it out of the warning.
+					float distCeiling = limit - localDistance[axis];
+					if (distCeiling < distanceToCeiling) {
+						distanceToCeiling = distCeiling;
+						ceilingNormal = obsOBB.orientations[axis];
+					}
 				}
 
 				if (localDistance[axis] > limit) {
@@ -900,18 +915,48 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				}
 			}
 
+			auto registerBoundaryAlert = [&](float intensity, const Vector3& position, const Vector3& normal) {
+				if (intensity > boundaryWarningIntensity_) {
+					isNearBoundary_ = true;
+					boundaryWarningIntensity_ = intensity;
+					boundaryAlertPosition_ = position;
+					boundaryAlertNormal_ = normal;
+				}
+			};
+
+			Vector3 ceilingPosition = {
+				playerOBB.center.x + ceilingNormal.x * distanceToCeiling,
+				playerOBB.center.y + ceilingNormal.y * distanceToCeiling,
+				playerOBB.center.z + ceilingNormal.z * distanceToCeiling
+			};
+
 			// 警告フラグの更新
-			if (minDistanceToWall < warningThreshold) {
-				isNearBoundary_ = true;
-				boundaryWarningIntensity_ = 1.0f - (std::max)(0.0f, minDistanceToWall) / warningThreshold;
-				boundaryAlertNormal_ = closestNormal;
-				
-				// プレイヤーの位置から壁の方向（closestNormal）へ距離分進んだ位置
-				boundaryAlertPosition_ = {
-					playerOBB.center.x + closestNormal.x * minDistanceToWall,
-					playerOBB.center.y + closestNormal.y * minDistanceToWall,
-					playerOBB.center.z + closestNormal.z * minDistanceToWall
+			if (minDistanceToSideWall < warningThreshold) {
+				isNearWallBoundary_ = true;
+				wallBoundaryWarningIntensity_ = 1.0f - (std::max)(0.0f, minDistanceToSideWall) / warningThreshold;
+				wallBoundaryAlertNormal_ = closestSideWallNormal;
+
+				wallBoundaryAlertPosition_ = {
+					playerOBB.center.x + closestSideWallNormal.x * minDistanceToSideWall,
+					playerOBB.center.y + closestSideWallNormal.y * minDistanceToSideWall,
+					playerOBB.center.z + closestSideWallNormal.z * minDistanceToSideWall
 				};
+
+				if (distanceToCeiling < warningThreshold) {
+					constexpr float kBoundaryAlertHalfHeight = 2.0f;
+					wallBoundaryAlertPosition_.y = (std::min)(wallBoundaryAlertPosition_.y, ceilingPosition.y - kBoundaryAlertHalfHeight);
+				}
+
+				registerBoundaryAlert(wallBoundaryWarningIntensity_, wallBoundaryAlertPosition_, wallBoundaryAlertNormal_);
+			}
+
+			if (distanceToCeiling < warningThreshold) {
+				isNearCeilingBoundary_ = true;
+				ceilingBoundaryWarningIntensity_ = 1.0f - (std::max)(0.0f, distanceToCeiling) / warningThreshold;
+				ceilingBoundaryAlertNormal_ = ceilingNormal;
+				ceilingBoundaryAlertPosition_ = ceilingPosition;
+
+				registerBoundaryAlert(ceilingBoundaryWarningIntensity_, ceilingBoundaryAlertPosition_, ceilingBoundaryAlertNormal_);
 			}
 
 			if (localPushOut.x != 0.0f || localPushOut.y != 0.0f || localPushOut.z != 0.0f) {

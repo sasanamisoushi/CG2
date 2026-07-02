@@ -1,4 +1,4 @@
-#include "GamePlayScene.h"
+﻿#include "GamePlayScene.h"
 #include "3D/ModelManager.h"
 #include <Windows.h>
 #include "engine/Graphics/DirectXCommon.h"
@@ -50,6 +50,7 @@ namespace {
 	const char *kPlayerModelName = "vf-15c/scene.gltf";
 	const char *kLockOnReticleTexturePath = "resources/lock_on_reticle.png";
 	const char *kAimCursorTexturePath = "resources/aim_cursor.png";
+	const char *kBoundaryAlertTexturePath = "resources/boundary_alert.png";
 
 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -627,6 +628,7 @@ void GamePlayScene::Initialize() {
 	sprite->Initialize(SpriteCommon::GetInstance() , "resources/uvChecker.png");
 	TextureManager::GetInstance()->LoadTexture(kLockOnReticleTexturePath);
 	TextureManager::GetInstance()->LoadTexture(kAimCursorTexturePath);
+	TextureManager::GetInstance()->LoadTexture(kBoundaryAlertTexturePath);
 
 	aimCursorSprite_ = std::make_unique<Sprite>();
 	aimCursorSprite_->Initialize(SpriteCommon::GetInstance(), kAimCursorTexturePath);
@@ -636,10 +638,23 @@ void GamePlayScene::Initialize() {
 	lockOnReticleSprite_->Initialize(SpriteCommon::GetInstance(), kLockOnReticleTexturePath);
 	lockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
 
-	// SkyboxCommon に DirectX の惁E��を渡して初期化する！E
+	ModelManager::GetInstance()->CreatePlaneModel("BoundaryAlertPlane");
+	Model* alertModel = ModelManager::GetInstance()->FindModel("BoundaryAlertPlane");
+	if (alertModel) {
+		alertModel->SetTextureFilePath(kBoundaryAlertTexturePath);
+		alertModel->SetAlphaReference(0.05f); // Discard almost-black background
+	}
+	boundaryAlertObject_ = std::make_unique<Object3d>();
+	boundaryAlertObject_->Initialize(Object3dCommon::GetInstance());
+	boundaryAlertObject_->SetModel("BoundaryAlertPlane");
+	ceilingBoundaryAlertObject_ = std::make_unique<Object3d>();
+	ceilingBoundaryAlertObject_->Initialize(Object3dCommon::GetInstance());
+	ceilingBoundaryAlertObject_->SetModel("BoundaryAlertPlane");
+
+	// SkyboxCommon に DirectX の惁Eを渡して初期化する！E
 	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
-	// スカイボックスの生�Eと初期匁E
+	// スカイボックスの生Eと初期匁E
 	skybox = std::make_unique<Skybox>();
 	skybox->Initialize("resources/SkyBox.dds");
 
@@ -2897,6 +2912,56 @@ void GamePlayScene::Draw() {
 	// アニメーションModel��の個別描画制御
 	if (showModel && myModelObject) {
 		myModelObject->Draw();
+	}
+
+	if (player_ && boundaryAlertObject_ && ceilingBoundaryAlertObject_) {
+		static float pulseTime = 0.0f;
+		pulseTime += 0.05f;
+		float pulseAlpha = 0.5f + 0.5f * std::sin(pulseTime);
+
+		auto drawBoundaryAlert = [&](Object3d* alertObject, const Vector3& position, const Vector3& normal, float intensity) {
+			alertObject->SetScale({ 2.0f, 2.0f, 2.0f });
+
+			// The plane model is already upright on the XY plane. Walls only need yaw;
+			// the ceiling needs a pitch so the alert lies on the horizontal surface.
+			Vector3 rotate = { 0.0f, std::atan2(normal.x, normal.z), 0.0f };
+			if (normal.y > 0.5f) {
+				rotate = { -1.570796f, 0.0f, 0.0f };
+			}
+
+			Model* m = alertObject->GetModel();
+			if (m) {
+				m->SetColor({ 1.0f, 1.0f, 1.0f, intensity * pulseAlpha });
+			}
+
+			alertObject->SetTranslate({
+				position.x + normal.x * 0.5f,
+				position.y + normal.y * 0.5f,
+				position.z + normal.z * 0.5f
+			});
+
+			alertObject->SetRotate(rotate);
+			alertObject->Update();
+			alertObject->Draw();
+		};
+
+		if (player_->IsNearWallBoundary()) {
+			drawBoundaryAlert(
+				boundaryAlertObject_.get(),
+				player_->GetWallBoundaryAlertPosition(),
+				player_->GetWallBoundaryAlertNormal(),
+				player_->GetWallBoundaryWarningIntensity());
+		}
+		if (player_->IsNearCeilingBoundary()) {
+			drawBoundaryAlert(
+				ceilingBoundaryAlertObject_.get(),
+				player_->GetCeilingBoundaryAlertPosition(),
+				player_->GetCeilingBoundaryAlertNormal(),
+				player_->GetCeilingBoundaryWarningIntensity());
+		}
+		if (player_->IsNearBoundary()) {
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
 	}
 	
 	if (showBones) {

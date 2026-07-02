@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "3D/Object3d.h"
 #include "engine/Input/Input.h"
 #include "engine/Camera/Camera.h"
@@ -57,6 +57,14 @@ public:
     float GetBoundaryWarningIntensity() const { return boundaryWarningIntensity_; }
     Vector3 GetBoundaryAlertPosition() const { return boundaryAlertPosition_; }
     Vector3 GetBoundaryAlertNormal() const { return boundaryAlertNormal_; }
+    bool IsNearWallBoundary() const { return isNearWallBoundary_; }
+    float GetWallBoundaryWarningIntensity() const { return wallBoundaryWarningIntensity_; }
+    Vector3 GetWallBoundaryAlertPosition() const { return wallBoundaryAlertPosition_; }
+    Vector3 GetWallBoundaryAlertNormal() const { return wallBoundaryAlertNormal_; }
+    bool IsNearCeilingBoundary() const { return isNearCeilingBoundary_; }
+    float GetCeilingBoundaryWarningIntensity() const { return ceilingBoundaryWarningIntensity_; }
+    Vector3 GetCeilingBoundaryAlertPosition() const { return ceilingBoundaryAlertPosition_; }
+    Vector3 GetCeilingBoundaryAlertNormal() const { return ceilingBoundaryAlertNormal_; }
 
     // セッター
     void SetPosition(const Vector3 &position) {
@@ -125,6 +133,14 @@ private:
     float boundaryWarningIntensity_ = 0.0f;
     Vector3 boundaryAlertPosition_ = {0.0f, 0.0f, 0.0f};
     Vector3 boundaryAlertNormal_ = {0.0f, 0.0f, 1.0f};
+    bool isNearWallBoundary_ = false;
+    float wallBoundaryWarningIntensity_ = 0.0f;
+    Vector3 wallBoundaryAlertPosition_ = {0.0f, 0.0f, 0.0f};
+    Vector3 wallBoundaryAlertNormal_ = {0.0f, 0.0f, 1.0f};
+    bool isNearCeilingBoundary_ = false;
+    float ceilingBoundaryWarningIntensity_ = 0.0f;
+    Vector3 ceilingBoundaryAlertPosition_ = {0.0f, 0.0f, 0.0f};
+    Vector3 ceilingBoundaryAlertNormal_ = {0.0f, 1.0f, 0.0f};
 
     std::unique_ptr<BoosterEffect> boosterEffect_;
 };

@@ -89,6 +89,8 @@ private:
 
 	std::unique_ptr<Sprite> aimCursorSprite_;
 	std::unique_ptr<Sprite> lockOnReticleSprite_;
+	std::unique_ptr<Object3d> boundaryAlertObject_;
+	std::unique_ptr<Object3d> ceilingBoundaryAlertObject_;
 
 
 	//繝代・繝・ぅ繧ｯ繝ｫ
