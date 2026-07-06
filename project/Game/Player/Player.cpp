@@ -1,4 +1,4 @@
-﻿#include "Player.h"
+#include "Player.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -468,15 +468,7 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	}
 	Quaternion cameraRotation = MakeNoRollLookQuaternion(lookForward);
 
-	Vector3 lookForward = NormalizeOrZero({
-		lookTarget.x - camPos.x,
-		lookTarget.y - camPos.y,
-		lookTarget.z - camPos.z
-	});
-	if (LengthSq(lookForward) <= 0.0001f) {
-		lookForward = flatForward;
-	}
-	Quaternion cameraRotation = MakeNoRollLookQuaternion(lookForward);
+	
 
 	camera->SetTranslate(camPos);
 	camera->SetRotate({ 0,0,0 });
