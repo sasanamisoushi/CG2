@@ -1,34 +1,125 @@
-﻿import json
 import re
+import os
 
-transcript_path = r"c:\Users\k024g\.gemini\antigravity\brain\0fb02015-a0d1-4911-abf8-fde66651840d\.system_generated\logs\transcript_full.jsonl"
-lines_dict = {}
+def extract_function(file_content, func_name_pattern):
+    match = re.search(r'^[\w\s\*&]*\s+GamePlayScene::' + func_name_pattern + r'\s*\([^)]*\)\s*(const)?\s*\{', file_content, re.MULTILINE)
+    if not match:
+        return None, file_content
+    
+    start_index = match.start()
+    
+    brace_count = 0
+    in_string = False
+    in_char = False
+    in_comment = False
+    in_line_comment = False
+    
+    end_index = -1
+    
+    for i in range(match.end() - 1, len(file_content)):
+        char = file_content[i]
+        next_char = file_content[i+1] if i+1 < len(file_content) else ''
+        prev_char = file_content[i-1] if i-1 >= 0 else ''
+        
+        if in_line_comment:
+            if char == '\n':
+                in_line_comment = False
+            continue
+            
+        if in_comment:
+            if char == '*' and next_char == '/':
+                in_comment = False
+            continue
+            
+        if in_string:
+            if char == '"' and prev_char != '\\':
+                in_string = False
+            continue
+            
+        if in_char:
+            if char == "'" and prev_char != '\\':
+                in_char = False
+            continue
+            
+        if char == '/' and next_char == '/':
+            in_line_comment = True
+            continue
+            
+        if char == '/' and next_char == '*':
+            in_comment = True
+            continue
+            
+        if char == '"':
+            in_string = True
+            continue
+            
+        if char == "'":
+            in_char = True
+            continue
+            
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                end_index = i + 1
+                break
+                
+    if end_index != -1:
+        extracted = file_content[start_index:end_index]
+        new_content = file_content[:start_index] + file_content[end_index:]
+        return extracted, new_content
+        
+    return None, file_content
 
-with open(transcript_path, "r", encoding="utf-8") as f:
-    for line in f:
-        try:
-            entry = json.loads(line)
-            content = entry.get("content", "")
-            if isinstance(content, str):
-                lines = content.splitlines()
-                for l in lines:
-                    m = re.match(r'^(\d+):\s(.*)$', l)
-                    if m:
-                        line_num = int(m.group(1))
-                        # Only keep the latest viewed version of a line, or the longest one?
-                        # Let's keep all, actually latest is better, so just overwrite
-                        lines_dict[line_num] = m.group(2)
-        except Exception as e:
-            pass
+def main():
+    path = "project/Game/Scene/GamePlayScene.cpp"
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+        
+    funcs_to_extract = [
+        # Simulation
+        "SaveCurrentSimulationLayoutToSceneJson",
+        "RefreshSimulationActionNames",
+        "SaveNamedSimulationAction",
+        "ApplySimulationAction",
+        "DrawSimulationScreenUI",
+        "DrawSimulationSaveControls",
+        # Missile Preset
+        "RefreshMissilePresetNames",
+        "SaveMissilePreset",
+        "ApplyMissilePreset",
+        "DrawMissileSettingsUI",
+        "FirePlayerMissile",
+        # LockOn
+        "UpdateLockOn",
+        "FindLockOnTarget",
+        "IsLockedEnemyAlive",
+        "FindAimAssistTarget",
+        "FindMultiLockTarget",
+        "BeginMultiLock",
+        "PruneMultiLockTargets",
+        "UpdateMultiLock",
+        "FireMultiLockMissiles",
+        "CancelMultiLock"
+    ]
+    
+    extracted_funcs = {}
+    
+    for func in funcs_to_extract:
+        ext, content = extract_function(content, func)
+        if ext:
+            extracted_funcs[func] = ext
+            print(f"Extracted {func}")
+        else:
+            print(f"Failed to extract {func}")
+            
+    with open("project/Game/Scene/GamePlayScene_reduced.cpp", "w", encoding="utf-8") as f:
+        f.write(content)
+        
+    with open("recovered_lines_smart.txt", "w", encoding="utf-8") as f:
+        for k, v in extracted_funcs.items():
+            f.write(f"// --- {k} ---\n{v}\n\n")
 
-print(f"Recovered {len(lines_dict)} unique lines!")
-with open("recovered_lines_smart.txt", "w", encoding="utf-8") as f:
-    for num in sorted(lines_dict.keys()):
-        f.write(f"{num:04d}: {lines_dict[num]}\n")
-
-# Check missing
-missing_count = 0
-for i in range(270, 1754):
-    if i not in lines_dict:
-        missing_count += 1
-print(f"Missing {missing_count} lines between 270 and 1754")
+if __name__ == "__main__":
+    main()

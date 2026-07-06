@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "engine/Camera/Camera.h"
 #include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
@@ -57,26 +57,24 @@ public:
 	void UpdateUI();
 
 private:
+	friend class SimulationManager;
+	friend class MissilePresetManager;
+	friend class LockOnManager;
+
+
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
-	void DrawSimulationScreenUI();
-	void DrawSimulationSaveControls();
 	void DrawGameplayActionControls();
-	void DrawMissileSettingsUI();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
 	MissileTuning MakeMissileTuning(MissileType type) const;
-	void FirePlayerMissile(MissileType type, Enemy *target = nullptr, float horizontalOffset = 0.0f);
-	bool SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath);
-	bool SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName);
-	bool ApplySimulationAction(const std::string &filePath, const std::string &actionName);
-	void RefreshSimulationActionNames();
-	bool SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
-	bool ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
-	void RefreshMissilePresetNames();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
 	bool IsEnemySpawnPointActive(size_t spawnPointIndex) const;
+	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
+	void TriggerEnemyReinforcements(const std::string &deadEnemyName);
+	void UpdateEnemyRespawns();
+	bool HasPendingEnemySpawns() const;
 	void UpdateCinematicLockOnCamera();
 	Mode mode_ = Mode::Gameplay;
 
@@ -264,27 +262,20 @@ private:
 	// =====================================================
 	// マネージャークラス
 	// =====================================================
-	std::unique_ptr<GameCameraManager> cameraManager_;
+		std::unique_ptr<SimulationManager> simulationManager_;
+	std::unique_ptr<MissilePresetManager> missilePresetManager_;
+	std::unique_ptr<LockOnManager> lockOnManager_;
+std::unique_ptr<GameCameraManager> cameraManager_;
 	std::unique_ptr<LevelManager> levelManager_;
 	std::unique_ptr<EnvironmentRenderer> environmentRenderer_;
 	std::unique_ptr<GamePlayUIManager> uiManager_;
 
 	// JSON繝輔ぃ繧､繝ｫ縺梧怙蠕後↓譖ｴ譁ｰ縺輔ｌ縺滓律譎ゅｒ險倬鹸縺吶ｋ螟画焚
 	std::filesystem::file_time_type lastJsonWriteTime_;
-	Enemy* FindAimAssistTarget(Camera* activeCamera) const;
-	Enemy* FindMultiLockTarget(Camera* activeCamera) const;
-	void BeginMultiLock();
-	void PruneMultiLockTargets();
-	void UpdateMultiLock(Camera* activeCamera);
-	void FireMultiLockMissiles();
-	void CancelMultiLock();
 	Enemy* aimAssistEnemy_ = nullptr;
 	std::vector<Enemy*> multiLockTargets_;
 	bool isMultiLockCharging_ = false;
 	int multiLockChargeFrames_ = 0;
-    Enemy* FindLockOnTarget(Camera* activeCamera) const;
-    void UpdateLockOn(Camera* activeCamera, bool shouldUpdateGame);
-    bool IsLockedEnemyAlive() const;
 };
 
 
