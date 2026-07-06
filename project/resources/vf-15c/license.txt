@@ -1,0 +1,11 @@
+Model Information:
+* title:	VF-15C
+* source:	https://sketchfab.com/3d-models/vf-15c-21b475d4d5e743ecb17b464e8f87ad5d
+* author:	uzukibc (https://sketchfab.com/uzukibc)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "VF-15C" (https://sketchfab.com/3d-models/vf-15c-21b475d4d5e743ecb17b464e8f87ad5d) by uzukibc (https://sketchfab.com/uzukibc) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

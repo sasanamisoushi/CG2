@@ -16,6 +16,10 @@ public:
 
 	//エフェクト用描画設定
 	void SetEffectDrawSettings();
+	
+	//アルファブレンド（半透明）用描画設定
+	void SetAlphaBlendDrawSettings();
+	
 	void SetLineDrawSettings();
 
 	//シェーダーの読み込み
@@ -50,6 +54,7 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> effectPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> alphaBlendPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> linePipelineState_;
 
 	// Shader blobs

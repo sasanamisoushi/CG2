@@ -1,7 +1,9 @@
-#pragma once
+﻿#pragma once
 #include "engine/Camera/Camera.h"
 #include "3D/Object3d.h"
 #include "Game/base/BaseScene.h"
+#include "2D/Sprite.h"
+#include <memory>
 
 class TitleScene : public BaseScene {
 public:
@@ -15,9 +17,13 @@ public:
 private:
 	std::unique_ptr<Camera> camera;
 
-	//モデル
+	std::unique_ptr<Sprite> titleSprite;
+
+	//繝｢繝・Ν
 	std::vector<Object3d *> objects;
 	std::unique_ptr<Object3d> objA;
 
 };
+
+
 

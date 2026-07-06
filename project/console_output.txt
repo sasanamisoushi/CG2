@@ -1,0 +1,38 @@
+Use Adapter: NVIDIA GeForce RTX 4060 Laptop GPU
+
+FeatureLevel: 12.2
+
+Complete create D3D12Device!!!
+
+ [Model] Loaded: plane.obj | isSkinned: false | vertices: 4 | center: (0.000000, 0.000000, -0.000000) | extents: (1.000000, 1.000000, 0.000000)
+ [Model] Loaded: multiMesh.obj | isSkinned: false | vertices: 28 | center: (-1.247975, 0.613112, -0.275351) | extents: (2.247975, 1.613112, 1.000000)
+ [Model] Loaded: AnimatedCube/AnimatedCube.gltf | isSkinned: true | vertices: 36 | center: (0.000000, 0.000000, 0.000000) | extents: (1.000000, 1.000000, 1.000000)
+Begin CompileShader, path:resources/shaders/Particle.VS.hlsl, profile:vs_6_0
+
+Compile Succeeded, path:resources/shaders/Particle.VS.hlsl, profile:vs_6_0
+
+Begin CompileShader, path:resources/shaders/Particle.PS.hlsl, profile:ps_6_0
+
+Compile Succeeded, path:resources/shaders/Particle.PS.hlsl, profile:ps_6_0
+
+Begin CompileShader, path:resources/shaders/ParticleCPU.VS.hlsl, profile:vs_6_0
+
+Compile Succeeded, path:resources/shaders/ParticleCPU.VS.hlsl, profile:vs_6_0
+
+Begin CompileShader, path:resources/shaders/InitializeParticle.CS.hlsl, profile:cs_6_0
+
+Compile Succeeded, path:resources/shaders/InitializeParticle.CS.hlsl, profile:cs_6_0
+
+Begin CompileShader, path:resources/shaders/EmitParticle.CS.hlsl, profile:cs_6_0
+
+Compile Succeeded, path:resources/shaders/EmitParticle.CS.hlsl, profile:cs_6_0
+
+Begin CompileShader, path:resources/shaders/UpdateParticle.CS.hlsl, profile:cs_6_0
+
+Compile Succeeded, path:resources/shaders/UpdateParticle.CS.hlsl, profile:cs_6_0
+
+ [Model] Loaded: vf-15c/scene.gltf | isSkinned: true | vertices: 31375 | center: (0.000000, -0.000000, 0.000000) | extents: (8.027090, 3.030076, 12.422934)
+ [Model] Loaded: OhirayamaTerrainFull.gltf | isSkinned: false | vertices: 585914 | center: (0.000000, 3.683362, 0.000000) | extents: (11.220703, 3.683362, 8.525391)
+ [Model] Loaded: 立方体.obj | isSkinned: false | vertices: 24 | center: (0.000000, 0.000000, 0.000000) | extents: (0.402265, 0.373556, 0.456458)
+ [Model] Loaded: 立方体.001.obj | isSkinned: false | vertices: 24 | center: (0.000000, 0.000000, 0.000000) | extents: (0.639023, 1.565104, 0.401045)
+ [Model] Loaded: ブロック.obj | isSkinned: false | vertices: 286 | center: (-0.319224, 0.279270, 0.000000) | extents: (0.879848, 0.839894, 0.560624)

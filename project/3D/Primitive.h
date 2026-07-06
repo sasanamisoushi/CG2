@@ -10,6 +10,7 @@ enum class PrimitiveType {
 	PartialRing,
 	Cylinder,
 	Line,
+	BoundaryAlertPlane,
 };
 
 class Primitive : public Object3d {

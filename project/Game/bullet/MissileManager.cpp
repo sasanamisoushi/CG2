@@ -56,13 +56,56 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                 continue;
             }
 
-            OBB obsOBB = obstacle->GetOBB();
-            if (MyMath::IsCollision(bulletSphere, obsOBB)) {
-                missile->OnCollision(); // または直接 isDead = true; OnCollision() の中に dead にする処理がある想定
-                hitObstacle = true;
-                // 障害物に当たった場合も爆発させるかはお好みですが、ここでは要望の「消える」のみ実装。
-                // 爆発させたい場合は hitPositions.push_back(mPos); を追加します。
-                break;
+            if (obstacle->IsUseMeshCollider()) {
+                const std::vector<Triangle>& triangles = obstacle->GetWorldTriangles();
+                Vector3 pushVector;
+                for (const auto& tri : triangles) {
+                    float minX = tri.p[0].x;
+                    if (tri.p[1].x < minX) minX = tri.p[1].x;
+                    if (tri.p[2].x < minX) minX = tri.p[2].x;
+
+                    float maxX = tri.p[0].x;
+                    if (tri.p[1].x > maxX) maxX = tri.p[1].x;
+                    if (tri.p[2].x > maxX) maxX = tri.p[2].x;
+
+                    float minY = tri.p[0].y;
+                    if (tri.p[1].y < minY) minY = tri.p[1].y;
+                    if (tri.p[2].y < minY) minY = tri.p[2].y;
+
+                    float maxY = tri.p[0].y;
+                    if (tri.p[1].y > maxY) maxY = tri.p[1].y;
+                    if (tri.p[2].y > maxY) maxY = tri.p[2].y;
+
+                    float minZ = tri.p[0].z;
+                    if (tri.p[1].z < minZ) minZ = tri.p[1].z;
+                    if (tri.p[2].z < minZ) minZ = tri.p[2].z;
+
+                    float maxZ = tri.p[0].z;
+                    if (tri.p[1].z > maxZ) maxZ = tri.p[1].z;
+                    if (tri.p[2].z > maxZ) maxZ = tri.p[2].z;
+
+                    if (bulletSphere.center.x + bulletSphere.radius < minX || bulletSphere.center.x - bulletSphere.radius > maxX ||
+                        bulletSphere.center.y + bulletSphere.radius < minY || bulletSphere.center.y - bulletSphere.radius > maxY ||
+                        bulletSphere.center.z + bulletSphere.radius < minZ || bulletSphere.center.z - bulletSphere.radius > maxZ) {
+                        continue;
+                    }
+
+                    if (MyMath::IsCollision(bulletSphere, tri, pushVector)) {
+                        missile->OnCollision();
+                        hitObstacle = true;
+                        break;
+                    }
+                }
+                if (hitObstacle) {
+                    break;
+                }
+            } else {
+                OBB obsOBB = obstacle->GetOBB();
+                if (MyMath::IsCollision(bulletSphere, obsOBB)) {
+                    missile->OnCollision();
+                    hitObstacle = true;
+                    break;
+                }
             }
         }
 

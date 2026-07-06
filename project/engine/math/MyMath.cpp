@@ -249,7 +249,6 @@ Matrix4x4 MyMath::Transpose(const Matrix4x4 &m) {
 	Matrix4x4 result{};
 	for (int row = 0; row < 4; ++row) {
 		for (int col = 0; col < 4; ++col) {
-			// 行と列を入れ替えて代入する
 			result.m[row][col] = m.m[col][row];
 		}
 	}
@@ -306,12 +305,10 @@ Quaternion MyMath::Multiply(const Quaternion &lhs, const Quaternion &rhs) {
 Quaternion MyMath::MakeAxisAngle(const Vector3 &axis, float angle) {
 	float halfAngle = angle * 0.5f;
 	float s = std::sin(halfAngle);
-	// ※引数のaxisは Normalize() されている前提です
 	return { axis.x * s, axis.y * s, axis.z * s, std::cos(halfAngle) };
 }
 
 Vector3 MyMath::RotateVector(const Vector3 &v, const Quaternion &q) {
-	// 既に実装されている関数を組み合わせて、超シンプルに実現！
 	Matrix4x4 rotMatrix = MakeRotateMatrix(q);
 	return Transform(v, rotMatrix);
 }
@@ -319,14 +316,12 @@ Vector3 MyMath::RotateVector(const Vector3 &v, const Quaternion &q) {
 Quaternion MyMath::Slerp(const Quaternion &q0, const Quaternion &q1, float t) {
 	float dot = q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
 
-	// 内積がマイナスなら、片方を反転して最短経路を通るようにする
 	Quaternion q1_ = q1;
 	if (dot < 0.0f) {
 		q1_ = { -q1.x, -q1.y, -q1.z, -q1.w };
 		dot = -dot;
 	}
 
-	// 角度が非常に近い場合は、通常の線形補間（Lerp）で済ませる
 	if (dot > 0.9995f) {
 		Quaternion result = {
 			q0.x + t * (q1_.x - q0.x),
@@ -334,12 +329,10 @@ Quaternion MyMath::Slerp(const Quaternion &q0, const Quaternion &q1, float t) {
 			q0.z + t * (q1_.z - q0.z),
 			q0.w + t * (q1_.w - q0.w)
 		};
-		// 正規化
 		float mag = std::sqrt(result.x * result.x + result.y * result.y + result.z * result.z + result.w * result.w);
 		return { result.x / mag, result.y / mag, result.z / mag, result.w / mag };
 	}
 
-	// 球面線形補間の計算
 	float theta_0 = std::acos(dot);
 	float theta = theta_0 * t;
 	float sin_theta = std::sin(theta);
@@ -357,9 +350,7 @@ Quaternion MyMath::Slerp(const Quaternion &q0, const Quaternion &q1, float t) {
 }
 
 // 3D座標から2Dスクリーン座標への変換
-
 Vector3 MyMath::WorldToScreen(const Vector3 &worldPos, const Matrix4x4 &viewProjectionMatrix, float screenWidth, float screenHeight) {
-	// 1. ビュープロジェクション行列を掛けてクリップ座標系へ変換
 	float w = worldPos.x * viewProjectionMatrix.m[0][3] + worldPos.y * viewProjectionMatrix.m[1][3] + worldPos.z * viewProjectionMatrix.m[2][3] + viewProjectionMatrix.m[3][3];
 
 	Vector3 clipPos = {
@@ -368,19 +359,15 @@ Vector3 MyMath::WorldToScreen(const Vector3 &worldPos, const Matrix4x4 &viewProj
 		worldPos.x * viewProjectionMatrix.m[0][2] + worldPos.y * viewProjectionMatrix.m[1][2] + worldPos.z * viewProjectionMatrix.m[2][2] + viewProjectionMatrix.m[3][2]
 	};
 
-	// 2. 透視投影分割（Wで割って正規化デバイス座標 NDC へ）
 	if (w != 0.0f) {
 		clipPos.x /= w;
 		clipPos.y /= w;
 		clipPos.z /= w;
 	}
 
-	// 3. NDC座標（-1.0 ～ 1.0）をスクリーン座標（0 ～ Width/Height）に変換
-	// Y軸は画面の下に行くほどプラスになるので反転させる
 	float screenX = (clipPos.x + 1.0f) * (screenWidth / 2.0f);
 	float screenY = (1.0f - clipPos.y) * (screenHeight / 2.0f);
 
-	// Zには深度値（0～1）をそのまま入れて返す（カメラの後ろにあるかの判定に使える）
 	return { screenX, screenY, clipPos.z };
 }
 
@@ -397,14 +384,12 @@ Vector3 MyMath::Cross(const Vector3 &a, const Vector3 &b) {
 }
 
 bool MyMath::IsCollision(const OBB &obb1, const OBB &obb2) {
-	// 2つのOBBの中心間の距離ベクトル
 	Vector3 distance = {
 		obb2.center.x - obb1.center.x,
 		obb2.center.y - obb1.center.y,
 		obb2.center.z - obb1.center.z
 	};
 
-	// テストすべき15本の分離軸を格納する配列
 	Vector3 axes[15];
 	int axisCount = 0;
 
@@ -422,7 +407,6 @@ bool MyMath::IsCollision(const OBB &obb1, const OBB &obb2) {
 	for (int i = 0; i < 3; ++i) {
 		for (int j = 0; j < 3; ++j) {
 			Vector3 cross = Cross(obb1.orientations[i], obb2.orientations[j]);
-			// 外積が0ベクトル（2つの軸がほぼ平行）の場合はエラーになるので弾く
 			if (Dot(cross, cross) > 0.00001f) {
 				axes[axisCount++] = Normalize(cross);
 			}
@@ -433,8 +417,6 @@ bool MyMath::IsCollision(const OBB &obb1, const OBB &obb2) {
 	for (int i = 0; i < axisCount; ++i) {
 		const Vector3 &axis = axes[i];
 
-		// 各OBBの「軸に対する投影半径」を計算
-		// obb.size.x は幅の半分、size.yは高さの半分...
 		float rA = obb1.size.x * std::abs(Dot(obb1.orientations[0], axis)) +
 			obb1.size.y * std::abs(Dot(obb1.orientations[1], axis)) +
 			obb1.size.z * std::abs(Dot(obb1.orientations[2], axis));
@@ -443,21 +425,17 @@ bool MyMath::IsCollision(const OBB &obb1, const OBB &obb2) {
 			obb2.size.y * std::abs(Dot(obb2.orientations[1], axis)) +
 			obb2.size.z * std::abs(Dot(obb2.orientations[2], axis));
 
-		// 中心間距離ベクトルを軸に投影した長さ
 		float distanceProjected = std::abs(Dot(distance, axis));
 
-		// 隙間が見つかった！(当たっていない) -> 即座に判定終了
 		if (distanceProjected > rA + rB) {
 			return false;
 		}
 	}
 
-	// 15本すべての軸で隙間がなかった -> 衝突している！
 	return true;
 }
 
 bool MyMath::IsCollision(const Sphere &sphere, const OBB &obb) {
-	// 1. 球の中心をOBBのローカル空間（OBBから見た相対座標）に変換する
 	Vector3 localSpherePos = {
 		sphere.center.x - obb.center.x,
 		sphere.center.y - obb.center.y,
@@ -466,28 +444,131 @@ bool MyMath::IsCollision(const Sphere &sphere, const OBB &obb) {
 
 	Vector3 closestPoint = { 0, 0, 0 };
 
-	// 2. OBBの各軸(X, Y, Z)に対して、球の中心の投影位置をクランプ（箱の範囲内に収める）する
 	for (int i = 0; i < 3; ++i) {
-		// 球の中心をOBBのi番目の軸に投影
 		float dist = Dot(localSpherePos, obb.orientations[i]);
-
-		// OBBのサイズの範囲内に制限する
 		float axisSize = (i == 0) ? obb.size.x : (i == 1) ? obb.size.y : obb.size.z;
 		dist = std::max(-axisSize, std::min(dist, axisSize));
 
-		// 最も近い点を構築
 		closestPoint.x += dist * obb.orientations[i].x;
 		closestPoint.y += dist * obb.orientations[i].y;
 		closestPoint.z += dist * obb.orientations[i].z;
 	}
 
-	// 3. 最も近い点と、実際の球の中心との距離の2乗を計算
 	float dx = localSpherePos.x - closestPoint.x;
 	float dy = localSpherePos.y - closestPoint.y;
 	float dz = localSpherePos.z - closestPoint.z;
 	float distanceSq = dx * dx + dy * dy + dz * dz;
 
-	// 距離の2乗が、球の半径の2乗より小さければ衝突！
 	return distanceSq <= (sphere.radius * sphere.radius);
 }
 
+float MyMath::Length(const Vector3& v) {
+	return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+Vector3 MyMath::Subtract(const Vector3& v1, const Vector3& v2) {
+	return { v1.x - v2.x, v1.y - v2.y, v1.z - v2.z };
+}
+
+Vector3 MyMath::Add(const Vector3& v1, const Vector3& v2) {
+	return { v1.x + v2.x, v1.y + v2.y, v1.z + v2.z };
+}
+
+Vector3 MyMath::Multiply(float scalar, const Vector3& v) {
+	return { scalar * v.x, scalar * v.y, scalar * v.z };
+}
+
+Vector3 MyMath::ClosestPointOnTriangle(const Vector3& point, const Triangle& triangle) {
+	Vector3 ab = MyMath::Subtract(triangle.p[1], triangle.p[0]);
+	Vector3 ac = MyMath::Subtract(triangle.p[2], triangle.p[0]);
+	Vector3 ap = MyMath::Subtract(point, triangle.p[0]);
+
+	float d1 = MyMath::Dot(ab, ap);
+	float d2 = MyMath::Dot(ac, ap);
+	if (d1 <= 0.0f && d2 <= 0.0f) return triangle.p[0];
+
+	Vector3 bp = MyMath::Subtract(point, triangle.p[1]);
+	float d3 = MyMath::Dot(ab, bp);
+	float d4 = MyMath::Dot(ac, bp);
+	if (d3 >= 0.0f && d4 <= d3) return triangle.p[1];
+
+	float vc = d1 * d4 - d3 * d2;
+	if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+		float v = d1 / (d1 - d3);
+		return MyMath::Add(triangle.p[0], MyMath::Multiply(v, ab));
+	}
+
+	Vector3 cp = MyMath::Subtract(point, triangle.p[2]);
+	float d5 = MyMath::Dot(ab, cp);
+	float d6 = MyMath::Dot(ac, cp);
+	if (d6 >= 0.0f && d5 <= d6) return triangle.p[2];
+
+	float vb = d5 * d2 - d1 * d6;
+	if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+		float w = d2 / (d2 - d6);
+		return MyMath::Add(triangle.p[0], MyMath::Multiply(w, ac));
+	}
+
+	float va = d3 * d6 - d5 * d4;
+	if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+		float w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+		return MyMath::Add(triangle.p[1], MyMath::Multiply(w, MyMath::Subtract(triangle.p[2], triangle.p[1])));
+	}
+
+	float denom = 1.0f / (va + vb + vc);
+	float v = vb * denom;
+	float w = vc * denom;
+	return MyMath::Add(triangle.p[0], MyMath::Add(MyMath::Multiply(v, ab), MyMath::Multiply(w, ac)));
+}
+
+bool MyMath::IsCollision(const Sphere& sphere, const Triangle& triangle, Vector3& outPushOut) {
+	Vector3 closest = MyMath::ClosestPointOnTriangle(sphere.center, triangle);
+	Vector3 diff = MyMath::Subtract(sphere.center, closest);
+	float distSq = MyMath::Dot(diff, diff);
+
+	if (distSq <= sphere.radius * sphere.radius) {
+		if (distSq > 0.00001f) {
+			float dist = std::sqrt(distSq);
+			Vector3 pushDir = MyMath::Multiply(1.0f / dist, diff);
+			outPushOut = MyMath::Multiply(sphere.radius - dist, pushDir);
+		} else {
+			// 球の中心が三角形の面上に完全にめり込んでいる場合は、法線方向に押し出す
+			Vector3 ab = MyMath::Subtract(triangle.p[1], triangle.p[0]);
+			Vector3 ac = MyMath::Subtract(triangle.p[2], triangle.p[0]);
+			Vector3 normal = MyMath::Normalize(MyMath::Cross(ab, ac));
+			outPushOut = MyMath::Multiply(sphere.radius, normal);
+		}
+		return true;
+	}
+	outPushOut = { 0, 0, 0 };
+	return false;
+}
+
+void MyMath::ExtractFrustumPlanes(const Matrix4x4& vpMatrix, Vector4 outPlanes[6]) {
+	outPlanes[0] = { vpMatrix.m[0][3] + vpMatrix.m[0][0], vpMatrix.m[1][3] + vpMatrix.m[1][0], vpMatrix.m[2][3] + vpMatrix.m[2][0], vpMatrix.m[3][3] + vpMatrix.m[3][0] };
+	outPlanes[1] = { vpMatrix.m[0][3] - vpMatrix.m[0][0], vpMatrix.m[1][3] - vpMatrix.m[1][0], vpMatrix.m[2][3] - vpMatrix.m[2][0], vpMatrix.m[3][3] - vpMatrix.m[3][0] };
+	outPlanes[2] = { vpMatrix.m[0][3] + vpMatrix.m[0][1], vpMatrix.m[1][3] + vpMatrix.m[1][1], vpMatrix.m[2][3] + vpMatrix.m[2][1], vpMatrix.m[3][3] + vpMatrix.m[3][1] };
+	outPlanes[3] = { vpMatrix.m[0][3] - vpMatrix.m[0][1], vpMatrix.m[1][3] - vpMatrix.m[1][1], vpMatrix.m[2][3] - vpMatrix.m[2][1], vpMatrix.m[3][3] - vpMatrix.m[3][1] };
+	outPlanes[4] = { vpMatrix.m[0][2], vpMatrix.m[1][2], vpMatrix.m[2][2], vpMatrix.m[3][2] };
+	outPlanes[5] = { vpMatrix.m[0][3] - vpMatrix.m[0][2], vpMatrix.m[1][3] - vpMatrix.m[1][2], vpMatrix.m[2][3] - vpMatrix.m[2][2], vpMatrix.m[3][3] - vpMatrix.m[3][2] };
+
+	for (int i = 0; i < 6; ++i) {
+		float length = std::sqrt(outPlanes[i].x * outPlanes[i].x + outPlanes[i].y * outPlanes[i].y + outPlanes[i].z * outPlanes[i].z);
+		if (length > 0.0f) {
+			outPlanes[i].x /= length;
+			outPlanes[i].y /= length;
+			outPlanes[i].z /= length;
+			outPlanes[i].w /= length;
+		}
+	}
+}
+
+bool MyMath::IsInFrustum(const Sphere& sphere, const Vector4 planes[6]) {
+	for (int i = 0; i < 6; ++i) {
+		float dist = planes[i].x * sphere.center.x + planes[i].y * sphere.center.y + planes[i].z * sphere.center.z + planes[i].w;
+		if (dist < -sphere.radius) {
+			return false;
+		}
+	}
+	return true;
+}

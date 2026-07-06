@@ -52,5 +52,15 @@ void Primitive::Initialize(Object3dCommon *object3dCommon, PrimitiveType type) {
 		ModelManager::GetInstance()->CreateLineModel("Primitive_Line");
 		SetModel("Primitive_Line");
 		break;
+	//------------境界警告用平面------------
+	case PrimitiveType::BoundaryAlertPlane:
+		ModelManager::GetInstance()->CreatePlaneModel("Primitive_BoundaryAlertPlane");
+		SetModel("Primitive_BoundaryAlertPlane");
+		if (GetModel()) {
+			GetModel()->SetTextureFilePath("resources/boundary_alert.png");
+			GetModel()->SetAlphaReference(0.0f); // 透過対応は加算合成(EffectDrawSettings)に任せる
+			GetModel()->SetEnableLighting(false); // 光源の影響を受けずに鮮やかな赤色を出す
+		}
+		break;
 	}
 }

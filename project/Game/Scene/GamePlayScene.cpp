@@ -1,4 +1,4 @@
-#include "GamePlayScene.h"
+﻿#include "GamePlayScene.h"
 #include "3D/ModelManager.h"
 #include <Windows.h>
 #include "engine/Graphics/DirectXCommon.h"
@@ -6,6 +6,7 @@
 #include "3D/Object3dCommon.h"
 #include "engine/Input/Input.h"
 #include "engine/Debug/ImGuiManager.h"
+#include "engine/Resource/TextureManager.h"
 #include <externals/imgui/imgui.h>
 #include "engine/Camera/FlyCamera.h"
 #include "engine/Graphics/PostEffect.h"
@@ -36,11 +37,20 @@ namespace {
 	constexpr float kCinematicCameraDirectionBlend = 0.10f;
 	constexpr float kCinematicCameraPositionBlend = 0.10f;
 	constexpr float kCinematicCameraRotationBlend = 0.12f;
+	constexpr float kAimAssistScreenRadius = 96.0f;
+	constexpr float kAimAssistMaxDistance = 180.0f;
+	constexpr size_t kMultiLockMaxTargets = 6;
+	constexpr int kMultiLockAcquireIntervalFrames = 8;
+	constexpr float kMultiLockScreenRadius = 320.0f;
+	constexpr float kMultiLockMaxDistance = 240.0f;
 	constexpr float kRadiansToDegrees = 180.0f / 3.141592654f;
 	constexpr size_t kInvalidSceneObjectIndex = static_cast<size_t>(-1);
 	const char *kSimulationActionsFilePath = "resources/simulation_actions.json";
 	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
-	const char *kPlayerModelName = "PlayerBox";
+	const char *kPlayerModelName = "vf-15c/scene.gltf";
+	const char *kLockOnReticleTexturePath = "resources/lock_on_reticle.png";
+	const char *kAimCursorTexturePath = "resources/aim_cursor.png";
+	const char *kBoundaryAlertTexturePath = "resources/boundary_alert.png";
 
 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
@@ -111,7 +121,16 @@ namespace {
 		if (IsScenePlayerObject(objectData) || IsSceneEnemyObject(objectData)) {
 			return false;
 		}
-		return IsSceneCategory(objectData, "OBSTACLE") || GetJsonString(objectData, "type") == "MESH";
+		if (IsSceneCategory(objectData, "OBSTACLE")) {
+			return true;
+		}
+		if (GetJsonString(objectData, "type") == "MESH") {
+			std::string name = GetJsonString(objectData, "name");
+			if (name.find("Terrain") != std::string::npos || name.find("terrain") != std::string::npos) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	json ToBlenderPositionJson(const Vector3 &position) {
@@ -322,8 +341,7 @@ namespace {
 		return maxX > minX && maxY > minY;
 	}
 
-#ifdef ENABLE_IMGUI
-	void DrawLockOnOverlay(const Enemy *target, const Matrix4x4 &viewProjectionMatrix) {
+	void DrawLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* lockOnReticleSprite_) {
 		if (!target) {
 			return;
 		}
@@ -362,37 +380,55 @@ namespace {
 			return;
 		}
 
-		ImDrawList *drawList = ImGui::GetForegroundDrawList();
-		const ImVec2 center(minX + screenPosition.x, minY + screenPosition.y);
-		const float radius = 24.0f;
-		const float corner = 10.0f;
-		const ImU32 lockColor = IM_COL32(255, 230, 40, 255);
-		const ImU32 shadowColor = IM_COL32(0, 0, 0, 190);
+		float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
+		float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
 
-		auto addCorner = [&](float sx, float sy, ImU32 color, float thickness) {
-			const ImVec2 outer(center.x + sx * radius, center.y + sy * radius);
-			drawList->AddLine(outer, ImVec2(outer.x - sx * corner, outer.y), color, thickness);
-			drawList->AddLine(outer, ImVec2(outer.x, outer.y - sy * corner), color, thickness);
-		};
+		float spriteX = screenPosition.x * winAppWidth / width;
+		float spriteY = screenPosition.y * winAppHeight / height;
+		const Vector2 center = { spriteX, spriteY };
 
-		drawList->AddCircle(center, radius + 2.0f, shadowColor, 48, 4.0f);
-		drawList->AddCircle(center, radius, lockColor, 48, 2.0f);
-		addCorner(-1.0f, -1.0f, shadowColor, 5.0f);
-		addCorner(1.0f, -1.0f, shadowColor, 5.0f);
-		addCorner(-1.0f, 1.0f, shadowColor, 5.0f);
-		addCorner(1.0f, 1.0f, shadowColor, 5.0f);
-		addCorner(-1.0f, -1.0f, lockColor, 2.0f);
-		addCorner(1.0f, -1.0f, lockColor, 2.0f);
-		addCorner(-1.0f, 1.0f, lockColor, 2.0f);
-		addCorner(1.0f, 1.0f, lockColor, 2.0f);
+		const float reticleSize = std::clamp(76.0f + collisionRadius * 12.0f, 76.0f, 116.0f);
+		const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);
 
-		const char *text = "LOCK ON";
-		const ImVec2 textSize = ImGui::CalcTextSize(text);
-		const ImVec2 textPos(center.x - textSize.x * 0.5f, center.y + radius + 8.0f);
-		drawList->AddText(ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), shadowColor, text);
-		drawList->AddText(textPos, lockColor, text);
+		if (lockOnReticleSprite_) {
+			lockOnReticleSprite_->SetPosition(center);
+			lockOnReticleSprite_->SetSize({ reticleSize * aspectScaleX, reticleSize });
+			lockOnReticleSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+			lockOnReticleSprite_->Update();
+			lockOnReticleSprite_->Draw();
+		}
 	}
-#endif
+
+	void DrawAimCursorOverlaySprite(Sprite* aimCursorSprite_) {
+		float minX = 0.0f;
+		float minY = 0.0f;
+		float maxX = 0.0f;
+		float maxY = 0.0f;
+		if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+			return;
+		}
+
+		float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
+		float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
+
+		float width = maxX - minX;
+		float height = maxY - minY;
+
+		float spriteX = winAppWidth * 0.5f;
+		float spriteY = winAppHeight * 0.5f;
+		const Vector2 center = { spriteX, spriteY };
+
+		const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);
+
+		if (aimCursorSprite_) {
+			aimCursorSprite_->SetPosition(center);
+			aimCursorSprite_->SetSize({ 44.0f * aspectScaleX, 44.0f });
+			aimCursorSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 220.0f / 255.0f });
+			aimCursorSprite_->Update();
+			aimCursorSprite_->Draw();
+		}
+	}
+}
 
 #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
 	bool gShowStageValidationWindow = true;
@@ -555,7 +591,10 @@ namespace {
 
 		const float width = maxX - minX;
 		const float height = maxY - minY;
-		ImDrawList *drawList = ImGui::GetForegroundDrawList();
+		if (!ImGui::GetCurrentContext()) {
+			return;
+		}
+		ImDrawList *drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
 		std::vector<ValidationLabelRect> usedRects;
 
 		for (const StageValidation::ValidationMarker &marker : report.markers) {
@@ -588,7 +627,6 @@ namespace {
 		}
 	}
 #endif
-}
 
 GamePlayScene::GamePlayScene(Mode mode)
 	: mode_(mode) {
@@ -603,39 +641,65 @@ void GamePlayScene::Initialize() {
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
 
-	//スプライトの初期化
+	//スプライト�E初期匁E
 	sprite = std::make_unique<Sprite>();
 	sprite->Initialize(SpriteCommon::GetInstance() , "resources/uvChecker.png");
+	TextureManager::GetInstance()->LoadTexture(kLockOnReticleTexturePath);
+	TextureManager::GetInstance()->LoadTexture(kAimCursorTexturePath);
+	TextureManager::GetInstance()->LoadTexture(kBoundaryAlertTexturePath);
 
-	// SkyboxCommon に DirectX の情報を渡して初期化する！
+	aimCursorSprite_ = std::make_unique<Sprite>();
+	aimCursorSprite_->Initialize(SpriteCommon::GetInstance(), kAimCursorTexturePath);
+	aimCursorSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+
+	lockOnReticleSprite_ = std::make_unique<Sprite>();
+	lockOnReticleSprite_->Initialize(SpriteCommon::GetInstance(), kLockOnReticleTexturePath);
+	lockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+
+	ModelManager::GetInstance()->CreatePlaneModel("BoundaryAlertPlane");
+	Model* alertModel = ModelManager::GetInstance()->FindModel("BoundaryAlertPlane");
+	if (alertModel) {
+		alertModel->SetTextureFilePath(kBoundaryAlertTexturePath);
+		alertModel->SetAlphaReference(0.05f); // Discard almost-black background
+	}
+	boundaryAlertObject_ = std::make_unique<Object3d>();
+	boundaryAlertObject_->Initialize(Object3dCommon::GetInstance());
+	boundaryAlertObject_->SetModel("BoundaryAlertPlane");
+	ceilingBoundaryAlertObject_ = std::make_unique<Object3d>();
+	ceilingBoundaryAlertObject_->Initialize(Object3dCommon::GetInstance());
+	ceilingBoundaryAlertObject_->SetModel("BoundaryAlertPlane");
+
+	// SkyboxCommon に DirectX の惁Eを渡して初期化する！E
 	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
-	// スカイボックスの生成と初期化
+	// スカイボックスの生Eと初期匁E
 	skybox = std::make_unique<Skybox>();
 	skybox->Initialize("resources/SkyBox.dds");
 
 
-	//モデル・パーティクル
+	//Model��・パ�EチE��クル
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
 
 	//======================================================
-	// プリミティブの生成！
+	// プリミティブE生EEE
 	//======================================================
 
-	// 平面（元のチェッカーボード）
-	myPlane = std::make_unique<Primitive>();
-	myPlane->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Plane);
-	myPlane->SetTranslate({ 0.0f, 2.0f, 0.0f }); // 元の上の方の配置
-	objects.push_back(myPlane.get());
+	// 地面のモデル
+	groundModel = std::make_unique<Object3d>();
+	groundModel->Initialize(Object3dCommon::GetInstance());
+	groundModel->SetModel("plane.obj");
+	groundModel->SetScale({ 100.0f, 1.0f, 100.0f });
+	groundModel->SetTranslate({ 0.0f, 0.0f, 0.0f });
+	objects.push_back(groundModel.get());
 
-	// 球体
+	// 琁EE
 	myShere = std::make_unique<Primitive>();
 	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
 	myShere->SetTranslate({ 2.0f,0.0f,0.0f });
 	// objects.push_back(myShere.get());
-	// ボーンとしても使われるため、目立つように赤くしておく
+	// ボ�Eンとしても使われるため、目立つように赤くしておく
 	if (myShere->GetModel()) {
 		myShere->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f });
 	}
@@ -644,16 +708,16 @@ void GamePlayScene::Initialize() {
 	myBox = std::make_unique<Primitive>();
 	myBox->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Box);
 	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
-	// objects.push_back(myBox.get()); // Boxの代わりにモデルを使う
+	// objects.push_back(myBox.get()); // Boxの代わりにModel��を使ぁE
 
-	// 動的モデル
+	// 動的Model��
 	myModelObject = std::make_unique<Object3d>();
 	myModelObject->Initialize(Object3dCommon::GetInstance());
 	ModelManager::GetInstance()->LoadModel("AnimatedCube/AnimatedCube.gltf");
 	myModelObject->SetModel("AnimatedCube/AnimatedCube.gltf");
 	//objects.push_back(myModelObject.get());
 
-	// アニメーションとノード階層の読み込み
+	// アニメーションとノ�Eド階層の読み込み
 	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
 	Node rootNode = Model::LoadNodeHierarchy("resources/AnimatedCube", "AnimatedCube.gltf");
 	skeleton = CreateSkeleton(rootNode);
@@ -663,19 +727,19 @@ void GamePlayScene::Initialize() {
 
 	myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 
-	// ボーンライン用オブジェクトの初期化
+	// ボ�Eンライン用オブジェクト�E初期匁E
 	ModelManager::GetInstance()->CreateLineModel("SkeletonLines");
 	skeletonLinesObject = std::make_unique<Object3d>();
 	skeletonLinesObject->Initialize(Object3dCommon::GetInstance());
 	skeletonLinesObject->SetModel("SkeletonLines");
 
-	// デバッグ用コライダー表示ラインオブジェクトの初期化
+	// チE��チE��用コライダー表示ラインオブジェクト�E初期匁E
 	ModelManager::GetInstance()->CreateLineModel("DebugColliderLines");
 	debugColliderLinesObject = std::make_unique<Object3d>();
 	debugColliderLinesObject->Initialize(Object3dCommon::GetInstance());
 	debugColliderLinesObject->SetModel("DebugColliderLines");
 
-	// デバッグ用フリーカメラの初期化
+	// チE��チE��用フリーカメラの初期匁E
 	debugFlyCamera_ = std::make_unique<FlyCamera>();
 	debugFlyCamera_->SetTranslate({ 0.0f, 5.0f, -20.0f }); // 初期位置
 	isDebugCameraActive_ = false;
@@ -684,20 +748,20 @@ void GamePlayScene::Initialize() {
 	// リング
 	myRing = std::make_unique<Primitive>();
 	myRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Ring);
-	myRing->SetTranslate({ 0.0f, 0.0f, 0.0f }); // パーティクルと同じ中心位置に合わせる
+	myRing->SetTranslate({ 0.0f, 0.0f, 0.0f }); // パ�EチE��クルと同じ中忁E��置に合わせる
 
-	// 部分リング (三日月)
+	// 部刁E��ング (三日朁E
 	myPartialRing = std::make_unique<Primitive>();
 	myPartialRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::PartialRing);
 	myPartialRing->SetTranslate({ 0.0f, 0.0f, 0.0f });
 
-	// 円柱エフェクト
+	// 冁E��エフェクチE
 	myCylinder = std::make_unique<Primitive>();
 	myCylinder->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Cylinder);
 	myCylinder->SetTranslate({ 0.0f, 0.0f, 0.0f });
 	myCylinder->SetScale({ 2.0f, 2.0f, 2.0f });
 
-	//パーティクル
+	//パ�EチE��クル
 	particleManager = std::make_unique<ParticleManager>();
 	particleManager->Initialize(DirectXCommon::GetInstance());
 	particleManager->CreateParticleGroup("test", "resources/circle.png");
@@ -710,14 +774,14 @@ void GamePlayScene::Initialize() {
 	pVoice1=AudioManager::GetInstance()->PlayWave(soundData1, true);
 	pVoice2=AudioManager::GetInstance()->PlayWave(soundData2, true);
 
-	// 1. マネージャー経由でトレイル専用モデルを作る
+	// 1. マネージャー経由でトレイル専用Model��を作る
 	ModelManager::GetInstance()->CreateTrailModel("SmokeTrail");
 
-	// 2. トレイル計算機の初期化（今回は60フレーム=約1秒分の長さを残す）
+	// 2. トレイル計算機�E初期化（今回は60フレーム=紁E秒�Eの長さを残す�E�E
 	missileTrail = std::make_unique<Trail>();
 	missileTrail->Initialize(60);
 
-	// 3. 描画用オブジェクトの初期化
+	// 3. 描画用オブジェクト�E初期匁E
 	trailObject = std::make_unique<Object3d>();
 	trailObject->Initialize(Object3dCommon::GetInstance());
 	trailObject->SetModel("SmokeTrail");
@@ -734,7 +798,7 @@ void GamePlayScene::Initialize() {
 	missileManager_ = std::make_unique<MissileManager>();
 	missileManager_->Initialize();
 
-	// 爆発エフェクト
+	// 爁E��エフェクチE
 	explosionManager_ = std::make_unique<ExplosionManager>();
 	explosionManager_->Initialize(particleManager.get());
 
@@ -747,13 +811,13 @@ void GamePlayScene::Initialize() {
 	enemyBulletManager_ = std::make_unique<EnemyBulletManager>();
 	enemyBulletManager_->Initialize();
 
-	// ゲームオーバー演出の初期化
+	// ゲームオーバ�E演�Eの初期匁E
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
 
 	ReloadSceneJson();
-	RefreshSimulationActionNames();
-	RefreshMissilePresetNames();
+// 	RefreshSimulationActionNames();
+// 	RefreshMissilePresetNames();
 
 	if (IsSimulationMode()) {
 		isEditorPreviewPlaying_ = false;
@@ -762,7 +826,7 @@ void GamePlayScene::Initialize() {
 		SetDebugCameraActive(true);
 	}
 
-	// エディターレシーバーの初期化
+	// エチE��ターレシーバ�Eの初期匁E
 	EditorReceiver::GetInstance()->Initialize();
 }
 
@@ -785,6 +849,8 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 
 void GamePlayScene::ReloadSceneJson() {
 	lockedEnemy_ = nullptr;
+	aimAssistEnemy_ = nullptr;
+	CancelMultiLock();
 	isCinematicLockOnCameraInitialized_ = false;
 	enemies_.clear();
 	obstacles_.clear();
@@ -792,7 +858,7 @@ void GamePlayScene::ReloadSceneJson() {
 
 	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawns_);
 
-	// イベントデータを再読み込み
+	// イベントデータを�E読み込み
 	enemyEventManager_.LoadEvents("resources/enemy_events.json");
 	for (auto& spawnData : enemySpawns_) {
 		if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
@@ -800,12 +866,20 @@ void GamePlayScene::ReloadSceneJson() {
 		}
 	}
 
-	SpawnEnemiesFromSpawnPoints();
+	for (size_t i = 0; i < enemySpawns_.size(); ++i) {
+		if (enemySpawns_[i].isInitialSpawn) {
+			auto enemy = std::make_unique<Enemy>();
+			enemy->Initialize(enemySpawns_[i].position);
+			enemy->SetRotation(enemySpawns_[i].rotation);
+			enemy->SetSpawnPointIndex(i);
+			enemies_.push_back(std::move(enemy));
+		}
+	}
 
 	try {
 		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
 	} catch (...) {
-		// JSONがまだ存在しない場合でも、エディタ操作を続けられるようにする。
+		// JSONがまだ存在しなぁE��合でも、エチE��タ操作を続けられるよぁE��する"
 	}
 }
 
@@ -814,6 +888,8 @@ void GamePlayScene::ResetEditorPreview() {
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
 	lockedEnemy_ = nullptr;
+	aimAssistEnemy_ = nullptr;
+	CancelMultiLock();
 	isCinematicLockOnCameraInitialized_ = false;
 
 	if (PostEffect::GetInstance()) {
@@ -836,7 +912,13 @@ void GamePlayScene::ResetEditorPreview() {
 	ReloadSceneJson();
 
 	if (!isDebugCameraActive_ && player_) {
-		UpdateGameplayCamera();
+		Vector3* targetPos = nullptr;
+		Vector3 enemyPos;
+		if (lockedEnemy_) {
+			enemyPos = lockedEnemy_->GetPosition();
+			targetPos = &enemyPos;
+		}
+		player_->UpdateCamera(camera.get(), targetPos);
 	}
 
 	OutputDebugStringA("[EditorPreview] Reset scene and paused.\n");
@@ -847,7 +929,7 @@ bool GamePlayScene::SaveCurrentSimulationLayoutToSceneJson(const std::string &fi
 	{
 		std::ifstream ifs(filePath);
 		if (!ifs.is_open()) {
-			simulationSaveMessage_ = "scene.json が見つからないため保存できませんでした。";
+			simulationSaveMessage_ = "scene.json が見つからなぁE��め保存できませんでした";
 			OutputDebugStringA(("[SimulationSave] File not found: " + filePath + "\n").c_str());
 			return false;
 		}
@@ -855,14 +937,14 @@ bool GamePlayScene::SaveCurrentSimulationLayoutToSceneJson(const std::string &fi
 		try {
 			ifs >> root;
 		} catch (const std::exception &e) {
-			simulationSaveMessage_ = "scene.json の読み込みに失敗しました。";
+			simulationSaveMessage_ = "scene.json の読み込みに失敗しました";
 			OutputDebugStringA(("[SimulationSave] JSON parse failed: " + std::string(e.what()) + "\n").c_str());
 			return false;
 		}
 	}
 
 	if (!root.contains("objects") || !root["objects"].is_array()) {
-		simulationSaveMessage_ = "scene.json に objects がないため保存できませんでした。";
+		simulationSaveMessage_ = "scene.json に objects がなぁE��め保存できませんでした";
 		OutputDebugStringA("[SimulationSave] objects array not found.\n");
 		return false;
 	}
@@ -952,7 +1034,7 @@ bool GamePlayScene::SaveCurrentSimulationLayoutToSceneJson(const std::string &fi
 
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
-		simulationSaveMessage_ = "scene.json を書き込めませんでした。";
+		simulationSaveMessage_ = "scene.json を書き込めませんでした";
 		OutputDebugStringA(("[SimulationSave] Failed to open for write: " + filePath + "\n").c_str());
 		return false;
 	}
@@ -965,10 +1047,19 @@ bool GamePlayScene::SaveCurrentSimulationLayoutToSceneJson(const std::string &fi
 	} catch (...) {
 	}
 
-	simulationSaveMessage_ = "現在の配置を scene.json に保存しました。実ゲームにも反映されます。";
+	simulationSaveMessage_ = "現在の配置めEscene.json に保存しました。実ゲームにも反映されます";
 	OutputDebugStringA(("[SimulationSave] Saved " + std::to_string(savedCount) + " transforms.\n").c_str());
 	return true;
 }
+
+
+
+
+
+
+
+
+
 
 void GamePlayScene::RefreshSimulationActionNames() {
 	simulationActionNames_.clear();
@@ -1103,6 +1194,10 @@ bool GamePlayScene::SaveNamedSimulationAction(const std::string &filePath, const
 		obstacleData["position"] = ToVector3Json(obstacle->GetPosition());
 		obstacleData["rotation"] = ToVector3Json(obstacle->GetRotation());
 		obstacleData["scale"] = ToVector3Json(obstacle->GetScale());
+		obstacleData["collisionOffset"] = ToVector3Json(obstacle->GetCollisionOffset());
+		obstacleData["collisionScale"] = ToVector3Json(obstacle->GetCollisionScale());
+		obstacleData["isCollisionEnabled"] = obstacle->IsCollisionEnabled();
+		obstacleData["useMeshCollider"] = obstacle->IsUseMeshCollider();
 		obstacleData["stageBounds"] = obstacle->IsStageBounds();
 		obstaclesData.push_back(obstacleData);
 	}
@@ -1197,6 +1292,8 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 	}
 
 	lockedEnemy_ = nullptr;
+	aimAssistEnemy_ = nullptr;
+	CancelMultiLock();
 	isCinematicLockOnCameraInitialized_ = false;
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
@@ -1268,6 +1365,10 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 			(*obstacleIt)->SetPosition(ReadVector3Json(obstacleData.value("position", json::array()), (*obstacleIt)->GetPosition()));
 			(*obstacleIt)->SetRotation(ReadVector3Json(obstacleData.value("rotation", json::array()), (*obstacleIt)->GetRotation()));
 			(*obstacleIt)->SetScale(ReadVector3Json(obstacleData.value("scale", json::array()), (*obstacleIt)->GetScale()));
+			(*obstacleIt)->SetCollisionOffset(ReadVector3Json(obstacleData.value("collisionOffset", json::array()), (*obstacleIt)->GetCollisionOffset()));
+			(*obstacleIt)->SetCollisionScale(ReadVector3Json(obstacleData.value("collisionScale", json::array()), (*obstacleIt)->GetCollisionScale()));
+			(*obstacleIt)->SetCollisionEnabled(obstacleData.value("isCollisionEnabled", (*obstacleIt)->IsCollisionEnabled()));
+			(*obstacleIt)->SetUseMeshCollider(obstacleData.value("useMeshCollider", (*obstacleIt)->IsUseMeshCollider()));
 			(*obstacleIt)->Update();
 			++obstacleIt;
 		}
@@ -1311,7 +1412,13 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 	}
 
 	if (!isDebugCameraActive_ && camera && player_) {
-		UpdateGameplayCamera();
+		Vector3 *targetPos = nullptr;
+		Vector3 enemyPos;
+		if (lockedEnemy_) {
+			enemyPos = lockedEnemy_->GetPosition();
+			targetPos = &enemyPos;
+		}
+		player_->UpdateCamera(camera.get(), targetPos);
 		camera->Update();
 	} else if (debugFlyCamera_) {
 		debugFlyCamera_->Camera::Update();
@@ -1667,132 +1774,59 @@ MissileTuning GamePlayScene::MakeMissileTuning(MissileType type) const {
 	return tuning;
 }
 
-void GamePlayScene::FirePlayerMissile(MissileType type) {
+void GamePlayScene::FirePlayerMissile(MissileType type, Enemy *target, float horizontalOffset) {
 	if (!player_ || !missileManager_) {
 		return;
 	}
 
 	const MissileTuning tuning = MakeMissileTuning(type);
 	const Vector3 playerPos = player_->GetPosition();
-	const Vector3 forward = player_->GetForwardVector();
+	const Vector3 forward = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+	Vector3 right = NormalizeOrVector3(MyMath::Cross({ 0.0f, 1.0f, 0.0f }, forward), { 1.0f, 0.0f, 0.0f });
 	const float muzzleOffset = (std::max)(0.0f, missileMuzzleOffset);
 	const Vector3 muzzlePos = {
-		playerPos.x + forward.x * muzzleOffset,
+		playerPos.x + forward.x * muzzleOffset + right.x * horizontalOffset,
 		playerPos.y + forward.y * muzzleOffset,
-		playerPos.z + forward.z * muzzleOffset,
+		playerPos.z + forward.z * muzzleOffset + right.z * horizontalOffset,
 	};
+
+	Vector3 fireDirection = forward;
+	bool shouldAim = false;
+	if (target) {
+		if (type == MissileType::MissileWithTrail) {
+			shouldAim = true;
+		} else if (type == MissileType::Normal) {
+			PlayerMode mode = player_->GetCurrentMode();
+			if (mode == PlayerMode::Gerwalk || mode == PlayerMode::Battroid) {
+				shouldAim = true;
+			}
+		}
+	}
+
+	if (shouldAim) {
+		Vector3 targetPosition = target->GetPosition();
+		float collisionRadius = 1.0f;
+		try {
+			collisionRadius = target->GetCollisionRadius();
+		} catch (...) {}
+		targetPosition.y += collisionRadius * 0.3f;
+		fireDirection = NormalizeOrVector3(SubtractVector3(targetPosition, muzzlePos), forward);
+	}
+
 	const Vector3 velocity = {
-		forward.x * (std::max)(0.01f, tuning.speed),
-		forward.y * (std::max)(0.01f, tuning.speed),
-		forward.z * (std::max)(0.01f, tuning.speed),
+		fireDirection.x * (std::max)(0.01f, tuning.speed),
+		fireDirection.y * (std::max)(0.01f, tuning.speed),
+		fireDirection.z * (std::max)(0.01f, tuning.speed),
 	};
 
 	missileManager_->Shoot(muzzlePos, velocity, type, tuning);
 }
 
-void GamePlayScene::SpawnEnemiesFromSpawnPoints() {
-	lockedEnemy_ = nullptr;
-	enemies_.clear();
-	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoRespawnTimer);
 
-	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-		if (enemySpawns_[spawnPointIndex].isInitialSpawn) {
-			SpawnEnemyFromSpawnPoint(spawnPointIndex);
-		}
-	}
-}
 
-void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
-	if (spawnPointIndex >= enemySpawns_.size()) {
-		return;
-	}
 
-	const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
-	auto enemy = std::make_unique<Enemy>();
-	enemy->Initialize(spawnData.position);
-	enemy->SetRotation(spawnData.rotation);
-	if (spawnData.flightPath.IsValid()) {
-		enemy->SetFlightPath(spawnData.flightPath.points, spawnData.flightPath.loop, spawnData.flightPath.speed);
-	}
-	enemy->SetSpawnPointIndex(spawnPointIndex);
-	enemies_.push_back(std::move(enemy));
 
-	if (spawnPointIndex < enemyRespawnTimers_.size()) {
-		enemyRespawnTimers_[spawnPointIndex] = kNoRespawnTimer;
-	}
-}
 
-bool GamePlayScene::IsEnemySpawnPointActive(size_t spawnPointIndex) const {
-	for (const auto &enemy : enemies_) {
-		if (!enemy || enemy->GetSpawnPointIndex() != spawnPointIndex) {
-			continue;
-		}
-
-		try {
-			if (!enemy->IsDead()) {
-				return true;
-			}
-		} catch (...) {
-			continue;
-		}
-	}
-
-	return false;
-}
-
-void GamePlayScene::ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames) {
-	if (spawnPointIndex >= enemySpawns_.size() || spawnPointIndex >= enemyRespawnTimers_.size()) {
-		return;
-	}
-	if (enemyRespawnTimers_[spawnPointIndex] != kNoRespawnTimer) {
-		return;
-	}
-	if (IsEnemySpawnPointActive(spawnPointIndex)) {
-		return;
-	}
-
-	enemyRespawnTimers_[spawnPointIndex] = delayFrames > 0 ? delayFrames : 1;
-}
-
-void GamePlayScene::TriggerEnemyReinforcements(const std::string &deadEnemyName) {
-	if (deadEnemyName.empty()) {
-		return;
-	}
-
-	std::vector<EnemyEvent> triggeredEvents = enemyEventManager_.GetEventsForTrigger(deadEnemyName);
-	for (const auto &ev : triggeredEvents) {
-		for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-			if (enemySpawns_[spawnPointIndex].name == ev.targetEnemyName) {
-				ScheduleEnemySpawn(spawnPointIndex, ev.delayFrames);
-				break;
-			}
-		}
-	}
-
-	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-		const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
-		if (spawnData.reinforcementTriggerName == deadEnemyName) {
-			ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
-		}
-	}
-}
-
-void GamePlayScene::UpdateEnemyRespawns() {
-	for (size_t spawnPointIndex = 0; spawnPointIndex < enemyRespawnTimers_.size(); ++spawnPointIndex) {
-		int &timer = enemyRespawnTimers_[spawnPointIndex];
-		if (timer < 0) {
-			continue;
-		}
-
-		if (timer > 0) {
-			--timer;
-		}
-
-		if (timer == 0) {
-			SpawnEnemyFromSpawnPoint(spawnPointIndex);
-		}
-	}
-}
 
 bool GamePlayScene::IsLockedEnemyAlive() const {
 	if (!lockedEnemy_) {
@@ -1896,6 +1930,262 @@ Enemy *GamePlayScene::FindLockOnTarget(Camera *activeCamera) const {
 	return nearestAliveEnemy;
 }
 
+Enemy *GamePlayScene::FindAimAssistTarget(Camera *activeCamera) const {
+	if (!player_ || !activeCamera || player_->IsDead()) {
+		return nullptr;
+	}
+
+	float minX = 0.0f;
+	float minY = 0.0f;
+	float maxX = 0.0f;
+	float maxY = 0.0f;
+	if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+		return nullptr;
+	}
+
+	const float screenWidth = maxX - minX;
+	const float screenHeight = maxY - minY;
+	if (screenWidth <= 0.0f || screenHeight <= 0.0f) {
+		return nullptr;
+	}
+
+	const Vector3 playerPosition = player_->GetPosition();
+	const Vector3 playerForward = MyMath::Normalize(player_->GetForwardVector());
+	const float maxDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance;
+	const float centerX = screenWidth * 0.5f;
+	const float centerY = screenHeight * 0.5f;
+	Enemy *bestTarget = nullptr;
+	float bestScore = (std::numeric_limits<float>::max)();
+
+	for (const auto &enemy : enemies_) {
+		if (!enemy.get()) continue;
+		try {
+			if (enemy->IsDead()) continue;
+		} catch (...) { continue; }
+
+		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
+		const float distSq = LengthSqVector3(toEnemy);
+		if (distSq > maxDistanceSq) {
+			continue;
+		}
+
+		const Vector3 direction = MyMath::Normalize(toEnemy);
+		const float forwardDot = MyMath::Dot(playerForward, direction);
+		if (forwardDot <= 0.05f) {
+			continue;
+		}
+
+		Vector3 targetPosition = enemy->GetPosition();
+		float collisionRadius = 1.0f;
+		try {
+			collisionRadius = enemy->GetCollisionRadius();
+		} catch (...) {}
+		targetPosition.y += collisionRadius * 0.3f;
+
+		Vector3 screenPosition = MyMath::WorldToScreen(
+			targetPosition,
+			activeCamera->GetViewProjectionMatrix(),
+			screenWidth,
+			screenHeight);
+
+		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f ||
+			screenPosition.x < 0.0f || screenPosition.x > screenWidth ||
+			screenPosition.y < 0.0f || screenPosition.y > screenHeight) {
+			continue;
+		}
+
+		const float dx = screenPosition.x - centerX;
+		const float dy = screenPosition.y - centerY;
+		const float screenDistanceSq = dx * dx + dy * dy;
+		const float assistRadius = kAimAssistScreenRadius + collisionRadius * 12.0f;
+		if (screenDistanceSq > assistRadius * assistRadius) {
+			continue;
+		}
+
+		const float score = screenDistanceSq + distSq * 0.01f - forwardDot * 40.0f;
+		if (score < bestScore) {
+			bestScore = score;
+			bestTarget = enemy.get();
+		}
+	}
+
+	return bestTarget;
+}
+
+Enemy *GamePlayScene::FindMultiLockTarget(Camera *activeCamera) const {
+	if (!player_ || !activeCamera || player_->IsDead() || multiLockTargets_.size() >= kMultiLockMaxTargets) {
+		return nullptr;
+	}
+
+	float minX = 0.0f;
+	float minY = 0.0f;
+	float maxX = 0.0f;
+	float maxY = 0.0f;
+	if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+		return nullptr;
+	}
+
+	const float screenWidth = maxX - minX;
+	const float screenHeight = maxY - minY;
+	if (screenWidth <= 0.0f || screenHeight <= 0.0f) {
+		return nullptr;
+	}
+
+	const Vector3 playerPosition = player_->GetPosition();
+	const Vector3 playerForward = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+	const float maxDistanceSq = kMultiLockMaxDistance * kMultiLockMaxDistance;
+	const float centerX = screenWidth * 0.5f;
+	const float centerY = screenHeight * 0.5f;
+	Enemy *bestTarget = nullptr;
+	float bestScore = (std::numeric_limits<float>::max)();
+
+	for (const auto &enemy : enemies_) {
+		if (!enemy.get()) continue;
+		try {
+			if (enemy->IsDead()) continue;
+		} catch (...) { continue; }
+
+		bool alreadyLocked = false;
+		for (Enemy *target : multiLockTargets_) {
+			if (target == enemy.get()) {
+				alreadyLocked = true;
+				break;
+			}
+		}
+		if (alreadyLocked) {
+			continue;
+		}
+
+		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
+		const float distSq = LengthSqVector3(toEnemy);
+		if (distSq > maxDistanceSq) {
+			continue;
+		}
+
+		const Vector3 direction = NormalizeOrVector3(toEnemy, playerForward);
+		const float forwardDot = MyMath::Dot(playerForward, direction);
+		if (forwardDot <= 0.0f) {
+			continue;
+		}
+
+		Vector3 targetPosition = enemy->GetPosition();
+		float collisionRadius = 1.0f;
+		try {
+			collisionRadius = enemy->GetCollisionRadius();
+		} catch (...) {}
+		targetPosition.y += collisionRadius * 0.3f;
+
+		Vector3 screenPosition = MyMath::WorldToScreen(
+			targetPosition,
+			activeCamera->GetViewProjectionMatrix(),
+			screenWidth,
+			screenHeight);
+
+		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f ||
+			screenPosition.x < 0.0f || screenPosition.x > screenWidth ||
+			screenPosition.y < 0.0f || screenPosition.y > screenHeight) {
+			continue;
+		}
+
+		const float dx = screenPosition.x - centerX;
+		const float dy = screenPosition.y - centerY;
+		const float screenDistanceSq = dx * dx + dy * dy;
+		const float lockRadius = kMultiLockScreenRadius + collisionRadius * 16.0f;
+		if (screenDistanceSq > lockRadius * lockRadius) {
+			continue;
+		}
+
+		const float score = screenDistanceSq + distSq * 0.006f - forwardDot * 80.0f;
+		if (score < bestScore) {
+			bestScore = score;
+			bestTarget = enemy.get();
+		}
+	}
+
+	return bestTarget;
+}
+
+void GamePlayScene::BeginMultiLock() {
+	isMultiLockCharging_ = true;
+	multiLockChargeFrames_ = 0;
+	multiLockTargets_.clear();
+}
+
+void GamePlayScene::PruneMultiLockTargets() {
+	auto isTargetAlive = [this](Enemy *target) {
+		if (!target) {
+			return false;
+		}
+		for (const auto &enemy : enemies_) {
+			if (enemy.get() == target) {
+				try {
+					return !enemy->IsDead();
+				} catch (...) {
+					return false;
+				}
+			}
+		}
+		return false;
+	};
+
+	multiLockTargets_.erase(
+		std::remove_if(
+			multiLockTargets_.begin(),
+			multiLockTargets_.end(),
+			[&](Enemy *target) { return !isTargetAlive(target); }),
+		multiLockTargets_.end());
+}
+
+void GamePlayScene::UpdateMultiLock(Camera *activeCamera) {
+	if (!isMultiLockCharging_) {
+		return;
+	}
+
+	PruneMultiLockTargets();
+	if (multiLockTargets_.size() < kMultiLockMaxTargets &&
+		(multiLockChargeFrames_ == 0 || multiLockChargeFrames_ % kMultiLockAcquireIntervalFrames == 0)) {
+		if (Enemy *target = FindMultiLockTarget(activeCamera)) {
+			multiLockTargets_.push_back(target);
+		}
+	}
+
+	++multiLockChargeFrames_;
+}
+
+void GamePlayScene::FireMultiLockMissiles() {
+	if (!isMultiLockCharging_) {
+		return;
+	}
+
+	PruneMultiLockTargets();
+	if (multiLockTargets_.empty()) {
+		if (aimAssistEnemy_) {
+			multiLockTargets_.push_back(aimAssistEnemy_);
+		} else if (lockedEnemy_ && IsLockedEnemyAlive()) {
+			multiLockTargets_.push_back(lockedEnemy_);
+		}
+	}
+
+	if (multiLockTargets_.empty()) {
+		FirePlayerMissile(MissileType::MissileWithTrail);
+	} else {
+		const float spacing = 0.35f;
+		const float center = (static_cast<float>(multiLockTargets_.size()) - 1.0f) * 0.5f;
+		for (size_t index = 0; index < multiLockTargets_.size(); ++index) {
+			const float horizontalOffset = (static_cast<float>(index) - center) * spacing;
+			FirePlayerMissile(MissileType::MissileWithTrail, multiLockTargets_[index], horizontalOffset);
+		}
+	}
+
+	CancelMultiLock();
+}
+
+void GamePlayScene::CancelMultiLock() {
+	isMultiLockCharging_ = false;
+	multiLockChargeFrames_ = 0;
+	multiLockTargets_.clear();
+}
+
 void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 	Input *input = Input::GetInstance();
 	if (!input) return;
@@ -1903,6 +2193,7 @@ void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 
 	if (canUseKeyboardInput && input->TriggerKey(DIK_TAB)) {
 		lockedEnemy_ = FindLockOnTarget(activeCamera);
+		aimAssistEnemy_ = nullptr;
 		isCinematicLockOnCameraInitialized_ = false;
 	}
 
@@ -1911,12 +2202,18 @@ void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 		isCinematicLockOnCameraInitialized_ = false;
 	}
 
+	aimAssistEnemy_ = nullptr;
+	if (!lockedEnemy_ && shouldUpdateGame) {
+		aimAssistEnemy_ = FindAimAssistTarget(activeCamera);
+	}
+
 	if (!shouldUpdateGame) {
 		return;
 	}
 
 	if (canUseKeyboardInput && input->TriggerKey(DIK_X)) {
 		lockedEnemy_ = nullptr;
+		aimAssistEnemy_ = nullptr;
 		isCinematicLockOnCameraInitialized_ = false;
 		return;
 	}
@@ -1926,116 +2223,7 @@ void GamePlayScene::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 	}
 }
 
-void GamePlayScene::UpdateGameplayCamera() {
-	if (!player_ || !camera) {
-		return;
-	}
 
-	const bool canUseCinematicCamera =
-		isCinematicLockOnCameraEnabled_ &&
-		lockedEnemy_ &&
-		!lockedEnemy_->IsDead();
-
-	if (canUseCinematicCamera) {
-		UpdateCinematicLockOnCamera();
-		return;
-	}
-
-	isCinematicLockOnCameraInitialized_ = false;
-	camera->SetFovY(kNormalCameraFovY);
-	camera->SetFarClip(kNormalCameraFarClip);
-	player_->UpdateCamera(camera.get());
-}
-
-void GamePlayScene::UpdateCinematicLockOnCamera() {
-	if (!player_ || !camera || !lockedEnemy_) {
-		return;
-	}
-
-	const Vector3 playerPosition = player_->GetPosition();
-	const Vector3 enemyPosition = lockedEnemy_->GetPosition();
-	const float enemyRadius = lockedEnemy_->GetCollisionRadius();
-
-	Vector3 playerFocus = playerPosition;
-	playerFocus.y += 1.0f;
-
-	Vector3 enemyFocus = enemyPosition;
-	enemyFocus.y += enemyRadius * 0.35f;
-
-	Vector3 rawFocus = ScaleVector3(AddVector3(playerFocus, enemyFocus), 0.5f);
-	const Vector3 toEnemy = SubtractVector3(enemyFocus, playerFocus);
-	const float separation = LengthVector3(toEnemy);
-	const Vector3 playerForward = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
-	const Vector3 enemyDirection = NormalizeOrVector3(toEnemy, playerForward);
-	const Vector3 flatPlayerForward = NormalizeOrVector3(FlattenYVector3(playerForward), { 0.0f, 0.0f, 1.0f });
-	const Vector3 flatEnemyDirection = NormalizeOrVector3(FlattenYVector3(enemyDirection), flatPlayerForward);
-
-	Vector3 rawCameraBackDirection = NormalizeOrVector3(
-		AddVector3(
-			ScaleVector3(flatPlayerForward, 0.65f),
-			ScaleVector3(flatEnemyDirection, 0.35f)),
-		flatEnemyDirection);
-
-	const Vector3 worldUp = { 0.0f, 1.0f, 0.0f };
-	Vector3 rawSideDirection = MyMath::Cross(worldUp, rawCameraBackDirection);
-	rawSideDirection = NormalizeOrVector3(rawSideDirection, { 1.0f, 0.0f, 0.0f });
-
-	if (!isCinematicLockOnCameraInitialized_) {
-		cinematicLockOnCameraPosition_ = camera->GetTranslate();
-		cinematicLockOnCameraRotation_ = MakeLookQuaternion(playerForward);
-		cinematicLockOnCameraFocus_ = rawFocus;
-		cinematicLockOnCameraBackDirection_ = rawCameraBackDirection;
-		cinematicLockOnCameraSeparation_ = separation;
-		cinematicLockOnCameraSideSign_ =
-			(MyMath::Dot(SubtractVector3(camera->GetTranslate(), rawFocus), rawSideDirection) < 0.0f) ? -1.0f : 1.0f;
-		isCinematicLockOnCameraInitialized_ = true;
-	} else {
-		cinematicLockOnCameraFocus_ = LerpVector3(cinematicLockOnCameraFocus_, rawFocus, kCinematicCameraFocusBlend);
-		cinematicLockOnCameraBackDirection_ = NormalizeOrVector3(
-			LerpVector3(cinematicLockOnCameraBackDirection_, rawCameraBackDirection, kCinematicCameraDirectionBlend),
-			rawCameraBackDirection);
-		cinematicLockOnCameraSeparation_ += (separation - cinematicLockOnCameraSeparation_) * kCinematicCameraFocusBlend;
-	}
-
-	const Vector3 focus = cinematicLockOnCameraFocus_;
-	const Vector3 cameraBackDirection = cinematicLockOnCameraBackDirection_;
-	const float cameraSeparation = cinematicLockOnCameraSeparation_;
-	Vector3 sideDirection = MyMath::Cross(worldUp, cameraBackDirection);
-	sideDirection = NormalizeOrVector3(sideDirection, rawSideDirection);
-	sideDirection = ScaleVector3(sideDirection, cinematicLockOnCameraSideSign_);
-
-	const int32_t clientWidth = WinApp::GetClientWidth();
-	const int32_t clientHeight = WinApp::GetClientHeight();
-	const float aspectRatio = (clientWidth > 0 && clientHeight > 0)
-		? static_cast<float>(clientWidth) / static_cast<float>(clientHeight)
-		: 16.0f / 9.0f;
-	const float horizontalFov = 2.0f * std::atan(std::tan(kCinematicCameraFovY * 0.5f) * aspectRatio);
-	const float fitDistance = (cameraSeparation * 0.55f + 4.0f) / std::tan(horizontalFov * 0.5f);
-	const float distanceBase = 16.0f + cameraSeparation * 0.45f;
-	const float fitBackDistance = fitDistance + 8.0f;
-	const float desiredBackDistance = (distanceBase > fitBackDistance) ? distanceBase : fitBackDistance;
-	const float backDistance = std::clamp(desiredBackDistance, 16.0f, 75.0f);
-	const float sideOffset = std::clamp(cameraSeparation * 0.22f, 2.0f, 10.0f);
-	const float heightOffset = std::clamp(4.0f + cameraSeparation * 0.18f, 5.0f, 16.0f);
-
-	Vector3 desiredPosition = focus;
-	desiredPosition = AddVector3(desiredPosition, ScaleVector3(cameraBackDirection, -backDistance));
-	desiredPosition = AddVector3(desiredPosition, ScaleVector3(sideDirection, sideOffset));
-	desiredPosition.y += heightOffset;
-
-	Vector3 lookTarget = focus;
-	lookTarget.y += std::clamp(cameraSeparation * 0.04f, 0.5f, 2.5f);
-	const Vector3 lookForward = NormalizeOrVector3(SubtractVector3(lookTarget, desiredPosition), cameraBackDirection);
-	const Quaternion desiredRotation = MakeLookQuaternion(lookForward);
-
-	cinematicLockOnCameraPosition_ = LerpVector3(cinematicLockOnCameraPosition_, desiredPosition, kCinematicCameraPositionBlend);
-	cinematicLockOnCameraRotation_ = MyMath::Slerp(cinematicLockOnCameraRotation_, desiredRotation, kCinematicCameraRotationBlend);
-
-	camera->SetFovY(kCinematicCameraFovY);
-	camera->SetFarClip(kCinematicCameraFarClip);
-	camera->SetTranslate(cinematicLockOnCameraPosition_);
-	camera->SetQuaternion(cinematicLockOnCameraRotation_);
-}
 
 void GamePlayScene::Finalize() {
 	if (pVoice1) {
@@ -2046,7 +2234,7 @@ void GamePlayScene::Finalize() {
 	AudioManager::GetInstance()->UnloadWave(soundData1);
 	AudioManager::GetInstance()->UnloadWave(soundData2);
 
-	// シーン切り替え時にポストエフェクトを通常に戻す
+	// シーン刁E��替え時にポストエフェクトを通常に戻ぁE
 	if (PostEffect::GetInstance()) {
 		PostEffect::GetInstance()->SetEffectType(0);
 	}
@@ -2056,34 +2244,34 @@ void GamePlayScene::Finalize() {
 
 void GamePlayScene::Update() {
 
-	// Blenderからデータが来ていたら敵をリアルタイム更新！
+	// BlenderからチE�Eタが来てぁE��ら敵をリアルタイム更新�E�E
 	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawns_)) {
 		for (auto &spawnData : enemySpawns_) {
 			if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
 				spawnData.isInitialSpawn = false;
 			}
 		}
-		SpawnEnemiesFromSpawnPoints();
+// 		SpawnEnemiesFromSpawnPoints();
 	}
 
 
 	// =========================================================
-	// ホットリロードの監視処理！
+	// ホットリロード�E監視�E琁E��E
 	// =========================================================
 	try {
-		// 今の "scene.json" の更新日時をチェックする
+		// 今�E "scene.json" の更新日時をチェチE��する
 		auto currentTime = std::filesystem::last_write_time("resources/scene.json");
 
-		// もし記憶している日時よりも新しければ（＝Blenderで上書き保存されたら！）
+		// もし記�EしてぁE��日時よりも新しけれ�E�E�＝Blenderで上書き保存されたら！E��E
 		if (currentTime > lastJsonWriteTime_) {
 			ReloadSceneJson();
 
-			// デバッグウィンドウにお知らせを出す
-			OutputDebugStringA("Hot Reloaded: scene.json を再読み込みしました！\n");
+			// チE��チE��ウィンドウにお知らせを�EぁE
+			OutputDebugStringA("Hot Reloaded: scene.json を�E読み込みしました�E�\n");
 		}
 	} catch (...) {
-		// 💡超重要：Blenderがファイルに書き込んでいる最中（数ミリ秒）は
-		// C++からアクセスできずエラーになることがあるため、try-catchで握りつぶす
+		// 💡趁E��要E��Blenderがファイルに書き込んでぁE��最中�E�数ミリ秒）�E
+		// C++からアクセスできずエラーになることがあるため、try-catchで握りつぶぁE
 	}
 
 	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
@@ -2106,26 +2294,26 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
-	// Rキーでシーンを最初からやり直す
+	// Rキーでシーンを最初からやり直ぁE
 	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_R)) {
 		SceneManager::GetInstance()->ChangeScene(IsSimulationMode() ? "SIMULATION" : "GAMEPLAY");
 		return;
 	}
 
 	// ==========================================
-	// ゲームオーバー判定と演出進行
+	// ゲームオーバ�E判定と演�E進衁E
 	// ==========================================
 	//if (!isGameOver_ && player_ && player_->IsDead()) {
 	//	isGameOver_ = true;
 	//	gameOverTimer_ = 0;
 
-	//	// 💥 自機がやられた時の大爆発パーティクルを生成！
+	//	// 💥 自機がめE��れた時�E大爁E��パ�EチE��クルを生成！E
 	//	std::vector<Vector3> playerHitPos = { player_->GetPosition() };
 	//	if (explosionManager_) {
 	//		explosionManager_->CreateExplosions(playerHitPos);
 	//	}
 
-	//	// 🎵 BGMを停止して絶望感を演出
+	//	// 🎵 BGMを停止して絶望感を演�E
 	//	if (pVoice2) {
 	//		pVoice2->Stop();
 	//	}
@@ -2136,7 +2324,7 @@ void GamePlayScene::Update() {
 	if (isGameOver_) {
 		gameOverTimer_++;
 
-		// 絶望の白黒化（グレースケール）エフェクトを適用！
+		// 絶望�E白黒化�E�グレースケール�E�エフェクトを適用�E�E
 		if (PostEffect::GetInstance()) {
 			float effectProgress = static_cast<float>(gameOverTimer_) / 120.0f;
 			if (effectProgress > 1.0f) {
@@ -2147,15 +2335,15 @@ void GamePlayScene::Update() {
 			PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.38f, blurIntensity);
 		}
 
-		// 5フレームに1回だけ更新することで、スローモーション（世界停止）を実現！
+		// 5フレームに1回だけ更新することで、スローモーション�E�世界停止�E�を実現�E�E
 		shouldUpdateGame = (gameOverTimer_ % 5 == 0);
 
-		// 約2秒（120フレーム）経過したら、正式にゲームオーバーシーンへ遷移する！
+		// 紁E秒！E20フレーム�E�経過したら、正式にゲームオーバ�Eシーンへ遷移する�E�E
 		if (gameOverTimer_ >= 120) {
 			SceneManager::GetInstance()->ChangeScene("GAMEOVER");
 		}
 	} else {
-		// 通常時はノーマルエフェクト
+		// 通常時�Eノ�EマルエフェクチE
 		if (PostEffect::GetInstance()) {
 			PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
 		}
@@ -2186,22 +2374,22 @@ void GamePlayScene::Update() {
 			myModelObject->GetModel()->UpdateSkinCluster(myModelObject->skinCluster, skeleton);
 		}
 
-		// 今のやつに合わせた状態で使うため、Skeletonから計算結果を取り出してBox/Modelに適用する
+		// 今�EめE��に合わせた状態で使ぁE��め、Skeletonから計算結果を取り�EしてBox/Modelに適用する
 		if (!skeleton.joints.empty()) {
 			myBox->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 			myBox->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
 
-			// スキニングが実装されたため、スキンなしモデルの場合のみTransformを適用する
-			// スキニングが実装されたため、スキンなしモデルの場合のみTransformを適用する
+			// スキニングが実裁E��れたため、スキンなしModel��の場合�EみTransformを適用する
+			// スキニングが実裁E��れたため、スキンなしModel��の場合�EみTransformを適用する
 			if (myModelObject->GetModel()) {
 				if (!myModelObject->skinCluster.isValid) {
 					myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 					myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 					myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
 				} else {
-					// スキニングモデルはアニメーションが行列に含まれるため、ベースのトランスフォームはリセットする
-					// (これを行わないと二重に移動して画面外に消える)
+					// スキニングModel��はアニメーションが行�Eに含まれるため、�EースのトランスフォームはリセチE��する
+					// (これを行わなぁE��二重に移動して画面外に消えめE
 					myModelObject->SetTranslate({ 0.0f, 0.0f, 0.0f });
 					myModelObject->SetQuaternionRotate({ 0.0f, 0.0f, 0.0f, 1.0f });
 					myModelObject->SetScale({ modelScale, modelScale, modelScale });
@@ -2219,12 +2407,12 @@ void GamePlayScene::Update() {
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][1],
 					skeleton.joints[i].skeletonSpaceMatrix.m[3][2]
 				};
-				// モデル全体のスケールに合わせてボーンの座標もスケーリングする
+				// Model��全体�Eスケールに合わせてボ�Eンの座標もスケーリングする
 				pos.x *= modelScale;
 				pos.y *= modelScale;
 				pos.z *= modelScale;
 
-				// ライン用の頂点を作成（親がいる場合）
+				// ライン用の頂点を作�E�E�親がいる場合！E
 				if (skeleton.joints[i].parent) {
 					int32_t parentIndex = *skeleton.joints[i].parent;
 					Vector3 parentPos = {
@@ -2252,7 +2440,7 @@ void GamePlayScene::Update() {
 				}
 			}
 
-			// ラインモデルの頂点を更新
+			// ラインModel��の頂点を更新
 			if (!lineVertices.empty() && skeletonLinesObject->GetModel()) {
 				skeletonLinesObject->GetModel()->UpdateLineVertices(lineVertices);
 			}
@@ -2260,7 +2448,7 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// モデルの更新
+	// Model��の更新
 	if (showModel && myModelObject) {
 		myModelObject->Update();
 	}
@@ -2270,7 +2458,7 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
-	// プレイヤーの更新と、カメラの追従
+	// プレイヤーの更新と、カメラの追征E
 	if (player_) {
 		if (updateSelectedPlayer) {
 			if (lockedEnemy_) {
@@ -2286,17 +2474,17 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// 敵
 	// ==========================================
-	// プレイヤーの最新座標を取得する
+	// プレイヤーの最新座標を取得すめE
 	Vector3 playerPos = player_ ? player_->GetOBB().center : Vector3{ 0.0f, 0.0f, 0.0f };
 
 	if (updateSelectedEnemies) {
-		// 敵の弾の更新（被弾時の爆発座標を受け取る）
+		// 敵の弾の更新�E�被弾時�E爁E��座標を受け取る�E�E
 		std::vector<Vector3> enemyBulletHits;
 		if (enemyBulletManager_ && player_) {
 			enemyBulletManager_->Update(player_.get(), enemyBulletHits, obstacles_);
 		}
 
-		// 敵の弾がプレイヤーに当たった場合も爆発を発生させる
+		// 敵の弾が�Eレイヤーに当たった場合も爁E��を発生させる
 		if (explosionManager_ && !enemyBulletHits.empty()) {
 			explosionManager_->CreateExplosions(enemyBulletHits);
 		}
@@ -2308,24 +2496,30 @@ void GamePlayScene::Update() {
 					lockedEnemy_ = nullptr;
 					isCinematicLockOnCameraInitialized_ = false;
 				}
+				if (aimAssistEnemy_ == it->get()) {
+					aimAssistEnemy_ = nullptr;
+				}
+				if (missileManager_) {
+// 					missileManager_->ClearTarget(it->get());
+				}
 				size_t spawnPointIndex = (*it)->GetSpawnPointIndex();
 				
 				if (spawnPointIndex < enemySpawns_.size()) {
 					const std::string& deadName = enemySpawns_[spawnPointIndex].name;
-					TriggerEnemyReinforcements(deadName);
+// 					TriggerEnemyReinforcements(deadName);
 				}
 
 				if (spawnPointIndex < enemySpawns_.size() && enemySpawns_[spawnPointIndex].isInitialSpawn) {
-					ScheduleEnemySpawn(spawnPointIndex, kEnemyRespawnDelayFrames);
+// 					ScheduleEnemySpawn(spawnPointIndex, kEnemyRespawnDelayFrames);
 				}
-				it = enemies_.erase(it); // 当たった敵はリストから消滅
+				it = enemies_.erase(it); // 当たった敵はリストから消滁E
 			} else {
 				++it;
 			}
 		}
-		UpdateEnemyRespawns();
+// 		UpdateEnemyRespawns();
 
-		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します）
+		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します！）
 		for (auto &obstacle : obstacles_) {
 			obstacle->Update();
 		}
@@ -2338,13 +2532,21 @@ void GamePlayScene::Update() {
 	// カメラの更新
 	if (isDebugCameraActive_) {
 		if (canUseKeyboardInput && canUseMouseInput) {
-			debugFlyCamera_->Update(); // FlyCameraが自分で入力を消化して自分を更新する
+			debugFlyCamera_->Update(); // FlyCameraが入力の消化して自動更新する
 		} else {
 			debugFlyCamera_->Camera::Update();
 		}
 		skybox->Update(debugFlyCamera_.get());
 	} else {
-		UpdateGameplayCamera();
+		if (player_) {
+			Vector3* targetPos = nullptr;
+			Vector3 enemyPos;
+			if (lockedEnemy_) {
+				enemyPos = lockedEnemy_->GetPosition();
+				targetPos = &enemyPos;
+			}
+			player_->UpdateCamera(camera.get(), targetPos);
+		}
 		camera->Update();
 		skybox->Update(camera.get());
 	}
@@ -2366,8 +2568,8 @@ void GamePlayScene::Update() {
 		static float ringTime = 0.0f;
 		ringTime += 0.05f;
 
-		// オブジェクト自体の回転や拡縮は行わず、UVスクロールのみでエフェクトを表現する
-		// パーティクルのエフェクトを囲むようにスケールを調整
+		// オブジェクト�E体�E回転めE��縮は行わず、UVスクロールのみでエフェクトを表現する
+		// パ�EチE��クルのエフェクトを囲むようにスケールを調整
 		myRing->SetRotate({ 0.0f, 0.0f, 0.0f });
 		myRing->SetScale({ 2.0f, 2.0f, 1.0f });
 
@@ -2376,7 +2578,7 @@ void GamePlayScene::Update() {
 		if (ringModel) {
 			Vector3 uvScale = { 10.0f, 1.0f, 1.0f }; // U方向にScaleして細かい模様にする
 			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
-			// 資料の指示通り、U方向（X成分）を時間でスクロールさせて円を回転させる
+			// 賁E��の持E��通り、U方向！E成�E�E�を時間でスクロールさせて冁E��回転させめE
 			Vector3 uvTranslate = { ringTime * 0.1f, 0.0f, 0.0f }; 
 			
 			MyMath math;
@@ -2390,7 +2592,7 @@ void GamePlayScene::Update() {
 		static float pRingTime = 0.0f;
 		pRingTime += 0.05f;
 
-		// 部分リングはV方向をスクロールさせたり、Z軸回転させたりしてアニメーションできる
+		// 部刁E��ングはV方向をスクロールさせたり、Z軸回転させたりしてアニメーションできる
 		myPartialRing->SetRotate({ 0.0f, 0.0f, pRingTime * -0.5f }); // Z回転で三日月を回す
 		myPartialRing->SetScale({ 2.0f, 2.0f, 1.0f });
 
@@ -2447,22 +2649,37 @@ void GamePlayScene::Update() {
 
 
 	// ==========================================
-	// ミサイルの発射処理
+	// ミサイルの発封E�E琁E
 	// ==========================================
 	if (allowMouseMissileFire && player_ && !isGameOver_) {
-		// 左クリック：速くて煙が出ない通常弾
-		if (Input::GetInstance()->TriggerMouseButton(0)) {
-			FirePlayerMissile(MissileType::Normal);
+		Input *input = Input::GetInstance();
+		// 左クリチE���E�速くて煙が出なぁE��常弾
+		if (input->TriggerMouseButton(0)) {
+			Enemy* aimTarget = nullptr;
+			if (lockedEnemy_ && IsLockedEnemyAlive()) {
+				aimTarget = lockedEnemy_;
+			} else if (aimAssistEnemy_) {
+				aimTarget = aimAssistEnemy_;
+			}
+			FirePlayerMissile(MissileType::Normal, aimTarget);
 		}
 
-		// 右クリック：煙を引きながら敵へ曲がるホーミング弾
-		if (Input::GetInstance()->TriggerMouseButton(1)) {
-			FirePlayerMissile(MissileType::MissileWithTrail);
+		// 右クリチE���E��Eを引きながら敵へ曲がるホ�Eミング弾
+		if (input->TriggerMouseButton(1)) {
+			BeginMultiLock();
 		}
+		if (isMultiLockCharging_ && input->PushMouseButton(1)) {
+			UpdateMultiLock(activeCamera);
+		}
+		if (isMultiLockCharging_ && !input->PushMouseButton(1)) {
+			FireMultiLockMissiles();
+		}
+	} else if (isMultiLockCharging_) {
+		CancelMultiLock();
 	}
 
 	// ==========================================
-	// 弾の更新処理
+	// 弾の更新処琁E
 	// ==========================================
 	std::vector<Vector3> hitPositions;
 	if (updateSelectedMissiles) {
@@ -2470,7 +2687,7 @@ void GamePlayScene::Update() {
 			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, lockedEnemy_);
 		}
 
-		// 爆発マネージャーに座標リストを渡して、発生を依頼するだけ！
+		// 爁E��マネージャーに座標リストを渡して、発生を依頼するだけ！E
 		if (explosionManager_ && !hitPositions.empty()) {
 			explosionManager_->CreateExplosions(hitPositions);
 		}
@@ -2481,18 +2698,18 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// 爆発マネージャーの更新
+	// 爁E��マネージャーの更新
 	if ((!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) && explosionManager_) {
 		explosionManager_->Update();
 	}
 
-	// 大元のパーティクル全体の更新
+	// 大允E�Eパ�EチE��クル全体�E更新
 	if (!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) {
 		particleManager->Update(activeCamera);
 	}
 
 	// ==========================================
-	// デバッグ用コライダー頂点構築
+	// チE��チE��用コライダー頂点構篁E
 	// ==========================================
 	if (showDebugColliders && updateDebugWireframes && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
 		std::vector<VertexData> colliderVertices;
@@ -2617,7 +2834,7 @@ void GamePlayScene::Update() {
 			}
 		};
 
-		// 1. プレイヤーのAABBと球
+		// 1. プレイヤーのAABBと琁E
 		if (drawPlayerDebugFrame && player_ && !player_->IsDead()) {
 			addOBBShape(player_->GetOBB(), { 0.0f, 1.0f, 0.0f, 1.0f });
 		}
@@ -2628,12 +2845,12 @@ void GamePlayScene::Update() {
 				if (!obstacle || obstacle->IsStageBounds()) {
 					continue;
 				}
-				// モデルの実際のバウンディングボックス × Blenderスケール = 正確なワールドAABB
+				// Model��の実際のバウンチE��ングボックス ÁEBlenderスケール = 正確なワールドAABB
 				addOBBShape(obstacle->GetOBB(), { 0.0f, 1.0f, 1.0f, 1.0f });
 			}
 		}
 
-		// 3. 敵のAABBと球
+		// 3. 敵のAABBと琁E
 		if (drawEnemyDebugFrame) {
 			for (const auto& enemy : enemies_) {
 				if (!enemy->IsDead()) {
@@ -2646,7 +2863,7 @@ void GamePlayScene::Update() {
 			addSphere(lockedEnemy_->GetPosition(), lockedEnemy_->GetCollisionRadius() + 0.35f, { 1.0f, 0.95f, 0.0f, 1.0f });
 		}
 
-		// 4. 自機ミサイル（Player Bullets）
+		// 4. 自機ミサイル�E�Elayer Bullets�E�E
 		if (drawMissileDebugFrame && missileManager_) {
 			for (const auto& missile : missileManager_->GetMissiles()) {
 				if (!missile->IsDead()) {
@@ -2656,7 +2873,7 @@ void GamePlayScene::Update() {
 			}
 		}
 
-		// 5. 敵の弾（Enemy Bullets）
+		// 5. 敵の弾�E�Enemy Bullets�E�E
 		if (drawEnemyDebugFrame && enemyBulletManager_) {
 			for (const auto& bullet : enemyBulletManager_->GetBullets()) {
 				if (!bullet.isDead) {
@@ -2666,7 +2883,7 @@ void GamePlayScene::Update() {
 			}
 		}
 
-		// 空の場合はダミーの透明な線を追加（リソース stuck 防止）
+		// 空の場合�Eダミ�Eの透�Eな線を追加�E�リソース stuck 防止�E�E
 		if (colliderVertices.empty()) {
 			VertexData v1, v2;
 			v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -2688,7 +2905,7 @@ void GamePlayScene::Update() {
 }
 
 void GamePlayScene::Draw() {
-	//3Dオブジェトの描画準備
+	//3Dオブジェト�E描画準備
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
 	// プレイヤーの描画
@@ -2711,14 +2928,24 @@ void GamePlayScene::Draw() {
 		enemy->Draw();
 	}
 
+	Vector4 frustumPlanes[6];
+	MyMath::ExtractFrustumPlanes(camera->GetViewProjectionMatrix(), frustumPlanes);
+
 	// 障害物の描画
 	for (const auto &obstacle : obstacles_) {
-		obstacle->Draw();
-		Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		Sphere obsSphere;
+		obsSphere.center = obstacle->GetPosition();
+		obsSphere.radius = MyMath::Length(obstacle->GetWorldHalfExtents());
+
+		// 画面外�E場合�E描画しなぁE��カリング�E�E
+		if (MyMath::IsInFrustum(obsSphere, frustumPlanes)) {
+			obstacle->Draw();
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-	//3Dオブジェクトの描画
+	//3Dオブジェクト�E描画
 	if (showPlane) {
 		for (Object3d* object3d : objects) {
 			object3d->Draw();
@@ -2726,16 +2953,66 @@ void GamePlayScene::Draw() {
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-	// アニメーションモデルの個別描画制御
+	// アニメーションModel��の個別描画制御
 	if (showModel && myModelObject) {
 		myModelObject->Draw();
 	}
+
+	if (player_ && boundaryAlertObject_ && ceilingBoundaryAlertObject_) {
+		static float pulseTime = 0.0f;
+		pulseTime += 0.05f;
+		float pulseAlpha = 0.5f + 0.5f * std::sin(pulseTime);
+
+		auto drawBoundaryAlert = [&](Object3d* alertObject, const Vector3& position, const Vector3& normal, float intensity) {
+			alertObject->SetScale({ 2.0f, 2.0f, 2.0f });
+
+			// The plane model is already upright on the XY plane. Walls only need yaw;
+			// the ceiling needs a pitch so the alert lies on the horizontal surface.
+			Vector3 rotate = { 0.0f, std::atan2(normal.x, normal.z), 0.0f };
+			if (normal.y > 0.5f) {
+				rotate = { -1.570796f, 0.0f, 0.0f };
+			}
+
+			Model* m = alertObject->GetModel();
+			if (m) {
+				m->SetColor({ 1.0f, 1.0f, 1.0f, intensity * pulseAlpha });
+			}
+
+			alertObject->SetTranslate({
+				position.x + normal.x * 0.5f,
+				position.y + normal.y * 0.5f,
+				position.z + normal.z * 0.5f
+			});
+
+			alertObject->SetRotate(rotate);
+			alertObject->Update();
+			alertObject->Draw();
+		};
+
+		if (player_->IsNearWallBoundary()) {
+			drawBoundaryAlert(
+				boundaryAlertObject_.get(),
+				player_->GetWallBoundaryAlertPosition(),
+				player_->GetWallBoundaryAlertNormal(),
+				player_->GetWallBoundaryWarningIntensity());
+		}
+		if (player_->IsNearCeilingBoundary()) {
+			drawBoundaryAlert(
+				ceilingBoundaryAlertObject_.get(),
+				player_->GetCeilingBoundaryAlertPosition(),
+				player_->GetCeilingBoundaryAlertNormal(),
+				player_->GetCeilingBoundaryWarningIntensity());
+		}
+		if (player_->IsNearBoundary()) {
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
+	}
 	
 	if (showBones) {
-		// ボーン描画の前に設定を確実にする
+		// ボ�Eン描画の前に設定を確実にする
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-		// ボーンラインの描画
+		// ボ�Eンラインの描画
 		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
 			skeletonLinesObject->Draw();
 		}
@@ -2757,7 +3034,7 @@ void GamePlayScene::Draw() {
 	if (explosionManager_) explosionManager_->Draw();
 
 
-	//Spriteの描画基準
+	//Spriteの描画基溁E
 	SpriteCommon::GetInstance()->SetCommonPipelineState();
 	//スプライト描画
 	if (showSprite) {
@@ -2776,10 +3053,18 @@ void GamePlayScene::DrawOverlay() {
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (!activeCamera) return;
 
-#ifdef ENABLE_IMGUI
-	DrawLockOnOverlay(lockedEnemy_, activeCamera->GetViewProjectionMatrix());
-#endif
+	if (isMultiLockCharging_ && !multiLockTargets_.empty()) {
+		for (Enemy *target : multiLockTargets_) {
+			DrawLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get());
+		}
+	} else if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
+		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get());
+	} else {
+		DrawAimCursorOverlaySprite(aimCursorSprite_.get());
+	}
 }
+
+
 
 void GamePlayScene::DrawSimulationScreenUI() {
 #ifdef ENABLE_IMGUI
@@ -2880,6 +3165,23 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			ImGui::SliderFloat("ピッチ回転速度", &p.pitchSpeed, 0.001f, 0.1f);
 			ImGui::SliderFloat("ヨー回転速度", &p.yawSpeed, 0.001f, 0.1f);
 			ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
+
+			ImGui::Separator();
+			ImGui::Text("アニメーションデバッグ");
+			bool isDebug = player_->IsAnimDebugActive();
+			if (ImGui::Checkbox("デバッグ時間を強制", &isDebug)) {
+				player_->SetAnimDebugActive(isDebug);
+			}
+			if (isDebug) {
+				float t = player_->GetTargetAnimationTime();
+				float duration = player_->GetAnimationDuration();
+				if (ImGui::SliderFloat("アニメーション時間 (秒)", &t, 0.0f, duration, "%.3f秒")) {
+					player_->SetTargetAnimationTime(t);
+				}
+				ImGui::Text("対応フレーム (24fps換算): %.1f", t * 24.0f);
+			} else {
+				ImGui::Text("アニメーション時間: %.3f秒 (目標: %.3f秒)", player_->GetAnimationTime(), player_->GetTargetAnimationTime());
+			}
 		} else {
 			ImGui::Text("プレイヤーが初期化されていません。");
 		}
@@ -3518,10 +3820,39 @@ void GamePlayScene::UpdateUI() {
 
 		ImGui::Separator();
 		ImGui::Text("=== 障害物のリスト (総数: %d) ===", (int)obstacles_.size());
+		
+		if (ImGui::Button("障害物の設定をJSONに保存")) {
+			SaveCurrentSimulationLayoutToSceneJson("resources/scene.json");
+		}
+		if (!simulationSaveMessage_.empty()) {
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s", simulationSaveMessage_.c_str());
+		}
+
 		int obsIndex = 0;
 		for (const auto& obstacle : obstacles_) {
 			Vector3 pos = obstacle->GetPosition();
+			Vector3 colOff = obstacle->GetCollisionOffset();
+			Vector3 colScale = obstacle->GetCollisionScale();
+			bool colEnabled = obstacle->IsCollisionEnabled();
+			bool useMeshCol = obstacle->IsUseMeshCollider();
+
+			ImGui::PushID(obsIndex);
 			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", obsIndex, pos.x, pos.y, pos.z);
+			
+			if (ImGui::Checkbox("Collision Enabled", &colEnabled)) {
+				obstacle->SetCollisionEnabled(colEnabled);
+			}
+			if (ImGui::Checkbox("Use Mesh Collider", &useMeshCol)) {
+				obstacle->SetUseMeshCollider(useMeshCol);
+			}
+			if (ImGui::DragFloat3("Collision Offset", &colOff.x, 0.1f)) {
+				obstacle->SetCollisionOffset(colOff);
+			}
+			if (ImGui::DragFloat3("Collision Scale", &colScale.x, 0.05f)) {
+				obstacle->SetCollisionScale(colScale);
+			}
+			ImGui::PopID();
+			
 			obsIndex++;
 		}
 		if (obstacles_.empty()) {

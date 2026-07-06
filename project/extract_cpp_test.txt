@@ -1,0 +1,509 @@
+﻿Created At: 2026-07-01T00:54:04Z
+Completed At: 2026-07-01T00:54:04Z
+File Path: `file:///c:/Users/k024g/OneDrive/%E3%83%87%E3%82%B9%E3%82%AF%E3%83%88%E3%83%83%E3%83%97/2%E5%B9%B4/2%E5%B9%B4%E5%89%8D%E6%9C%9F/CG2/CG2/project/Game/Scene/GamePlayScene.cpp`
+Total Lines: 3763
+Total Bytes: 143687
+Showing lines 1 to 500
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: #include "GamePlayScene.h"
+2: #include "3D/ModelManager.h"
+3: #include <Windows.h>
+4: #include "engine/Graphics/DirectXCommon.h"
+5: #include "2D/SpriteCommon.h"
+6: #include "3D/Object3dCommon.h"
+7: #include "engine/Input/Input.h"
+8: #include "engine/Debug/ImGuiManager.h"
+9: #include <externals/imgui/imgui.h>
+10: #include "engine/Camera/FlyCamera.h"
+11: #include "engine/Graphics/PostEffect.h"
+12: #include "engine/Scene/SceneManager.h"
+13: #include "engine/Utility/StageLoader.h"
+14: #include "engine/Utility/StageValidation.h"
+15: #include "externals/json.hpp"
+16: #include "Game/editor/EditorReceiver.h"
+17: #include <algorithm>
+18: #include <cctype>
+19: #include <cmath>
+20: #include <exception>
+21: #include <filesystem>
+22: #include <fstream>
+23: #include <limits>
+24: #include <shellapi.h>
+25: 
+26: using json = nlohmann::json;
+27: 
+28: namespace {
+29: 	constexpr int kNoRespawnTimer = -1;
+30: 	constexpr float kNormalCameraFovY = 0.45f;
+31: 	constexpr float kNormalCameraFarClip = 100.0f;
+32: 	constexpr float kCinematicCameraFovY = 0.70f;
+33: 	constexpr float kCinematicCameraFarClip = 250.0f;
+34: 	constexpr float kCinematicCameraFocusBlend = 0.18f;
+35: 	constexpr float kCinematicCameraDirectionBlend = 0.10f;
+36: 	constexpr float kCinematicCameraPositionBlend = 0.10f;
+37: 	constexpr float kCinematicCameraRotationBlend = 0.12f;
+38: 	constexpr float kRadiansToDegrees = 180.0f / 3.141592654f;
+39: 	constexpr size_t kInvalidSceneObjectIndex = static_cast<size_t>(-1);
+40: 	const char *kSimulationActionsFilePath = "resources/simulation_actions.json";
+41: 	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
+42: 	const char *kPlayerModelName = "vf-15c/scene.gltf";
+43: 
+44: 	Vector3 SubtractVector3(const Vector3 &lhs, const Vector3 &rhs) {
+45: 		return { lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z };
+46: 	}
+47: 
+48: 	Vector3 AddVector3(const Vector3 &lhs, const Vector3 &rhs) {
+49: 		return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
+50: 	}
+51: 
+52: 	Vector3 ScaleVector3(const Vector3 &value, float scale) {
+53: 		return { value.x * scale, value.y * scale, value.z * scale };
+54: 	}
+55: 
+56: 	Vector3 FlattenYVector3(const Vector3 &value) {
+57: 		return { value.x, 0.0f, value.z };
+58: 	}
+59: 
+60: 	std::filesystem::path GetCurrentExecutablePath() {
+61: 		wchar_t modulePath[MAX_PATH] = {};
+62: 		const DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+63: 		if (length == 0) {
+64: 			return {};
+65: 		}
+66: 		return std::filesystem::path(modulePath);
+67: 	}
+68: 
+69: 	bool LaunchSimulationExecutable() {
+70: 		const std::filesystem::path currentExe = GetCurrentExecutablePath();
+71: 		if (currentExe.empty()) {
+72: 			return false;
+73: 		}
+74: 
+75: 		const std::filesystem::path simulationExe = currentExe.parent_path() / L"CG2Simulation.exe";
+76: 		const std::filesystem::path launchExe = std::filesystem::exists(simulationExe) ? simulationExe : currentExe;
+77: 		const wchar_t *parameters = (launchExe == currentExe) ? L"--simulation" : nullptr;
+78: 		const std::filesystem::path workDir = std::filesystem::current_path();
+79: 
+80: 		HINSTANCE result = ShellExecuteW(
+81: 			nullptr,
+82: 			L"open",
+83: 			launchExe.c_str(),
+84: 			parameters,
+85: 			workDir.c_str(),
+86: 			SW_SHOWNORMAL);
+87: 		return reinterpret_cast<intptr_t>(result) > 32;
+88: 	}
+89: 
+90: 	std::string GetJsonString(const json &objectData, const char *key) {
+91: 		if (!objectData.contains(key) || !objectData[key].is_string()) {
+92: 			return {};
+93: 		}
+94: 		return objectData[key].get<std::string>();
+95: 	}
+96: 
+97: 	bool IsSceneCategory(const json &objectData, const char *category) {
+98: 		return GetJsonString(objectData, "category") == category;
+99: 	}
+100: 
+101: 	bool IsSceneEnemyObject(const json &objectData) {
+102: 		return IsSceneCategory(objectData, "ENEMY") || objectData.contains("enemy");
+103: 	}
+104: 
+105: 	bool IsScenePlayerObject(const json &objectData) {
+106: 		return IsSceneCategory(objectData, "PLAYER");
+107: 	}
+108: 
+109: 	bool IsSceneObstacleObject(const json &objectData) {
+110: 		if (IsScenePlayerObject(objectData) || IsSceneEnemyObject(objectData)) {
+111: 			return false;
+112: 		}
+113: 		if (IsSceneCategory(objectData, "OBSTACLE")) {
+114: 			return true;
+115: 		}
+116: 		if (GetJsonString(objectData, "type") == "MESH") {
+117: 			std::string name = GetJsonString(objectData, "name");
+118: 			if (name.find("Terrain") != std::string::npos || name.find("terrain") != std::string::npos) {
+119: 				return true;
+120: 			}
+121: 		}
+122: 		return false;
+123: 	}
+124: 
+125: 	json ToBlenderPositionJson(const Vector3 &position) {
+126: 		return json::array({ position.x, position.z, position.y });
+127: 	}
+128: 
+129: 	json ToBlenderRotationJson(const Vector3 &rotation) {
+130: 		return json::array({
+131: 			rotation.x * kRadiansToDegrees,
+132: 			rotation.z * kRadiansToDegrees,
+133: 			rotation.y * kRadiansToDegrees
+134: 		});
+135: 	}
+136: 
+137: 	json ToBlenderScaleJson(const Vector3 &scale) {
+138: 		return json::array({ scale.x, scale.z, scale.y });
+139: 	}
+140: 
+141: 	void WriteSceneTransform(
+142: 		json &objectData,
+143: 		const Vector3 &position,
+144: 		const Vector3 *rotation,
+145: 		const Vector3 *scale) {
+146: 
+147: 		if (!objectData.contains("transform") || !objectData["transform"].is_object()) {
+148: 			objectData["transform"] = json::object();
+149: 		}
+150: 
+151: 		json &transform = objectData["transform"];
+152: 		transform["translation"] = ToBlenderPositionJson(position);
+153: 		if (rotation) {
+154: 			transform["rotation"] = ToBlenderRotationJson(*rotation);
+155: 		}
+156: 		if (scale) {
+157: 			transform["scale"] = ToBlenderScaleJson(*scale);
+158: 		}
+159: 	}
+160: 
+161: 	Vector3 EulerFromQuaternionXYZ(const Quaternion &quaternion) {
+162: 		const Matrix4x4 matrix = MyMath::MakeRotateMatrix(MyMath::Normalize(quaternion));
+163: 		const float sinY = std::clamp(-matrix.m[0][2], -1.0f, 1.0f);
+164: 		const float y = std::asin(sinY);
+165: 		const float cosY = std::cos(y);
+166: 
+167: 		Vector3 rotation = { 0.0f, y, 0.0f };
+168: 		if (std::abs(cosY) > 0.0001f) {
+169: 			rotation.x = std::atan2(matrix.m[1][2], matrix.m[2][2]);
+170: 			rotation.z = std::atan2(matrix.m[0][1], matrix.m[0][0]);
+171: 		} else {
+172: 			rotation.z = std::atan2(-matrix.m[1][0], matrix.m[1][1]);
+173: 		}
+174: 		return rotation;
+175: 	}
+176: 
+177: 	bool SceneObjectNameExists(const json &objects, const std::string &name) {
+178: 		for (const auto &objectData : objects) {
+179: 			if (GetJsonString(objectData, "name") == name) {
+180: 				return true;
+181: 			}
+182: 		}
+183: 		return false;
+184: 	}
+185: 
+186: 	std::string MakeUniqueSceneObjectName(const json &objects, const std::string &prefix) {
+187: 		for (int index = 1; index < 10000; ++index) {
+188: 			std::string name = prefix + std::to_string(index);
+189: 			if (!SceneObjectNameExists(objects, name)) {
+190: 				return name;
+191: 			}
+192: 		}
+193: 		return prefix + "9999";
+194: 	}
+195: 
+196: 	std::string TrimActionName(const std::string &name) {
+197: 		size_t begin = 0;
+198: 		while (begin < name.size() && std::isspace(static_cast<unsigned char>(name[begin]))) {
+199: 			++begin;
+200: 		}
+201: 
+202: 		size_t end = name.size();
+203: 		while (end > begin && std::isspace(static_cast<unsigned char>(name[end - 1]))) {
+204: 			--end;
+205: 		}
+206: 
+207: 		return name.substr(begin, end - begin);
+208: 	}
+209: 
+210: 	json ToVector3Json(const Vector3 &value) {
+211: 		return json::array({ value.x, value.y, value.z });
+212: 	}
+213: 
+214: 	Vector3 ReadVector3Json(const json &value, const Vector3 &fallback) {
+215: 		if (!value.is_array() || value.size() < 3) {
+216: 			return fallback;
+217: 		}
+218: 
+219: 		return {
+220: 			value[0].get<float>(),
+221: 			value[1].get<float>(),
+222: 			value[2].get<float>()
+223: 		};
+224: 	}
+225: 
+226: 	float ReadJsonFloat(const json &objectData, const char *key, float fallback) {
+227: 		if (!objectData.is_object() || !objectData.contains(key) || !objectData[key].is_number()) {
+228: 			return fallback;
+229: 		}
+230: 		return objectData[key].get<float>();
+231: 	}
+232: 
+233: 	int ReadJsonInt(const json &objectData, const char *key, int fallback) {
+234: 		if (!objectData.is_object() || !objectData.contains(key) || !objectData[key].is_number_integer()) {
+235: 			return fallback;
+236: 		}
+237: 		return objectData[key].get<int>();
+238: 	}
+239: 
+240: 	json PlayerModeParamsToJson(const PlayerModeParams &params) {
+241: 		json data;
+242: 		data["maxMoveSpeed"] = params.maxMoveSpeed;
+243: 		data["moveAcceleration"] = params.moveAcceleration;
+244: 		data["moveDamping"] = params.moveDamping;
+245: 		data["pitchSpeed"] = params.pitchSpeed;
+246: 		data["yawSpeed"] = params.yawSpeed;
+247: 		data["rollSpeed"] = params.rollSpeed;
+248: 		return data;
+249: 	}
+250: 
+251: 	void ApplyPlayerModeParamsFromJson(const json &data, PlayerModeParams &params) {
+252: 		params.maxMoveSpeed = ReadJsonFloat(data, "maxMoveSpeed", params.maxMoveSpeed);
+253: 		params.moveAcceleration = ReadJsonFloat(data, "moveAcceleration", params.moveAcceleration);
+254: 		params.moveDamping = ReadJsonFloat(data, "moveDamping", params.moveDamping);
+255: 		params.pitchSpeed = ReadJsonFloat(data, "pitchSpeed", params.pitchSpeed);
+256: 		params.yawSpeed = ReadJsonFloat(data, "yawSpeed", params.yawSpeed);
+257: 		params.rollSpeed = ReadJsonFloat(data, "rollSpeed", params.rollSpeed);
+258: 	}
+259: 
+260: 	float LengthSqVector3(const Vector3 &value) {
+261: 		return value.x * value.x + value.y * value.y + value.z * value.z;
+262: 	}
+263: 
+264: 	float LengthVector3(const Vector3 &value) {
+265: 		return std::sqrt(LengthSqVector3(value));
+266: 	}
+267: 
+268: 	Vector3 NormalizeOrVector3(const Vector3 &value, const Vector3 &fallback) {
+269: 		const float length = LengthVector3(value);
+270: 		if (length <= 0.0001f) {
+271: 			return fallback;
+272: 		}
+273: 		return ScaleVector3(value, 1.0f / length);
+274: 	}
+275: 
+276: 	Vector3 LerpVector3(const Vector3 &from, const Vector3 &to, float t) {
+277: 		return {
+278: 			from.x + (to.x - from.x) * t,
+279: 			from.y + (to.y - from.y) * t,
+280: 			from.z + (to.z - from.z) * t
+281: 		};
+282: 	}
+283: 
+284: 	Quaternion MakeLookQuaternion(const Vector3 &forward) {
+285: 		const Vector3 normalizedForward = NormalizeOrVector3(forward, { 0.0f, 0.0f, 1.0f });
+286: 		const float clampedY = std::clamp(normalizedForward.y, -1.0f, 1.0f);
+287: 		const float pitch = -std::asin(clampedY);
+288: 		const float yaw = std::atan2(normalizedForward.x, normalizedForward.z);
+289: 
+290: 		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+291: 		Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+292: 		return MyMath::Normalize(MyMath::Multiply(qYaw, qPitch));
+293: 	}
+294: 
+295: 	bool IsImGuiKeyboardCaptureActive() {
+296: #ifdef ENABLE_IMGUI
+297: 		if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+298: 			return false;
+299: 		}
+300: 
+301: 		const ImGuiIO &io = ImGui::GetIO();
+302: 		return io.WantCaptureKeyboard || io.WantTextInput || ImGui::IsAnyItemActive();
+303: #else
+304: 		return false;
+305: #endif
+306: 	}
+307: 
+308: 	bool IsImGuiMouseCaptureActive() {
+309: #ifdef ENABLE_IMGUI
+310: 		if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+311: 			return false;
+312: 		}
+313: 
+314: 		const ImGuiIO &io = ImGui::GetIO();
+315: 		return io.WantCaptureMouse || ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive();
+316: #else
+317: 		return false;
+318: #endif
+319: 	}
+320: 
+321: 	bool GetOverlayBounds(float &minX, float &minY, float &maxX, float &maxY) {
+322: 		if (FlyCamera::GetGameViewBounds(minX, minY, maxX, maxY) && maxX > minX && maxY > minY) {
+323: 			return true;
+324: 		}
+325: 
+326: 		minX = 0.0f;
+327: 		minY = 0.0f;
+328: 		maxX = static_cast<float>(WinApp::GetClientWidth());
+329: 		maxY = static_cast<float>(WinApp::GetClientHeight());
+330: 		return maxX > minX && maxY > minY;
+331: 	}
+332: 
+333: #ifdef ENABLE_IMGUI
+334: 	void DrawLockOnOverlay(const Enemy *target, const Matrix4x4 &viewProjectionMatrix) {
+335: 		if (!target) {
+336: 			return;
+337: 		}
+338: 		
+339: 		try {
+340: 			if (target->IsDead()) {
+341: 				return;
+342: 			}
+343: 		} catch(...) {
+344: 			return;
+345: 		}
+346: 
+347: 		Vector3 worldPosition = target->GetPosition();
+348: 		float collisionRadius = 1.0f;
+349: 		try {
+350: 			collisionRadius = target->GetCollisionRadius();
+351: 		} catch(...) {}
+352: 		worldPosition.y += collisionRadius * 0.3f;
+353: 		float minX = 0.0f;
+354: 		float minY = 0.0f;
+355: 		float maxX = 0.0f;
+356: 		float maxY = 0.0f;
+357: 		if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+358: 			return;
+359: 		}
+360: 
+361: 		const float width = maxX - minX;
+362: 		const float height = maxY - minY;
+363: 
+364: 		Vector3 screenPosition = MyMath::WorldToScreen(worldPosition, viewProjectionMatrix, width, height);
+365: 		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f) {
+366: 			return;
+367: 		}
+368: 		if (screenPosition.x < 0.0f || screenPosition.x > width ||
+369: 			screenPosition.y < 0.0f || screenPosition.y > height) {
+370: 			return;
+371: 		}
+372: 
+373: 		if (!ImGui::GetCurrentContext()) {
+374: 			return;
+375: 		}
+376: 		ImDrawList *drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
+377: 		const ImVec2 center(minX + screenPosition.x, minY + screenPosition.y);
+378: 		const float radius = 24.0f;
+379: 		const float corner = 10.0f;
+380: 		const ImU32 lockColor = IM_COL32(255, 230, 40, 255);
+381: 		const ImU32 shadowColor = IM_COL32(0, 0, 0, 190);
+382: 
+383: 		auto addCorner = [&](float sx, float sy, ImU32 color, float thickness) {
+384: 			const ImVec2 outer(center.x + sx * radius, center.y + sy * radius);
+385: 			drawList->AddLine(outer, ImVec2(outer.x - sx * corner, outer.y), color, thickness);
+386: 			drawList->AddLine(outer, ImVec2(outer.x, outer.y - sy * corner), color, thickness);
+387: 		};
+388: 
+389: 		drawList->AddCircle(center, radius + 2.0f, shadowColor, 48, 4.0f);
+390: 		drawList->AddCircle(center, radius, lockColor, 48, 2.0f);
+391: 		addCorner(-1.0f, -1.0f, shadowColor, 5.0f);
+392: 		addCorner(1.0f, -1.0f, shadowColor, 5.0f);
+393: 		addCorner(-1.0f, 1.0f, shadowColor, 5.0f);
+394: 		addCorner(1.0f, 1.0f, shadowColor, 5.0f);
+395: 		addCorner(-1.0f, -1.0f, lockColor, 2.0f);
+396: 		addCorner(1.0f, -1.0f, lockColor, 2.0f);
+397: 		addCorner(-1.0f, 1.0f, lockColor, 2.0f);
+398: 		addCorner(1.0f, 1.0f, lockColor, 2.0f);
+399: 
+400: 		const char *text = "LOCK ON";
+401: 		const ImVec2 textSize = ImGui::CalcTextSize(text);
+402: 		const ImVec2 textPos(center.x - textSize.x * 0.5f, center.y + radius + 8.0f);
+403: 		drawList->AddText(ImVec2(textPos.x + 1.0f, textPos.y + 1.0f), shadowColor, text);
+404: 		drawList->AddText(textPos, lockColor, text);
+405: 	}
+406: #endif
+407: 
+408: #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
+409: 	bool gShowStageValidationWindow = true;
+410: 	bool gShowStageValidationLabels = true;
+411: 
+412: 	ImVec4 ValidationLevelColor(const std::string &level) {
+413: 		if (level == "ERROR") {
+414: 			return ImVec4(1.0f, 0.25f, 0.2f, 1.0f);
+415: 		}
+416: 		if (level == "WARNING") {
+417: 			return ImVec4(1.0f, 0.75f, 0.2f, 1.0f);
+418: 		}
+419: 		return ImVec4(0.35f, 1.0f, 0.45f, 1.0f);
+420: 	}
+421: 
+422: 	const char *ValidationLevelText(const std::string &level) {
+423: 		if (level == "ERROR") {
+424: 			return "ERROR";
+425: 		}
+426: 		if (level == "WARNING") {
+427: 			return "WARNING";
+428: 		}
+429: 		return "OK";
+430: 	}
+431: 
+432: 	void DrawValidationMessages(const char *title, const std::vector<std::string> &messages, const ImVec4 &color) {
+433: 		ImGui::TextColored(color, "%s: %d", title, static_cast<int>(messages.size()));
+434: 		for (const std::string &message : messages) {
+435: 			ImGui::BulletText("%s", message.c_str());
+436: 		}
+437: 	}
+438: 
+439: 	void DrawStageValidationWindow(const StageValidation::Report &report) {
+440: 		ImGui::Begin("Level Validation");
+441: 		ImGui::Text("Source: %s", report.source.c_str());
+442: 
+443: 		DrawValidationMessages("Errors", report.errors, ValidationLevelColor("ERROR"));
+444: 		DrawValidationMessages("Warnings", report.warnings, ValidationLevelColor("WARNING"));
+445: 
+446: 		ImGui::Separator();
+447: 		ImGui::Text("Check Items");
+448: 		for (const StageValidation::CheckItemResult &item : report.checkItems) {
+449: 			ImGui::TextColored(ValidationLevelColor(item.level), "%s", ValidationLevelText(item.level));
+450: 			ImGui::SameLine(90.0f);
+451: 			if (item.detail.empty()) {
+452: 				ImGui::TextWrapped("%s", item.label.c_str());
+453: 			} else {
+454: 				ImGui::TextWrapped("%s: %s", item.label.c_str(), item.detail.c_str());
+455: 			}
+456: 		}
+457: 
+458: 		ImGui::End();
+459: 	}
+460: 
+461: 	struct ValidationLabelRect {
+462: 		ImVec2 min;
+463: 		ImVec2 max;
+464: 	};
+465: 
+466: 	float ClampValidationFloat(float value, float minValue, float maxValue) {
+467: 		if (maxValue < minValue) {
+468: 			return minValue;
+469: 		}
+470: 		if (value < minValue) {
+471: 			return minValue;
+472: 		}
+473: 		if (value > maxValue) {
+474: 			return maxValue;
+475: 		}
+476: 		return value;
+477: 	}
+478: 
+479: 	ValidationLabelRect MakeValidationLabelRect(const ImVec2 &textPos, const ImVec2 &textSize, float padding) {
+480: 		return {
+481: 			ImVec2(textPos.x - padding, textPos.y - padding),
+482: 			ImVec2(textPos.x + textSize.x + padding, textPos.y + textSize.y + padding),
+483: 		};
+484: 	}
+485: 
+486: 	bool ValidationRectsOverlap(const ValidationLabelRect &lhs, const ValidationLabelRect &rhs) {
+487: 		return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
+488: 			lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y;
+489: 	}
+490: 
+491: 	bool ValidationRectOverlapsAny(const ValidationLabelRect &rect, const std::vector<ValidationLabelRect> &usedRects) {
+492: 		for (const ValidationLabelRect &usedRect : usedRects) {
+493: 			if (ValidationRectsOverlap(rect, usedRect)) {
+494: 				return true;
+495: 			}
+496: 		}
+497: 		return false;
+498: 	}
+499: 
+500: 	void ClampValidationLabelToGameView(
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.
+

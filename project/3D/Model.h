@@ -1,6 +1,7 @@
 #pragma once
 #include "ModelCommon.h"
 #include "MyMath.h"
+#include "engine/Resource/TextureManager.h"
 #include <memory>
 #include <optional>
 #include <map>
@@ -184,6 +185,13 @@ public:
 		}
 	}
 
+	void SetTextureFilePath(const std::string& path) {
+		textureFilePath_ = path;
+		modelData.material.textureFilePath = path;
+		TextureManager::GetInstance()->LoadTexture(path);
+		modelData.material.textureIndex = TextureManager::GetInstance()->GetTextureIndexByFilePath(path);
+	}
+
 	void SetAlphaReference(float alphaRef) {
 		if (materialData) {
 			materialData->alphaReference = alphaRef;
@@ -200,6 +208,12 @@ public:
 		}
 	}
 
+	void SetEnableLighting(bool enable) {
+		if (materialData) {
+			materialData->enableLighting = enable ? 1 : 0;
+		}
+	}
+
 	// スキニング
 	bool Skinning(SkinCluster& skinCluster);
 
@@ -211,54 +225,20 @@ public:
 	void InitializeTrail(ModelCommon *modelCommon);
 	void UpdateTrailVertices(const std::vector<VertexData> &vertices);
 
-	// モデルのローカル空間でのバウンディングボックス半径（頂点から計算）を返す
-	// 例: BoxModel(頂点±1) は {1,1,1} を返す
-	// これに Object3d の scale を掛けると、ワールド空間での当たり判定サイズになる
-	Vector3 GetHalfExtents() const {
-		if (modelData.vertices.empty()) return { 1.0f, 1.0f, 1.0f };
-		float minX = modelData.vertices[0].position.x;
-		float minY = modelData.vertices[0].position.y;
-		float minZ = modelData.vertices[0].position.z;
-		float maxX = minX;
-		float maxY = minY;
-		float maxZ = minZ;
-		for (const auto &v : modelData.vertices) {
-			if (v.position.x < minX) minX = v.position.x;
-			if (v.position.y < minY) minY = v.position.y;
-			if (v.position.z < minZ) minZ = v.position.z;
-			if (v.position.x > maxX) maxX = v.position.x;
-			if (v.position.y > maxY) maxY = v.position.y;
-			if (v.position.z > maxZ) maxZ = v.position.z;
-		}
-		return { (maxX - minX) * 0.5f, (maxY - minY) * 0.5f, (maxZ - minZ) * 0.5f };
-	}
-
-	Vector3 GetBoundsCenter() const {
-		if (modelData.vertices.empty()) return { 0.0f, 0.0f, 0.0f };
-		float minX = modelData.vertices[0].position.x;
-		float minY = modelData.vertices[0].position.y;
-		float minZ = modelData.vertices[0].position.z;
-		float maxX = minX;
-		float maxY = minY;
-		float maxZ = minZ;
-		for (const auto &v : modelData.vertices) {
-			if (v.position.x < minX) minX = v.position.x;
-			if (v.position.y < minY) minY = v.position.y;
-			if (v.position.z < minZ) minZ = v.position.z;
-			if (v.position.x > maxX) maxX = v.position.x;
-			if (v.position.y > maxY) maxY = v.position.y;
-			if (v.position.z > maxZ) maxZ = v.position.z;
-		}
-		return { (minX + maxX) * 0.5f, (minY + maxY) * 0.5f, (minZ + maxZ) * 0.5f };
-	}
+	Vector3 GetHalfExtents() const { return cachedHalfExtents_; }
+	Vector3 GetBoundsCenter() const { return cachedBoundsCenter_; }
 
 private:
+	void RecalculateBounds();
+
 	ModelCommon *modelCommon_;
 
 	std::unique_ptr<MyMath> math = std::make_unique<MyMath>();
 
 	//Objファイルのデータ
 	ModelData modelData;
+	Vector3 cachedHalfExtents_ = { 1.0f, 1.0f, 1.0f };
+	Vector3 cachedBoundsCenter_ = { 0.0f, 0.0f, 0.0f };
 
 	//バッファリソース
 	Microsoft::WRL::ComPtr<ID3D12Resource> vertexResource;
