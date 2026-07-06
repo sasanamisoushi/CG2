@@ -445,6 +445,8 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 		}
 	}
 
+	lastCameraDirection_ = cameraDirection;
+
 	const float backDistance = 12.0f;
 	const float heightOffset = 2.5f;
 	
@@ -453,7 +455,7 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	Vector3 playerOBBCenter = GetOBB().center;
 	Vector3 camPos = {
 		playerOBBCenter.x + cameraBackOffset.x,
-		playerOBBCenter.y + heightOffset,
+		playerOBBCenter.y + heightOffset + cameraBackOffset.y,
 		playerOBBCenter.z + cameraBackOffset.z
 	};
 
@@ -471,7 +473,6 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	camera->SetRotate({ 0,0,0 });
 	camera->SetQuaternion(cameraRotation);
 }
-
 Vector3 Player::GetForwardVector() const {
 	Vector3 bodyForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
 	if (currentMode_ == PlayerMode::Fighter) {
@@ -481,6 +482,15 @@ Vector3 Player::GetForwardVector() const {
 	return MakeForwardFromFlatAndPitch(bodyForward, cameraPitch_);
 }
 
+
+void Player::SyncRotationToLastCameraDirection() {
+	if (LengthSq(lastCameraDirection_) > 0.0001f) {
+		float pitch = -std::asin(std::clamp(lastCameraDirection_.y, -1.0f, 1.0f));
+		float yaw = std::atan2(lastCameraDirection_.x, lastCameraDirection_.z);
+		// Update pitch and yaw based on last camera direction (keep roll as 0 to snap flat)
+		SetRotation({pitch, yaw, 0.0f});
+	}
+}
 void Player::SetRotation(const Vector3 &eulerRotation) {
 	Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, eulerRotation.x);
 	Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, eulerRotation.y);
@@ -507,6 +517,9 @@ void Player::OnCollision() {
 	isDead_ = true;
 	if (object_) {
 		object_.reset();
+	}
+	if (boosterEffect_) {
+		boosterEffect_.reset();
 	}
 }
 

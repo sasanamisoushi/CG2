@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "3D/Object3d.h"
 #include "engine/Input/Input.h"
 #include "engine/Camera/Camera.h"
@@ -42,6 +42,9 @@ public:
 
     // カメラへの追従（Debug用のカメラではなく、本番用カメラをプレイヤーの後ろに置く処理）
     void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr);
+
+    // ロックオン解除時などにカメラの向きに合わせて機体の向きを同期する
+    void SyncRotationToLastCameraDirection();
 
     // ゲッター
     Vector3 GetPosition() const { return position_; }
@@ -117,6 +120,7 @@ private:
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f };
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f }; // 単位クォータニオン（無回転）
     float cameraPitch_ = 0.0f;
+    Vector3 lastCameraDirection_ = { 0.0f, 0.0f, 1.0f };
 
     bool isDead_ = false;
     int hp_ = 3;

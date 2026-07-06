@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "engine/Camera/Camera.h"
 #include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
@@ -165,7 +165,7 @@ private:
 	bool showSphere = false;
 	bool showBox = false;
 	bool showTrail = false;
-	bool showSkybox = false;
+	bool showSkybox = true;
 	bool showSprite = false;
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
@@ -192,7 +192,7 @@ private:
 
 	// UI縺ｨ迥ｶ諷狗ｮ｡逅・
 	bool showParticles = false;
-	bool showModel = true;
+	bool showModel = false;
 	bool enableSkinning = true; // 繧ｹ繧ｭ繝九Φ繧ｰ・医ぎ繝ｯ繧貞虚縺九☆・峨・蛻・ｊ譖ｿ縺・
 	float modelScale = 1.0f;
 	int currentAnimationIndex = 0;

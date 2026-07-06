@@ -4,6 +4,7 @@ class MYADDON_PropertyGroup_AIChatMessage(bpy.types.PropertyGroup):
     role: bpy.props.StringProperty(name="Role", default="USER")
     content: bpy.props.StringProperty(name="Content", default="")
     seed: bpy.props.IntProperty(name="Seed", default=1)
+    gemini_ratio: bpy.props.IntProperty(name="Gemini Ratio", default=-1)
 
 def register():
     bpy.utils.register_class(MYADDON_PropertyGroup_AIChatMessage)

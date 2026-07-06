@@ -215,7 +215,9 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
                     op = row.operator(operators.MYADDON_OT_ai_enemy_chat_revert.bl_idname, text=f"あなた: {msg.content}", icon='USER')
                     op.target_index = i
                 else:
-                    row.label(text=f"AI: {msg.content}", icon='MONKEY')
+                    ratio = getattr(msg, "gemini_ratio", -1)
+                    ratio_text = f" [Gemini {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
+                    row.label(text=f"AI: {msg.content}{ratio_text}", icon='MONKEY')
         enemy_chat_box.operator(operators.MYADDON_OT_ai_enemy_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_base_type", text="敵のタイプ")
@@ -248,7 +250,9 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
                     op = row.operator(operators.MYADDON_OT_ai_chat_revert.bl_idname, text=f"あなた: {msg.content}", icon='USER')
                     op.target_index = i
                 else:
-                    row.label(text=f"AI: {msg.content}", icon='MONKEY')
+                    ratio = getattr(msg, "gemini_ratio", -1)
+                    ratio_text = f" [Gemini {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
+                    row.label(text=f"AI: {msg.content}{ratio_text}", icon='MONKEY')
         chat_box.operator(operators.MYADDON_OT_ai_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
         
         level_box.prop(context.scene, "myaddon_ai_level_prompt", text="コンセプト")

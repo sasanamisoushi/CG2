@@ -380,12 +380,19 @@ namespace {
 			return;
 		}
 
-		const Vector2 center = { minX + screenPosition.x, minY + screenPosition.y };
+		float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
+		float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
+
+		float spriteX = screenPosition.x * winAppWidth / width;
+		float spriteY = screenPosition.y * winAppHeight / height;
+		const Vector2 center = { spriteX, spriteY };
+
 		const float reticleSize = std::clamp(76.0f + collisionRadius * 12.0f, 76.0f, 116.0f);
+		const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);
 
 		if (lockOnReticleSprite_) {
 			lockOnReticleSprite_->SetPosition(center);
-			lockOnReticleSprite_->SetSize({ reticleSize, reticleSize });
+			lockOnReticleSprite_->SetSize({ reticleSize * aspectScaleX, reticleSize });
 			lockOnReticleSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			lockOnReticleSprite_->Update();
 			lockOnReticleSprite_->Draw();
@@ -401,10 +408,21 @@ namespace {
 			return;
 		}
 
-		const Vector2 center = { (minX + maxX) * 0.5f, (minY + maxY) * 0.5f };
+		float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
+		float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
+
+		float width = maxX - minX;
+		float height = maxY - minY;
+
+		float spriteX = winAppWidth * 0.5f;
+		float spriteY = winAppHeight * 0.5f;
+		const Vector2 center = { spriteX, spriteY };
+
+		const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);
+
 		if (aimCursorSprite_) {
 			aimCursorSprite_->SetPosition(center);
-			aimCursorSprite_->SetSize({ 44.0f, 44.0f });
+			aimCursorSprite_->SetSize({ 44.0f * aspectScaleX, 44.0f });
 			aimCursorSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 220.0f / 255.0f });
 			aimCursorSprite_->Update();
 			aimCursorSprite_->Draw();
@@ -848,7 +866,15 @@ void GamePlayScene::ReloadSceneJson() {
 		}
 	}
 
-// 	SpawnEnemiesFromSpawnPoints();
+	for (size_t i = 0; i < enemySpawns_.size(); ++i) {
+		if (enemySpawns_[i].isInitialSpawn) {
+			auto enemy = std::make_unique<Enemy>();
+			enemy->Initialize(enemySpawns_[i].position);
+			enemy->SetRotation(enemySpawns_[i].rotation);
+			enemy->SetSpawnPointIndex(i);
+			enemies_.push_back(std::move(enemy));
+		}
+	}
 
 	try {
 		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
@@ -1765,7 +1791,19 @@ void GamePlayScene::FirePlayerMissile(MissileType type, Enemy *target, float hor
 	};
 
 	Vector3 fireDirection = forward;
-	if (target && type == MissileType::MissileWithTrail) {
+	bool shouldAim = false;
+	if (target) {
+		if (type == MissileType::MissileWithTrail) {
+			shouldAim = true;
+		} else if (type == MissileType::Normal) {
+			PlayerMode mode = player_->GetCurrentMode();
+			if (mode == PlayerMode::Gerwalk || mode == PlayerMode::Battroid) {
+				shouldAim = true;
+			}
+		}
+	}
+
+	if (shouldAim) {
 		Vector3 targetPosition = target->GetPosition();
 		float collisionRadius = 1.0f;
 		try {
@@ -2481,7 +2519,7 @@ void GamePlayScene::Update() {
 		}
 // 		UpdateEnemyRespawns();
 
-		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します！E
+		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します！）
 		for (auto &obstacle : obstacles_) {
 			obstacle->Update();
 		}
@@ -2494,7 +2532,7 @@ void GamePlayScene::Update() {
 	// カメラの更新
 	if (isDebugCameraActive_) {
 		if (canUseKeyboardInput && canUseMouseInput) {
-			debugFlyCamera_->Update(); // FlyCameraが�E刁E��入力を消化して自刁E��更新する
+			debugFlyCamera_->Update(); // FlyCameraが入力の消化して自動更新する
 		} else {
 			debugFlyCamera_->Camera::Update();
 		}
@@ -2617,7 +2655,13 @@ void GamePlayScene::Update() {
 		Input *input = Input::GetInstance();
 		// 左クリチE���E�速くて煙が出なぁE��常弾
 		if (input->TriggerMouseButton(0)) {
-			FirePlayerMissile(MissileType::Normal);
+			Enemy* aimTarget = nullptr;
+			if (lockedEnemy_ && IsLockedEnemyAlive()) {
+				aimTarget = lockedEnemy_;
+			} else if (aimAssistEnemy_) {
+				aimTarget = aimAssistEnemy_;
+			}
+			FirePlayerMissile(MissileType::Normal, aimTarget);
 		}
 
 		// 右クリチE���E��Eを引きながら敵へ曲がるホ�Eミング弾
