@@ -209,6 +209,8 @@ _pkginfo.txt
 !?*.[Cc]ache/
 
 # Others
+.codex-tmp/
+.codex-msbuild-localappdata/
 ClientBin/
 ~$*
 *~
