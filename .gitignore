@@ -18,6 +18,25 @@ mono_crash.*
 
 # Build results
 generated/
+**/[Xx]64/
+project/build-check/
+project/externals/DirectXTex/Bin/
+externals/DirectXTex/Bin/
+**/[Dd]ebug/*.obj
+**/[Rr]elease/*.obj
+*.pch
+*.pdb
+*.idb
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.recipe
+*.log
+*.pdbstr
+/*.exe
+/project/*.exe
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
