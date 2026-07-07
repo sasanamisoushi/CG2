@@ -211,6 +211,7 @@ _pkginfo.txt
 # Others
 .codex-tmp/
 .codex-msbuild-localappdata/
+desktop.ini
 ClientBin/
 ~$*
 *~
@@ -349,6 +350,21 @@ Dumps/
 generated/
 /project/imgui.ini
 .*pdb
+
+# Local debug/recovery artifacts
+dirs.txt
+log.txt
+errors*.txt
+console_output.txt
+animation_dump.txt
+extract_*.txt
+extract*.txt
+extracted_*.txt
+extracted_funcs.txt
+recovered_lines*.txt
+signatures.txt
+*_June*.cpp
+/project/Game/Scene/GamePlayScene_reduced.cpp
 
 # Local secrets
 .env
