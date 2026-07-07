@@ -34,6 +34,8 @@
 
 class GamePlayScene :public BaseScene {
 public:
+	friend class GamePlayUIManager;
+public:
 	enum class Mode {
 		Gameplay,
 		Simulation
