@@ -56,7 +56,6 @@ public:
 	void Draw() override;
 
 	// UI縺ｮ譖ｴ譁ｰ
-	void UpdateUI();
 
 private:
 	friend class SimulationManager;
@@ -66,7 +65,6 @@ private:
 
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
-	void DrawGameplayActionControls();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
@@ -85,7 +83,6 @@ private:
 	std::unique_ptr<Sprite> sprite;
 	std::unique_ptr<Object3d> groundModel;
 	std::unique_ptr<Primitive> myShere;
-	std::unique_ptr<Skybox> skybox;
 
 	std::unique_ptr<Sprite> aimCursorSprite_;
 	std::unique_ptr<Sprite> lockOnReticleSprite_;
@@ -94,8 +91,6 @@ private:
 
 
 	//繝代・繝・ぅ繧ｯ繝ｫ
-	std::unique_ptr<ParticleManager> particleManager;
-	std::unique_ptr<ParticleEmitter> particleEmitter;
 
 	//繝｢繝・Ν
 	std::vector<Object3d *> objects;
@@ -109,49 +104,15 @@ private:
 	IXAudio2SourceVoice *pVoice2 = nullptr;
 
 	// 繝励Μ繝溘ユ繧｣繝・
-	std::unique_ptr<Primitive> boundaryAlertPlane_;
 	std::unique_ptr<Primitive> myBox;
-	std::unique_ptr<Primitive> myRing;
-	std::unique_ptr<Primitive> myPartialRing;
-	std::unique_ptr<Primitive> myCylinder;
 
 	std::unique_ptr<Object3d> myModelObject;
 
 	// 陦ｨ遉ｺ蛻・崛繝輔Λ繧ｰ
-	bool showNormalRing = false;
-	bool showPartialRing = false;
-	bool showCylinder = false;
 
 	// Partial Ring逕ｨ繝代Λ繝｡繝ｼ繧ｿ
-	int prSubdivision = 64;
-	float prOuterRadius = 1.2f;
-	float prInnerRadius = 0.4f;
-	bool prIsUvHorizontal = false;
-	float prInnerColor[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
-	float prOuterColor[4] = { 1.0f, 0.5f, 0.0f, 1.0f };
-	float prStartAngle = 0.0f;
-	float prEndAngle = 180.0f;
-	float prFadeAngle = 30.0f;
 
 	// Cylinder逕ｨ繝代Λ繝｡繝ｼ繧ｿ
-	float cylinderPos[3] = { 0.0f, 0.0f, 0.0f };
-	float cylinderScale[3] = { 1.0f, 1.0f, 1.0f };
-	float cylinderUVOffset[2] = { 0.0f, 0.0f };
-	float cylinderUVScrollSpeed[2] = { 0.01f, 0.0f };
-	float cylinderAlphaReference = 0.0f;
-
-	int cylinderSubdivision = 32;
-	int cylinderVerticalSubdivision = 1;
-	float cylinderTopRadiusX = 1.0f;
-	float cylinderTopRadiusZ = 1.0f;
-	float cylinderBottomRadiusX = 1.0f;
-	float cylinderBottomRadiusZ = 1.0f;
-	float cylinderHeight = 3.0f;
-	float cylinderTopColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	float cylinderBottomColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	float cylinderStartAngle = 0.0f;
-	float cylinderEndAngle = 360.0f;
-	bool cylinderIsUvFlipped = false;
 
 	// 繧｢繝九Γ繝ｼ繧ｷ繝ｧ繝ｳ逕ｨ
 	Animation animationData;
@@ -165,14 +126,13 @@ private:
 	bool showSphere = false;
 	bool showBox = false;
 	bool showTrail = false;
-	bool showSkybox = true;
 	bool showSprite = false;
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
 
 	// 繝・ヰ繝・げ逕ｨ縺ｮ繧ｳ繝ｩ繧､繝繝ｼ謠冗判
 	std::unique_ptr<Object3d> debugColliderLinesObject;
-	bool showDebugColliders = true;
+	bool showDebugColliders = false;
 
 	// =====================================================
 	// 繝・ヰ繝・げ逕ｨ繝輔Μ繝ｼ繧ｫ繝｡繝ｩ
@@ -191,7 +151,6 @@ private:
 	float cinematicLockOnCameraSeparation_ = 0.0f;
 
 	// UI縺ｨ迥ｶ諷狗ｮ｡逅・
-	bool showParticles = false;
 	bool showModel = false;
 	bool enableSkinning = true; // 繧ｹ繧ｭ繝九Φ繧ｰ・医ぎ繝ｯ繧貞虚縺九☆・峨・蛻・ｊ譖ｿ縺・
 	float modelScale = 1.0f;
@@ -247,19 +206,7 @@ private:
 	int gameOverTimer_ = 0;
 
 	// 繧ｷ繝溘Η繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ繝・・繝ｫUI逕ｨ
-	bool showSimulationWindow_ = false;
-	int currentSimulationTarget_ = 0;
-	std::string simulationSaveMessage_;
-	char simulationActionName_[64] = "Action1";
-	std::vector<std::string> simulationActionNames_;
-	int selectedSimulationActionIndex_ = 0;
-	std::string simulationActionMessage_;
-	int simulationPlaybackMode_ = 0;
-	char missilePresetName_[64] = "MissilePreset1";
-	int missilePresetTypeIndex_ = 0;
-	std::vector<std::string> missilePresetNames_[2];
-	int selectedMissilePresetIndex_[2] = { 0, 0 };
-	std::string missilePresetMessage_;
+
 
 	// =====================================================
 	// マネージャークラス

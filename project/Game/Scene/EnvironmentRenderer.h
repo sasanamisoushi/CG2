@@ -8,9 +8,10 @@
 #include "engine/Particle/ParticleEmitter.h"
 #include <memory>
 
-// 背景・プリミティブ・デバッグ描画など、環境オブジェクトの描画を管理するクラス
 class EnvironmentRenderer {
 public:
+	friend class GamePlayUIManager;
+
 	EnvironmentRenderer();
 	~EnvironmentRenderer() = default;
 
@@ -18,31 +19,23 @@ public:
 	void Update(Camera* camera);
 	void Draw();
 
-	// スカイボックス取得
 	Skybox* GetSkybox() const { return skybox_.get(); }
+	bool GetShowSkybox() const { return showSkybox_; }
+	bool GetShowParticles() const { return showParticles_; }
 
-	// プリミティブ取得・設定
-	void SetShowNormalRing(bool show) { showNormalRing_ = show; }
-	void SetShowPartialRing(bool show) { showPartialRing_ = show; }
-	void SetShowCylinder(bool show) { showCylinder_ = show; }
-
-	// パーティクルマネージャー
 	ParticleManager* GetParticleManager() const { return particleManager_.get(); }
 	ParticleEmitter* GetParticleEmitter() const { return particleEmitter_.get(); }
 
-	// 軌跡(Trail)
 	Trail* GetMissileTrail() const { return missileTrail_.get(); }
 
 private:
 	std::unique_ptr<Skybox> skybox_;
 
-	// パーティクル
 	std::unique_ptr<ParticleManager> particleManager_;
 	std::unique_ptr<ParticleEmitter> particleEmitter_;
 
-	// プリミティブ（リングやシリンダー等）
-	std::unique_ptr<Primitive> myPlane_;
 	std::unique_ptr<Primitive> boundaryAlertPlane_;
+	std::unique_ptr<Primitive> myPlane_;
 	std::unique_ptr<Primitive> myShere_;
 	std::unique_ptr<Primitive> myBox_;
 	std::unique_ptr<Primitive> myRing_;
@@ -52,8 +45,40 @@ private:
 	bool showNormalRing_ = false;
 	bool showPartialRing_ = false;
 	bool showCylinder_ = false;
+	bool showSkybox_ = true;
+	bool showParticles_ = true;
 
-	// Trail
+	// Partial Ring用パラメータ
+	int prSubdivision_ = 64;
+	float prOuterRadius_ = 1.2f;
+	float prInnerRadius_ = 0.4f;
+	bool prIsUvHorizontal_ = false;
+	float prInnerColor_[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+	float prOuterColor_[4] = { 1.0f, 0.5f, 0.0f, 1.0f };
+	float prStartAngle_ = 0.0f;
+	float prEndAngle_ = 180.0f;
+	float prFadeAngle_ = 30.0f;
+
+	// Cylinder用パラメータ
+	float cylinderPos_[3] = { 0.0f, 0.0f, 0.0f };
+	float cylinderScale_[3] = { 1.0f, 1.0f, 1.0f };
+	float cylinderUVOffset_[2] = { 0.0f, 0.0f };
+	float cylinderUVScrollSpeed_[2] = { 0.01f, 0.0f };
+	float cylinderAlphaReference_ = 0.0f;
+
+	int cylinderSubdivision_ = 32;
+	int cylinderVerticalSubdivision_ = 1;
+	float cylinderTopRadiusX_ = 1.0f;
+	float cylinderTopRadiusZ_ = 1.0f;
+	float cylinderBottomRadiusX_ = 1.0f;
+	float cylinderBottomRadiusZ_ = 1.0f;
+	float cylinderHeight_ = 3.0f;
+	float cylinderTopColor_[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float cylinderBottomColor_[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	float cylinderStartAngle_ = 0.0f;
+	float cylinderEndAngle_ = 360.0f;
+	bool cylinderIsUvFlipped_ = false;
+
 	std::unique_ptr<Trail> missileTrail_;
 	std::unique_ptr<Object3d> trailObject_;
 };

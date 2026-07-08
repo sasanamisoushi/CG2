@@ -9,6 +9,23 @@
 
 using Microsoft::WRL::ComPtr;
 
+namespace {
+
+constexpr bool kShowEnvMapDebugWindow = false;
+
+template <typename T>
+bool MapUploadBuffer(ID3D12Resource* resource, T*& mappedData) {
+	mappedData = nullptr;
+	if (!resource) {
+		return false;
+	}
+
+	HRESULT hr = resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+	return SUCCEEDED(hr) && mappedData != nullptr;
+}
+
+}
+
 void Object3d::Initialize(Object3dCommon *object3dCommon) {
 	//引数で受け取ってメンバ変数に記録する
 	this->object3dCommon = object3dCommon;
@@ -38,12 +55,17 @@ void Object3d::Initialize(Object3dCommon *object3dCommon) {
 }
 
 void Object3d::Update() {
+	if (!object3dCommon || !transformationMatrixData) {
+		return;
+	}
+
 	camera = object3dCommon->GetDefaultCamera();
 
 	//transform.rotate.y += 0.01f;
 
 	// ImGuiで環境マップの設定ウィンドウを作る
 #ifdef ENABLE_IMGUI 
+	if (kShowEnvMapDebugWindow && envMapParamData_) {
 	ImGui::Begin("Environment Map Settings");
 
 	// オブジェクト自身のメモリアドレスをIDにして、ImGuiの混乱を防ぐ！
@@ -62,6 +84,7 @@ void Object3d::Update() {
 	ImGui::PopID();
 
 	ImGui::End();
+	}
 #endif
 
 	
@@ -82,7 +105,9 @@ void Object3d::Update() {
 	if (camera) {
 		const Matrix4x4 &viewProjectionMatrix = camera->GetViewProjectionMatrix();
 		worldViewProjectionMatrix = math->Multiply(worldMatrix, viewProjectionMatrix);
-		cameraData->worldPosition = camera->GetTranslate();
+		if (cameraData) {
+			cameraData->worldPosition = camera->GetTranslate();
+		}
 	} else {
 		worldViewProjectionMatrix = worldMatrix;
 	}
@@ -97,6 +122,9 @@ void Object3d::Update() {
 void Object3d::Draw() {
 
 	if (model == nullptr) {
+		return;
+	}
+	if (!object3dCommon || !wvpResource || !directionLightResource || !cameraResource || !envMapParamResource_) {
 		return;
 	}
 
@@ -145,7 +173,10 @@ void Object3d::CreateTransformationData() {
 	//Plane用のWVPリソース
 	wvpResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(TransformationMatrix));
 	
-	wvpResource->Map(0, nullptr, reinterpret_cast<void **>(&transformationMatrixData));
+	if (!MapUploadBuffer(wvpResource.Get(), transformationMatrixData)) {
+		wvpResource.Reset();
+		return;
+	}
 	transformationMatrixData->WVP = math->MakeIdentity4x4();
 	transformationMatrixData->World = math->MakeIdentity4x4();
 }
@@ -155,7 +186,10 @@ void Object3d::CreateDirectionLightData() {
 	directionLightResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(DirectionalLight));
 	
 	//書き込むためのアドレスを取得
-	directionLightResource->Map(0, nullptr, reinterpret_cast<void **>(&directionLightData));
+	if (!MapUploadBuffer(directionLightResource.Get(), directionLightData)) {
+		directionLightResource.Reset();
+		return;
+	}
 
 	directionLightData->color = { 1.0f,1.0f,1.0f,1.0f };
 	directionLightData->direction = { 1.0f,0.0f,0.0f };
@@ -170,7 +204,10 @@ void Object3d::CreateCameraData() {
 	cameraResource = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(CameraForGPU));
 
 	// 書き込むためのアドレスを取得
-	cameraResource->Map(0, nullptr, reinterpret_cast<void **>(&cameraData));
+	if (!MapUploadBuffer(cameraResource.Get(), cameraData)) {
+		cameraResource.Reset();
+		return;
+	}
 
 	// 初期値
 	cameraData->worldPosition = { 0.0f, 0.0f, 0.0f };
@@ -183,7 +220,10 @@ void Object3d::CreateEnvMapParamData() {
 	// リソース生成 (CreateBufferResource内部で256バイトアライメントされている前提)
 	envMapParamResource_ = object3dCommon->GetDxCommon()->CreateBufferResource(sizeof(EnvMapParam));
 	// マップ
-	envMapParamResource_->Map(0, nullptr, reinterpret_cast<void **>(&envMapParamData_));
+	if (!MapUploadBuffer(envMapParamResource_.Get(), envMapParamData_)) {
+		envMapParamResource_.Reset();
+		return;
+	}
 	// 初期値
 	envMapParamData_->enable = 1;      // 最初はON
 	envMapParamData_->weight = 0.3f;   // 30%の反射

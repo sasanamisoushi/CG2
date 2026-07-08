@@ -1,4 +1,4 @@
-#include "Framework.h"
+﻿#include "Framework.h"
 #include "engine/Graphics/SrvManager.h"
 #include "engine/Resource/TextureManager.h"
 #include "3D/ModelManager.h"
@@ -60,6 +60,9 @@ void Framework::Initialize() {
 
 	//3Dオブジェクト共通部の初期化
 	Object3dCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
+
+	//Skybox共通部の初期化
+	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
 
 }
 

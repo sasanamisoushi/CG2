@@ -6,6 +6,8 @@
 #include <vector>
 
 namespace {
+	constexpr bool kEnableMissileTrails = false;
+
 	float LengthSq(const Vector3 &value) {
 		return value.x * value.x + value.y * value.y + value.z * value.z;
 	}
@@ -73,7 +75,7 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	spiralSpeed_ = 0.12f + (float)(rand() % 8) * 0.01f;
 
 	// ミサイルタイプのみトレイルを準備
-	if (type_ == MissileType::MissileWithTrail) {
+	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail) {
 		trail_ = std::make_unique<Trail>();
 		trail_->Initialize(60);
 		trailObject_ = std::make_unique<Object3d>();
@@ -169,7 +171,7 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 	UpdateModel();
 
 	// ミサイルタイプのみトレイルを更新
-	if (type_ == MissileType::MissileWithTrail && trail_ && trailObject_) {
+	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trail_ && trailObject_) {
 		trail_->Update(position_);
 		std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
 		if (trailObject_->GetModel()) {
@@ -184,7 +186,7 @@ void Missile::UpdateModel(Camera *camera) {
 		object_->SetTranslate(position_);
 		object_->Update();
 	}
-	if (type_ == MissileType::MissileWithTrail && trailObject_) {
+	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trailObject_) {
 		if (camera && trail_ && trailObject_->GetModel()) {
 			std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
 			trailObject_->GetModel()->UpdateTrailVertices(trailVertices);
@@ -201,7 +203,7 @@ void Missile::Draw() {
 	}
 
 	// ミサイルタイプのみトレイルを描画
-	if (type_ == MissileType::MissileWithTrail && trailObject_) {
+	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trailObject_) {
 		trailObject_->Draw();
 	}
 }

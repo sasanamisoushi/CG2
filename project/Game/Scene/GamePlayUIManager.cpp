@@ -234,45 +234,45 @@ void GamePlayUIManager::UpdateUI() {
 #define lockOnReticleSprite_ scene_->lockOnReticleSprite_
 #define boundaryAlertObject_ scene_->boundaryAlertObject_
 #define ceilingBoundaryAlertObject_ scene_->ceilingBoundaryAlertObject_
-#define particleManager scene_->particleManager
-#define particleEmitter scene_->particleEmitter
+#define particleManager scene_->environmentRenderer_->GetParticleManager()
+#define particleEmitter scene_->environmentRenderer_->GetParticleEmitter()
 #define soundData1 scene_->soundData1
 #define soundData2 scene_->soundData2
 #define boundaryAlertPlane_ scene_->boundaryAlertPlane_
 #define myBox scene_->myBox
-#define myRing scene_->myRing
-#define myPartialRing scene_->myPartialRing
-#define myCylinder scene_->myCylinder
+#define myRing scene_->environmentRenderer_->myRing_
+#define myPartialRing scene_->environmentRenderer_->myPartialRing_
+#define myCylinder scene_->environmentRenderer_->myCylinder_
 #define myModelObject scene_->myModelObject
-#define showNormalRing scene_->showNormalRing
-#define showPartialRing scene_->showPartialRing
-#define showCylinder scene_->showCylinder
-#define prSubdivision scene_->prSubdivision
-#define prOuterRadius scene_->prOuterRadius
-#define prInnerRadius scene_->prInnerRadius
-#define prIsUvHorizontal scene_->prIsUvHorizontal
-#define prInnerColor scene_->prInnerColor
-#define prOuterColor scene_->prOuterColor
-#define prStartAngle scene_->prStartAngle
-#define prEndAngle scene_->prEndAngle
-#define prFadeAngle scene_->prFadeAngle
-#define cylinderPos scene_->cylinderPos
-#define cylinderScale scene_->cylinderScale
-#define cylinderUVOffset scene_->cylinderUVOffset
-#define cylinderUVScrollSpeed scene_->cylinderUVScrollSpeed
-#define cylinderAlphaReference scene_->cylinderAlphaReference
-#define cylinderSubdivision scene_->cylinderSubdivision
-#define cylinderVerticalSubdivision scene_->cylinderVerticalSubdivision
-#define cylinderTopRadiusX scene_->cylinderTopRadiusX
-#define cylinderTopRadiusZ scene_->cylinderTopRadiusZ
-#define cylinderBottomRadiusX scene_->cylinderBottomRadiusX
-#define cylinderBottomRadiusZ scene_->cylinderBottomRadiusZ
-#define cylinderHeight scene_->cylinderHeight
-#define cylinderTopColor scene_->cylinderTopColor
-#define cylinderBottomColor scene_->cylinderBottomColor
-#define cylinderStartAngle scene_->cylinderStartAngle
-#define cylinderEndAngle scene_->cylinderEndAngle
-#define cylinderIsUvFlipped scene_->cylinderIsUvFlipped
+#define showNormalRing scene_->environmentRenderer_->showNormalRing_
+#define showPartialRing scene_->environmentRenderer_->showPartialRing_
+#define showCylinder scene_->environmentRenderer_->showCylinder_
+#define prSubdivision scene_->environmentRenderer_->prSubdivision_
+#define prOuterRadius scene_->environmentRenderer_->prOuterRadius_
+#define prInnerRadius scene_->environmentRenderer_->prInnerRadius_
+#define prIsUvHorizontal scene_->environmentRenderer_->prIsUvHorizontal_
+#define prInnerColor scene_->environmentRenderer_->prInnerColor_
+#define prOuterColor scene_->environmentRenderer_->prOuterColor_
+#define prStartAngle scene_->environmentRenderer_->prStartAngle_
+#define prEndAngle scene_->environmentRenderer_->prEndAngle_
+#define prFadeAngle scene_->environmentRenderer_->prFadeAngle_
+#define cylinderPos scene_->environmentRenderer_->cylinderPos_
+#define cylinderScale scene_->environmentRenderer_->cylinderScale_
+#define cylinderUVOffset scene_->environmentRenderer_->cylinderUVOffset_
+#define cylinderUVScrollSpeed scene_->environmentRenderer_->cylinderUVScrollSpeed_
+#define cylinderAlphaReference scene_->environmentRenderer_->cylinderAlphaReference_
+#define cylinderSubdivision scene_->environmentRenderer_->cylinderSubdivision_
+#define cylinderVerticalSubdivision scene_->environmentRenderer_->cylinderVerticalSubdivision_
+#define cylinderTopRadiusX scene_->environmentRenderer_->cylinderTopRadiusX_
+#define cylinderTopRadiusZ scene_->environmentRenderer_->cylinderTopRadiusZ_
+#define cylinderBottomRadiusX scene_->environmentRenderer_->cylinderBottomRadiusX_
+#define cylinderBottomRadiusZ scene_->environmentRenderer_->cylinderBottomRadiusZ_
+#define cylinderHeight scene_->environmentRenderer_->cylinderHeight_
+#define cylinderTopColor scene_->environmentRenderer_->cylinderTopColor_
+#define cylinderBottomColor scene_->environmentRenderer_->cylinderBottomColor_
+#define cylinderStartAngle scene_->environmentRenderer_->cylinderStartAngle_
+#define cylinderEndAngle scene_->environmentRenderer_->cylinderEndAngle_
+#define cylinderIsUvFlipped scene_->environmentRenderer_->cylinderIsUvFlipped_
 #define animationData scene_->animationData
 #define animationTime scene_->animationTime
 #define playAnimation scene_->playAnimation
@@ -282,7 +282,7 @@ void GamePlayUIManager::UpdateUI() {
 #define showSphere scene_->showSphere
 #define showBox scene_->showBox
 #define showTrail scene_->showTrail
-#define showSkybox scene_->showSkybox
+#define showSkybox scene_->environmentRenderer_->showSkybox_
 #define showSprite scene_->showSprite
 #define skeletonLinesModel scene_->skeletonLinesModel
 #define skeletonLinesObject scene_->skeletonLinesObject
@@ -299,7 +299,7 @@ void GamePlayUIManager::UpdateUI() {
 #define cinematicLockOnCameraBackDirection_ scene_->cinematicLockOnCameraBackDirection_
 #define cinematicLockOnCameraSideSign_ scene_->cinematicLockOnCameraSideSign_
 #define cinematicLockOnCameraSeparation_ scene_->cinematicLockOnCameraSeparation_
-#define showParticles scene_->showParticles
+#define showParticles scene_->environmentRenderer_->showParticles_
 #define showModel scene_->showModel
 #define enableSkinning scene_->enableSkinning
 #define modelScale scene_->modelScale
@@ -333,32 +333,17 @@ void GamePlayUIManager::UpdateUI() {
 #define explosionManager_ scene_->explosionManager_
 #define isGameOver_ scene_->isGameOver_
 #define gameOverTimer_ scene_->gameOverTimer_
-#define showSimulationWindow_ scene_->showSimulationWindow_
-#define currentSimulationTarget_ scene_->currentSimulationTarget_
-#define simulationSaveMessage_ scene_->simulationSaveMessage_
-#define simulationActionName_ scene_->simulationActionName_
-#define simulationActionNames_ scene_->simulationActionNames_
-#define selectedSimulationActionIndex_ scene_->selectedSimulationActionIndex_
-#define simulationActionMessage_ scene_->simulationActionMessage_
-#define simulationPlaybackMode_ scene_->simulationPlaybackMode_
-#define missilePresetName_ scene_->missilePresetName_
-#define missilePresetTypeIndex_ scene_->missilePresetTypeIndex_
-#define missilePresetNames_ scene_->missilePresetNames_
-#define selectedMissilePresetIndex_ scene_->selectedMissilePresetIndex_
-#define missilePresetMessage_ scene_->missilePresetMessage_
 #define simulationManager_ scene_->simulationManager_
 #define missilePresetManager_ scene_->missilePresetManager_
 #define lockOnManager_ scene_->lockOnManager_
 #define cameraManager_ scene_->cameraManager_
 #define levelManager_ scene_->levelManager_
-#define environmentRenderer_ scene_->environmentRenderer_
 #define uiManager_ scene_->uiManager_
 #define lastJsonWriteTime_ scene_->lastJsonWriteTime_
 #define aimAssistEnemy_ scene_->aimAssistEnemy_
 #define isMultiLockCharging_ scene_->isMultiLockCharging_
 #define multiLockChargeFrames_ scene_->multiLockChargeFrames_
 #define IsSimulationMode scene_->IsSimulationMode
-#define DrawGameplayActionControls scene_->DrawGameplayActionControls
 #define SetDebugCameraActive scene_->SetDebugCameraActive
 #define ReloadSceneJson scene_->ReloadSceneJson
 #define ResetEditorPreview scene_->ResetEditorPreview
@@ -557,7 +542,6 @@ void GamePlayUIManager::UpdateUI() {
 		// --- オリジナルUI（今まで出していたImGui関連） ---
 		//開発用UIの処理
 		}
-		ImGui::ShowDemoWindow();
 		//ウィンドウのサイズを設定
 		ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
 
@@ -1092,32 +1076,17 @@ void GamePlayUIManager::UpdateUI() {
 #undef explosionManager_
 #undef isGameOver_
 #undef gameOverTimer_
-#undef showSimulationWindow_
-#undef currentSimulationTarget_
-#undef simulationSaveMessage_
-#undef simulationActionName_
-#undef simulationActionNames_
-#undef selectedSimulationActionIndex_
-#undef simulationActionMessage_
-#undef simulationPlaybackMode_
-#undef missilePresetName_
-#undef missilePresetTypeIndex_
-#undef missilePresetNames_
-#undef selectedMissilePresetIndex_
-#undef missilePresetMessage_
 #undef simulationManager_
 #undef missilePresetManager_
 #undef lockOnManager_
 #undef cameraManager_
 #undef levelManager_
-#undef environmentRenderer_
 #undef uiManager_
 #undef lastJsonWriteTime_
 #undef aimAssistEnemy_
 #undef isMultiLockCharging_
 #undef multiLockChargeFrames_
 #undef IsSimulationMode
-#undef DrawGameplayActionControls
 #undef SetDebugCameraActive
 #undef ReloadSceneJson
 #undef ResetEditorPreview
@@ -1136,4 +1105,42 @@ void GamePlayUIManager::UpdateUI() {
 #undef aimAssistEnemy_
 #undef isMultiLockCharging_
 #undef multiLockTargets_
+}
+
+void GamePlayUIManager::DrawGameplayActionControls() {
+#ifdef ENABLE_IMGUI
+	ImGui::Separator();
+	ImGui::Text("保存済みシミュレーション設定");
+	ImGui::TextWrapped("シミュレーション画面で保存した内容を、現在のゲーム側の設定値として読み込みます。");
+	if (ImGui::Button("保存一覧を更新")) {
+		scene_->simulationManager_->RefreshSimulationActionNames();
+	}
+
+	if (simulationActionNames_.empty()) {
+		ImGui::TextDisabled("保存されたシミュレーション設定がありません。");
+		if (!simulationActionMessage_.empty()) {
+			ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
+		}
+		return;
+	}
+
+	std::vector<const char *> actionNameItems;
+	actionNameItems.reserve(simulationActionNames_.size());
+	for (const std::string &name : simulationActionNames_) {
+		actionNameItems.push_back(name.c_str());
+	}
+
+	if (selectedSimulationActionIndex_ >= static_cast<int>(actionNameItems.size())) {
+		selectedSimulationActionIndex_ = 0;
+	}
+
+	ImGui::Combo("読み込む設定", &selectedSimulationActionIndex_, actionNameItems.data(), static_cast<int>(actionNameItems.size()));
+	if (ImGui::Button("この設定をゲームに読み込む")) {
+		scene_->simulationManager_->ApplySimulationAction(kSimulationActionsFilePath, simulationActionNames_[selectedSimulationActionIndex_]);
+	}
+
+	if (!simulationActionMessage_.empty()) {
+		ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
+	}
+#endif
 }

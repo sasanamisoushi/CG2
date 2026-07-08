@@ -1,4 +1,4 @@
-#include "SimulationManager.h"
+﻿#include "SimulationManager.h"
 #include "MissilePresetManager.h"
 #include "LockOnManager.h"
 #include "GamePlayScene.h"
@@ -15,7 +15,7 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 	{
 		std::ifstream ifs(filePath);
 		if (!ifs.is_open()) {
-			scene_->simulationSaveMessage_ = "scene.json が見つからなぁE��め保存できませんでした";
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json が見つからなぁE��め保存できませんでした";
 			OutputDebugStringA(("[SimulationSave] File not found: " + filePath + "\n").c_str());
 			return false;
 		}
@@ -23,14 +23,14 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 		try {
 			ifs >> root;
 		} catch (const std::exception &e) {
-			scene_->simulationSaveMessage_ = "scene.json の読み込みに失敗しました";
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json の読み込みに失敗しました";
 			OutputDebugStringA(("[SimulationSave] JSON parse failed: " + std::string(e.what()) + "\n").c_str());
 			return false;
 		}
 	}
 
 	if (!root.contains("objects") || !root["objects"].is_array()) {
-		scene_->simulationSaveMessage_ = "scene.json に objects がなぁE��め保存できませんでした";
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json に objects がなぁE��め保存できませんでした";
 		OutputDebugStringA("[SimulationSave] objects array not found.\n");
 		return false;
 	}
@@ -120,7 +120,7 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
-		scene_->simulationSaveMessage_ = "scene.json を書き込めませんでした";
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json を書き込めませんでした";
 		OutputDebugStringA(("[SimulationSave] Failed to open for write: " + filePath + "\n").c_str());
 		return false;
 	}
@@ -133,17 +133,17 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 	} catch (...) {
 	}
 
-	scene_->simulationSaveMessage_ = "現在の配置めEscene.json に保存しました。実ゲームにも反映されます";
+	scene_->uiManager_->simulationSaveMessage_ = "現在の配置めEscene.json に保存しました。実ゲームにも反映されます";
 	OutputDebugStringA(("[SimulationSave] Saved " + std::to_string(savedCount) + " transforms.\n").c_str());
 	return true;
 }
 
 void SimulationManager::RefreshSimulationActionNames() {
-	scene_->simulationActionNames_.clear();
+	scene_->uiManager_->simulationActionNames_.clear();
 
 	std::ifstream ifs(kSimulationActionsFilePath);
 	if (!ifs.is_open()) {
-		scene_->selectedSimulationActionIndex_ = 0;
+		scene_->uiManager_->selectedSimulationActionIndex_ = 0;
 		return;
 	}
 
@@ -151,12 +151,12 @@ void SimulationManager::RefreshSimulationActionNames() {
 	try {
 		ifs >> root;
 	} catch (...) {
-		scene_->selectedSimulationActionIndex_ = 0;
+		scene_->uiManager_->selectedSimulationActionIndex_ = 0;
 		return;
 	}
 
 	if (!root.contains("actions") || !root["actions"].is_array()) {
-		scene_->selectedSimulationActionIndex_ = 0;
+		scene_->uiManager_->selectedSimulationActionIndex_ = 0;
 		return;
 	}
 
@@ -165,18 +165,18 @@ void SimulationManager::RefreshSimulationActionNames() {
 			continue;
 		}
 
-		scene_->simulationActionNames_.push_back(actionData["name"].get<std::string>());
+		scene_->uiManager_->simulationActionNames_.push_back(actionData["name"].get<std::string>());
 	}
 
-	if (scene_->selectedSimulationActionIndex_ >= static_cast<int>(scene_->simulationActionNames_.size())) {
-		scene_->selectedSimulationActionIndex_ = scene_->simulationActionNames_.empty() ? 0 : static_cast<int>(scene_->simulationActionNames_.size()) - 1;
+	if (scene_->uiManager_->selectedSimulationActionIndex_ >= static_cast<int>(scene_->uiManager_->simulationActionNames_.size())) {
+		scene_->uiManager_->selectedSimulationActionIndex_ = scene_->uiManager_->simulationActionNames_.empty() ? 0 : static_cast<int>(scene_->uiManager_->simulationActionNames_.size()) - 1;
 	}
 }
 
 bool SimulationManager::SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName) {
 	const std::string trimmedName = TrimActionName(actionName);
 	if (trimmedName.empty()) {
-		scene_->simulationActionMessage_ = "保存名を入力してください。";
+		scene_->uiManager_->simulationActionMessage_ = "保存名を入力してください。";
 		return false;
 	}
 
@@ -310,7 +310,7 @@ bool SimulationManager::SaveNamedSimulationAction(const std::string &filePath, c
 
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
-		scene_->simulationActionMessage_ = "名前付き行動を保存できませんでした。";
+		scene_->uiManager_->simulationActionMessage_ = "名前付き行動を保存できませんでした。";
 		return false;
 	}
 
@@ -318,27 +318,27 @@ bool SimulationManager::SaveNamedSimulationAction(const std::string &filePath, c
 	ofs.close();
 
 	RefreshSimulationActionNames();
-	for (size_t index = 0; index < scene_->simulationActionNames_.size(); ++index) {
-		if (scene_->simulationActionNames_[index] == trimmedName) {
-			scene_->selectedSimulationActionIndex_ = static_cast<int>(index);
+	for (size_t index = 0; index < scene_->uiManager_->simulationActionNames_.size(); ++index) {
+		if (scene_->uiManager_->simulationActionNames_[index] == trimmedName) {
+			scene_->uiManager_->selectedSimulationActionIndex_ = static_cast<int>(index);
 			break;
 		}
 	}
 
-	scene_->simulationActionMessage_ = "行動「" + trimmedName + "」を保存しました。";
+	scene_->uiManager_->simulationActionMessage_ = "行動「" + trimmedName + "」を保存しました。";
 	return true;
 }
 
 bool SimulationManager::ApplySimulationAction(const std::string &filePath, const std::string &actionName) {
 	const std::string trimmedName = TrimActionName(actionName);
 	if (trimmedName.empty()) {
-		scene_->simulationActionMessage_ = "読み込む行動名がありません。";
+		scene_->uiManager_->simulationActionMessage_ = "読み込む行動名がありません。";
 		return false;
 	}
 
 	std::ifstream ifs(filePath);
 	if (!ifs.is_open()) {
-		scene_->simulationActionMessage_ = "名前付き行動ファイルが見つかりません。";
+		scene_->uiManager_->simulationActionMessage_ = "名前付き行動ファイルが見つかりません。";
 		return false;
 	}
 
@@ -346,12 +346,12 @@ bool SimulationManager::ApplySimulationAction(const std::string &filePath, const
 	try {
 		ifs >> root;
 	} catch (...) {
-		scene_->simulationActionMessage_ = "名前付き行動ファイルを読み込めませんでした。";
+		scene_->uiManager_->simulationActionMessage_ = "名前付き行動ファイルを読み込めませんでした。";
 		return false;
 	}
 
 	if (!root.contains("actions") || !root["actions"].is_array()) {
-		scene_->simulationActionMessage_ = "保存された行動がありません。";
+		scene_->uiManager_->simulationActionMessage_ = "保存された行動がありません。";
 		return false;
 	}
 
@@ -364,7 +364,7 @@ bool SimulationManager::ApplySimulationAction(const std::string &filePath, const
 	}
 
 	if (!action) {
-		scene_->simulationActionMessage_ = "選択した行動が見つかりません。";
+		scene_->uiManager_->simulationActionMessage_ = "選択した行動が見つかりません。";
 		return false;
 	}
 
@@ -515,7 +515,7 @@ bool SimulationManager::ApplySimulationAction(const std::string &filePath, const
 		scene_->missileManager_->UpdateModels(activeCamera);
 	}
 
-	scene_->simulationActionMessage_ = "設定「" + trimmedName + "」をゲームに読み込みました。";
+	scene_->uiManager_->simulationActionMessage_ = "設定「" + trimmedName + "」をゲームに読み込みました。";
 	return true;
 }
 
@@ -576,8 +576,8 @@ void SimulationManager::DrawSimulationScreenUI() {
 
 	ImGui::Separator();
 	const char *previewModes[] = { "選択中だけ確認", "全体確認" };
-	ImGui::Combo("確認モード", &scene_->simulationPlaybackMode_, previewModes, IM_ARRAYSIZE(previewModes));
-	if (scene_->simulationPlaybackMode_ == 0) {
+	ImGui::Combo("確認モード", &scene_->uiManager_->simulationPlaybackMode_, previewModes, IM_ARRAYSIZE(previewModes));
+	if (scene_->uiManager_->simulationPlaybackMode_ == 0) {
 		ImGui::TextDisabled("今選んでいるカテゴリだけ動きます。ミサイルはテスト発射ボタンでだけ出ます。");
 	} else {
 		ImGui::TextDisabled("プレイヤー・敵・ミサイルをまとめて動かして全体の流れを確認します。");
@@ -600,10 +600,10 @@ void SimulationManager::DrawSimulationScreenUI() {
 
 	ImGui::Separator();
 	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
-	ImGui::Combo("カテゴリ", &scene_->currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
+	ImGui::Combo("カテゴリ", &scene_->uiManager_->currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
 	ImGui::Separator();
 
-	if (scene_->currentSimulationTarget_ == 0) {
+	if (scene_->uiManager_->currentSimulationTarget_ == 0) {
 		ImGui::Text("プレイヤー移動設定");
 		if (scene_->player_) {
 			auto mode = scene_->player_->GetCurrentMode();
@@ -638,9 +638,9 @@ void SimulationManager::DrawSimulationScreenUI() {
 		} else {
 			ImGui::Text("プレイヤーが初期化されていません。");
 		}
-	} else if (scene_->currentSimulationTarget_ == 1) {
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 1) {
 		scene_->missilePresetManager_->DrawMissileSettingsUI();
-	} else if (scene_->currentSimulationTarget_ == 2) {
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 2) {
 		ImGui::Text("=== 敵の出現とルート ===");
 		ImGui::Text("Lock-on: %s", scene_->lockedEnemy_ ? "LOCKED" : "NONE");
 		ImGui::Text("Tab: ターゲットロック / X: ロック解除 / F2: シミュレーションを閉じる");
@@ -707,18 +707,18 @@ void SimulationManager::DrawSimulationScreenUI() {
 		} else {
 			ImGui::Text("敵の出現データがありません。");
 		}
-	} else if (scene_->currentSimulationTarget_ == 3) {
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 3) {
 		ImGui::Text("=== GPUパーティクル ===");
 		bool gpuChanged = false;
-		if (scene_->particleManager) {
-			if (auto *emitter = scene_->particleManager->GetEmitterSphere()) {
+		if (scene_->environmentRenderer_->GetParticleManager()) {
+			if (auto *emitter = scene_->environmentRenderer_->GetParticleManager()->GetEmitterSphere()) {
 				if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
 				if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
 				if (ImGui::DragInt("射出数", reinterpret_cast<int *>(&emitter->count), 1, 0, 1000)) gpuChanged = true;
 				if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
 			}
 			if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
-				scene_->particleManager->RequestGpuInitialize();
+				scene_->environmentRenderer_->GetParticleManager()->RequestGpuInitialize();
 			}
 		}
 
@@ -743,7 +743,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 				scene_->explosionManager_->LoadFromJson("resources/explosionConfig.json");
 			}
 		}
-	} else if (scene_->currentSimulationTarget_ == 4) {
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 4) {
 		ImGui::Text("カメラ設定");
 		if (scene_->isDebugCameraActive_) {
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[フリーカメラ アクティブ]");
@@ -785,17 +785,17 @@ void SimulationManager::DrawSimulationScreenUI() {
 void SimulationManager::DrawSimulationSaveControls() {
 #ifdef ENABLE_IMGUI
 	ImGui::Separator();
-	ImGui::InputText("保存名", scene_->simulationActionName_, IM_ARRAYSIZE(scene_->simulationActionName_));
+	ImGui::InputText("保存名", scene_->uiManager_->simulationActionName_, IM_ARRAYSIZE(scene_->uiManager_->simulationActionName_));
 	if (ImGui::Button("名前を付けて行動を保存")) {
-		SaveNamedSimulationAction(kSimulationActionsFilePath, scene_->simulationActionName_);
+		SaveNamedSimulationAction(kSimulationActionsFilePath, scene_->uiManager_->simulationActionName_);
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("保存一覧を更新")) {
 		RefreshSimulationActionNames();
 	}
 
-	if (!scene_->simulationActionMessage_.empty()) {
-		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.45f, 1.0f), "%s", scene_->simulationActionMessage_.c_str());
+	if (!scene_->uiManager_->simulationActionMessage_.empty()) {
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.45f, 1.0f), "%s", scene_->uiManager_->simulationActionMessage_.c_str());
 	}
 #endif
 }

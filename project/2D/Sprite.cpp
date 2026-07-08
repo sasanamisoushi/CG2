@@ -2,6 +2,21 @@
 #include "2D/SpriteCommon.h"
 #include "engine/Resource/TextureManager.h"
 
+namespace {
+
+template <typename T>
+bool MapUploadBuffer(ID3D12Resource* resource, T*& mappedData) {
+	mappedData = nullptr;
+	if (!resource) {
+		return false;
+	}
+
+	HRESULT hr = resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+	return SUCCEEDED(hr) && mappedData != nullptr;
+}
+
+}
+
 
 
 
@@ -32,6 +47,9 @@ void Sprite::Initialize(SpriteCommon *spriteCommon, std::string textureFilePath)
 }
 
 void Sprite::Update() {
+	if (!spriteCommon || !math || !vertexData_ || !indexData_ || !transformationMatrixData) {
+		return;
+	}
 
 	float left = 0.0f - anchorPoint.x;
 	float right = 1.0f - anchorPoint.x;
@@ -57,7 +75,6 @@ void Sprite::Update() {
 	float tex_bottom = (textureLeftTop.y + textureSize.y) / metadata.height;
 
 	//頂点リソースにデータを書き込む
-	vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&vertexData_));
 
 	//1枚目の三角形
 	vertexData_[0].Position= { left,bottom,0.0f,1.0f };
@@ -76,7 +93,6 @@ void Sprite::Update() {
 	vertexData_[3].normal = { 0.0f,0.0f,-1.0f };
 
 	//インデックスリソースにデータを書き込む
-	indexResource->Map(0, nullptr, reinterpret_cast<void **>(&indexData_));
 	indexData_[0] = 0;
 	indexData_[1] = 1;
 	indexData_[2] = 2;
@@ -103,6 +119,9 @@ void Sprite::Update() {
 }
 
 void Sprite::Draw() {
+	if (!spriteCommon || !materialResource || !vertexResource || !indexResource || !transformationMatrixResource) {
+		return;
+	}
 
 	
 
@@ -140,12 +159,23 @@ Sprite::~Sprite() {
 }
 
 void Sprite::CreateVertexData() {
+	vertexData_ = nullptr;
+	indexData_ = nullptr;
+	vertexBufferView = {};
+	indexBufferView = {};
 
 	//Sprite用の頂点リソースを作る
 	vertexResource = spriteCommon->GetDxCommon()->CreateBufferResource(sizeof(VertexData) * 6);
 
 	//Index用の頂点リソースを作る
 	indexResource = spriteCommon->GetDxCommon()->CreateBufferResource(sizeof(uint32_t) * 6);
+	if (!MapUploadBuffer(vertexResource.Get(), vertexData_) || !MapUploadBuffer(indexResource.Get(), indexData_)) {
+		vertexResource.Reset();
+		indexResource.Reset();
+		vertexData_ = nullptr;
+		indexData_ = nullptr;
+		return;
+	}
 	
 	
 
@@ -168,13 +198,17 @@ void Sprite::CreateVertexData() {
 }
 
 void Sprite::CreateMaterialData() {
+	materialData = nullptr;
 
 	//Sprite用のマテリアルリソースを作る
 	materialResource = spriteCommon->GetDxCommon()->CreateBufferResource(sizeof(Material));
 	
 
 	//書き込むためのアドレスを取得
-	materialResource->Map(0, nullptr, reinterpret_cast<void **>(&materialData));
+	if (!MapUploadBuffer(materialResource.Get(), materialData)) {
+		materialResource.Reset();
+		return;
+	}
 	//白で設定
 	materialData->color = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
 	materialData->enableLighting = 0;
@@ -184,12 +218,16 @@ void Sprite::CreateMaterialData() {
 }
 
 void Sprite::CreateTransformationData() {
+	transformationMatrixData = nullptr;
 
 	//TransformationMatrix用のリソースをス来る
 	transformationMatrixResource = spriteCommon->GetDxCommon()->CreateBufferResource(sizeof(TransformationMatrix));
 
 	//書き込むためのアドレスを取得
-	transformationMatrixResource->Map(0, nullptr, reinterpret_cast<void **>(&transformationMatrixData));
+	if (!MapUploadBuffer(transformationMatrixResource.Get(), transformationMatrixData)) {
+		transformationMatrixResource.Reset();
+		return;
+	}
 	//単位行列を書き込んでおく
 	transformationMatrixData->WVP = math->MakeIdentity4x4();
 	transformationMatrixData->World = math->MakeIdentity4x4();

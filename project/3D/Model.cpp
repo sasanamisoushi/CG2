@@ -48,6 +48,22 @@ std::ifstream OpenUtf8File(const std::string& filePath) {
 	return std::ifstream(std::filesystem::path(Utf8ToWide(filePath)));
 }
 
+bool UploadVertexData(ID3D12Resource* resource, const std::vector<VertexData>& vertices) {
+	if (!resource || vertices.empty()) {
+		return false;
+	}
+
+	VertexData* mappedData = nullptr;
+	HRESULT hr = resource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
+	if (FAILED(hr) || mappedData == nullptr) {
+		return false;
+	}
+
+	std::memcpy(mappedData, vertices.data(), sizeof(VertexData) * vertices.size());
+	resource->Unmap(0, nullptr);
+	return true;
+}
+
 }
 
 void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypath, const std::string &filename) {
@@ -102,6 +118,9 @@ void Model::Initialize(ModelCommon *modelCommon, const std::string &directorypat
 
 void Model::Draw() {
 	auto commandList = modelCommon_->GetDxCommon()->GetCommandList();
+	if (modelData.vertices.empty() || !vertexResource) {
+		return;
+	}
 
 	modelCommon_->GetDxCommon()->GetCommandList()->IASetVertexBuffers(0, 1, &vertexBufferView);
 	if (!modelData.indices.empty()) {
@@ -134,6 +153,13 @@ void Model::Draw() {
 
 void Model::CreateVertexData() {
 	size_t vertexBufferSize = sizeof(VertexData) * modelData.vertices.size();
+	vertexBufferView = {};
+
+	if (modelData.vertices.empty() || vertexBufferSize == 0) {
+		vertexResource.Reset();
+		inputVertexResource.Reset();
+		return;
+	}
 
 	if (modelData.isSkinned) {
 		// スキニング用: 変形後の頂点を入れるバッファ (UAV/描画用, DEFAULTヒープ)
@@ -141,10 +167,11 @@ void Model::CreateVertexData() {
 		
 		// スキニング用: 変形前の頂点を入れるバッファ (SRV用, UPLOADヒープ)
 		inputVertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(vertexBufferSize);
-		VertexData* inputMappedData = nullptr;
-		inputVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&inputMappedData));
-		std::memcpy(inputMappedData, modelData.vertices.data(), vertexBufferSize);
-		inputVertexResource->Unmap(0, nullptr);
+		if (!vertexResource || !UploadVertexData(inputVertexResource.Get(), modelData.vertices)) {
+			vertexResource.Reset();
+			inputVertexResource.Reset();
+			return;
+		}
 
 		// 初期状態としてバリアを張っておく
 		D3D12_RESOURCE_BARRIER barrier = {};
@@ -163,10 +190,10 @@ void Model::CreateVertexData() {
 		vertexResource = modelCommon_->GetDxCommon()->CreateBufferResource(vertexBufferSize);
 		inputVertexResource = nullptr;
 		
-		VertexData* mappedData = nullptr;
-		vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
-		std::memcpy(mappedData, modelData.vertices.data(), vertexBufferSize);
-		vertexResource->Unmap(0, nullptr);
+		if (!UploadVertexData(vertexResource.Get(), modelData.vertices)) {
+			vertexResource.Reset();
+			return;
+		}
 	}
 
 	//バッファビューの設定
@@ -1022,7 +1049,7 @@ void Model::InitializeCylinder(ModelCommon *modelCommon,
 
 void Model::InitializeLine(ModelCommon *modelCommon) {
 	this->modelCommon_ = modelCommon;
-	modelData.vertices.clear();
+	modelData = ModelData{};
 
 	VertexData v1, v2;
 	v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1039,6 +1066,9 @@ void Model::InitializeLine(ModelCommon *modelCommon) {
 	modelData.vertices.push_back(v2);
 
 	modelData.isLine = true;
+	modelData.isStrip = false;
+	modelData.isSkinned = false;
+	inputVertexResource = nullptr;
 
 	CreateVertexData();
 	CreateMaterialData();
@@ -1059,15 +1089,18 @@ void Model::UpdateLineVertices(const std::vector<VertexData>& lines) {
 	
 	bool needRecreate = (modelData.vertices.size() != lines.size());
 	modelData.vertices = lines;
+	modelData.isLine = true;
+	modelData.isStrip = false;
+	modelData.isSkinned = false;
+	inputVertexResource = nullptr;
 
 	if (needRecreate || !vertexResource) {
 		CreateVertexData();
 	} else {
 		// 既存のvertexResource(UPLOADヒープ)をマップして更新する
-		VertexData* mappedData = nullptr;
-		vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mappedData));
-		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
-		vertexResource->Unmap(0, nullptr);
+		if (!UploadVertexData(vertexResource.Get(), modelData.vertices)) {
+			CreateVertexData();
+		}
 	}
 	RecalculateBounds();
 }
@@ -1241,12 +1274,15 @@ bool Model::Skinning(SkinCluster& skinCluster) {
 
 void Model::InitializeTrail(ModelCommon *modelCommon) {
 	this->modelCommon_ = modelCommon;
-	modelData.vertices.clear();
+	modelData = ModelData{};
 
 	// 初期状態は空（またはダミー頂点）にしておく
 	VertexData v{};
 	modelData.vertices.push_back(v);
 	modelData.vertices.push_back(v);
+	modelData.isLine = false;
+	modelData.isSkinned = false;
+	inputVertexResource = nullptr;
 
 	modelData.isStrip = true; // ストリップ描画を有効化
 
@@ -1271,15 +1307,18 @@ void Model::UpdateTrailVertices(const std::vector<VertexData> &vertices) {
 	// 頂点数が変わったらバッファを作り直す必要があるかチェック
 	bool needRecreate = (modelData.vertices.size() != vertices.size());
 	modelData.vertices = vertices;
+	modelData.isLine = false;
+	modelData.isStrip = true;
+	modelData.isSkinned = false;
+	inputVertexResource = nullptr;
 
 	if (needRecreate || !vertexResource) {
 		CreateVertexData();
 	} else {
 		// 既存のvertexResource(UPLOADヒープ)をマップして更新する
-		VertexData *mappedData = nullptr;
-		vertexResource->Map(0, nullptr, reinterpret_cast<void **>(&mappedData));
-		std::memcpy(mappedData, modelData.vertices.data(), sizeof(VertexData) * modelData.vertices.size());
-		vertexResource->Unmap(0, nullptr);
+		if (!UploadVertexData(vertexResource.Get(), modelData.vertices)) {
+			CreateVertexData();
+		}
 	}
 	RecalculateBounds();
 }

@@ -4,11 +4,26 @@
 #include "engine/Resource/TextureManager.h"
 #include "engine/Graphics/SrvManager.h"
 #include "engine/base/StringUtility.h"
+#include <algorithm>
 
 #pragma comment(lib, "dxcompiler.lib")
 
 using namespace Microsoft::WRL;
 
+namespace {
+uint32_t ClampEmitCountToCapacity(const ParticleManager::ParticleGroup &group, uint32_t requestedCount) {
+	const size_t maxCount = static_cast<size_t>(group.kNumMaxInstance);
+	const size_t activeCount = group.particle.size();
+	if (activeCount >= maxCount) {
+		return 0;
+	}
+
+	const size_t availableCount = maxCount - activeCount;
+	return static_cast<uint32_t>((std::min)(static_cast<size_t>(requestedCount), availableCount));
+}
+
+constexpr bool kEnableGpuParticleSimulation = false;
+}
 
 IDxcBlob *CompileShader(
 	// CompilerするShaderファイルへのパス
@@ -403,7 +418,7 @@ void ParticleManager::Draw() {
 	for (auto &[name, group] : particleGroups_) {
 
 		// --- GPU Particle 初回初期化および更新 ---
-		if (group.particleResource) {
+		if (kEnableGpuParticleSimulation && group.particleResource) {
 			commandList->SetComputeRootSignature(computeRootSignature_.Get());
 
 			ID3D12DescriptorHeap *descriptorHeaps[] = { SrvManager::GetInstance()->GetDescriptorHeap() };
@@ -695,12 +710,15 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 	float posVariance) {
 	// 1. 登録済みのパーティクルグループを検索
 	if (particleGroups_.find(name) == particleGroups_.end()) {
-		assert(false); // 指定された名前のグループが見つからない
 		return;
 	}
 
 	// グループの参照を取得
 	ParticleGroup &group = particleGroups_[name];
+	const uint32_t emitCount = ClampEmitCountToCapacity(group, count);
+	if (emitCount == 0) {
+		return;
+	}
 
 	// 2. ランダム生成器の準備
 	static std::random_device seed_gen;
@@ -719,7 +737,7 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 	std::uniform_real_distribution<float> distSpeed(speed - speedVariance, speed + speedVariance);
 
 	// 3. 指定された数だけパーティクルを生成
-	for (uint32_t i = 0; i < count; ++i) {
+	for (uint32_t i = 0; i < emitCount; ++i) {
 		Particle newParticle{};
 
 		// ==========================================
@@ -779,11 +797,15 @@ void ParticleManager::Emit(const std::string name, const Vector3 &position, uint
 void ParticleManager::EmitFireball(const std::string name, const Vector3 &position, uint32_t count,
 	const Vector4 &color, float initialScale, float finalScale, float lifeTime, float radius) {
 	if (particleGroups_.find(name) == particleGroups_.end()) {
-		assert(false);
 		return;
 	}
 
 	ParticleGroup &group = particleGroups_[name];
+	const uint32_t emitCount = ClampEmitCountToCapacity(group, count);
+	if (emitCount == 0) {
+		return;
+	}
+
 	static std::random_device seedGenerator;
 	static std::mt19937_64 engine(seedGenerator());
 
@@ -797,7 +819,7 @@ void ParticleManager::EmitFireball(const std::string name, const Vector3 &positi
 	std::uniform_real_distribution<float> distAngularSpeed(0.04f, 0.11f);
 	std::uniform_int_distribution<int> distSpinDirection(0, 1);
 
-	for (uint32_t i = 0; i < count; ++i) {
+	for (uint32_t i = 0; i < emitCount; ++i) {
 		const float z = distZ(engine);
 		const float angle = distAngle(engine);
 		const float xyLength = std::sqrt(1.0f - z * z);
@@ -953,11 +975,11 @@ void ParticleManager::CreatePipelineState() {
 	inputElementDescs[0].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 	inputElementDescs[1].SemanticName = "TEXCOORD";
 	inputElementDescs[1].SemanticIndex = 0;
-	inputElementDescs[1].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
 	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 	inputElementDescs[2].SemanticName = "NORMAL";
 	inputElementDescs[2].SemanticIndex = 0;
-	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
 	inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;

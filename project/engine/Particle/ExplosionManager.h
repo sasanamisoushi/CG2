@@ -3,7 +3,7 @@
 #include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
 #include <array>
-#include <list>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -32,6 +32,8 @@ public:
 
     // 報告された座標リストを受け取り、爆発を一気に発生させる
     void CreateExplosions(const std::vector<Vector3> &hitPositions);
+    void CreateHitEffects(const std::vector<Vector3> &hitPositions);
+    void CreateDestructionEffects(const std::vector<Vector3> &hitPositions);
 
     // 設定の取得
     ExplosionConfig& GetConfig() { return config_; }
@@ -41,16 +43,23 @@ public:
     void LoadFromJson(const std::string &filepath);
 
 private:
+    static constexpr std::size_t kMaxExplosions = 16;
+
     // Plane粒子と同時に表示する立体エフェクト
     struct Explosion {
         std::array<std::unique_ptr<Object3d>, 3> rings;
         std::unique_ptr<Object3d> cylinder;
-        Vector3 position;
+        Vector3 position{};
         float age = 0.0f;
         float duration = 0.7f;
+        bool active = false;
     };
 
-    std::list<Explosion> explosions_;
+    void InitializeExplosionObjects(Explosion &explosion);
+    Explosion *AcquireExplosion();
+    void CreateEffects(const std::vector<Vector3> &hitPositions, bool includeMeshes);
+
+    std::array<Explosion, kMaxExplosions> explosions_;
     ParticleManager *particleManager_ = nullptr; // エミッター生成時に必要な大元
     ExplosionConfig config_;
 };

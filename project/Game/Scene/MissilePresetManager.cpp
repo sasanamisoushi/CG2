@@ -1,4 +1,4 @@
-#include "MissilePresetManager.h"
+﻿#include "MissilePresetManager.h"
 #include "GamePlayScene.h"
 #include "GamePlaySceneHelpers.h"
 #include <externals/imgui/imgui.h>
@@ -9,13 +9,13 @@
 MissilePresetManager::MissilePresetManager(GamePlayScene* scene) : scene_(scene) {}
 
 void MissilePresetManager::RefreshMissilePresetNames() {
-	scene_->missilePresetNames_[0].clear();
-	scene_->missilePresetNames_[1].clear();
+	scene_->uiManager_->missilePresetNames_[0].clear();
+	scene_->uiManager_->missilePresetNames_[1].clear();
 
 	std::ifstream ifs(kMissilePresetsFilePath);
 	if (!ifs.is_open()) {
-		scene_->selectedMissilePresetIndex_[0] = 0;
-		scene_->selectedMissilePresetIndex_[1] = 0;
+		scene_->uiManager_->selectedMissilePresetIndex_[0] = 0;
+		scene_->uiManager_->selectedMissilePresetIndex_[1] = 0;
 		return;
 	}
 
@@ -23,8 +23,8 @@ void MissilePresetManager::RefreshMissilePresetNames() {
 	try {
 		ifs >> root;
 	} catch (...) {
-		scene_->selectedMissilePresetIndex_[0] = 0;
-		scene_->selectedMissilePresetIndex_[1] = 0;
+		scene_->uiManager_->selectedMissilePresetIndex_[0] = 0;
+		scene_->uiManager_->selectedMissilePresetIndex_[1] = 0;
 		return;
 	}
 
@@ -36,14 +36,14 @@ void MissilePresetManager::RefreshMissilePresetNames() {
 
 		for (const auto &presetData : root[keys[typeIndex]]) {
 			if (presetData.is_object() && presetData.contains("name") && presetData["name"].is_string()) {
-				scene_->missilePresetNames_[typeIndex].push_back(presetData["name"].get<std::string>());
+				scene_->uiManager_->missilePresetNames_[typeIndex].push_back(presetData["name"].get<std::string>());
 			}
 		}
 
-		if (scene_->selectedMissilePresetIndex_[typeIndex] >= static_cast<int>(scene_->missilePresetNames_[typeIndex].size())) {
-			scene_->selectedMissilePresetIndex_[typeIndex] = scene_->missilePresetNames_[typeIndex].empty()
+		if (scene_->uiManager_->selectedMissilePresetIndex_[typeIndex] >= static_cast<int>(scene_->uiManager_->missilePresetNames_[typeIndex].size())) {
+			scene_->uiManager_->selectedMissilePresetIndex_[typeIndex] = scene_->uiManager_->missilePresetNames_[typeIndex].empty()
 				? 0
-				: static_cast<int>(scene_->missilePresetNames_[typeIndex].size()) - 1;
+				: static_cast<int>(scene_->uiManager_->missilePresetNames_[typeIndex].size()) - 1;
 		}
 	}
 }
@@ -52,7 +52,7 @@ bool MissilePresetManager::SaveMissilePreset(const std::string &filePath, int mi
 	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
 	const std::string trimmedName = TrimActionName(presetName);
 	if (trimmedName.empty()) {
-		scene_->missilePresetMessage_ = "保存名を入力してください。";
+		scene_->uiManager_->missilePresetMessage_ = "保存名を入力してください。";
 		return false;
 	}
 
@@ -108,7 +108,7 @@ bool MissilePresetManager::SaveMissilePreset(const std::string &filePath, int mi
 
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
-		scene_->missilePresetMessage_ = "ミサイル設定を保存できませんでした。";
+		scene_->uiManager_->missilePresetMessage_ = "ミサイル設定を保存できませんでした。";
 		return false;
 	}
 
@@ -116,14 +116,14 @@ bool MissilePresetManager::SaveMissilePreset(const std::string &filePath, int mi
 	ofs.close();
 
 	RefreshMissilePresetNames();
-	for (size_t index = 0; index < scene_->missilePresetNames_[typeIndex].size(); ++index) {
-		if (scene_->missilePresetNames_[typeIndex][index] == trimmedName) {
-			scene_->selectedMissilePresetIndex_[typeIndex] = static_cast<int>(index);
+	for (size_t index = 0; index < scene_->uiManager_->missilePresetNames_[typeIndex].size(); ++index) {
+		if (scene_->uiManager_->missilePresetNames_[typeIndex][index] == trimmedName) {
+			scene_->uiManager_->selectedMissilePresetIndex_[typeIndex] = static_cast<int>(index);
 			break;
 		}
 	}
 
-	scene_->missilePresetMessage_ =
+	scene_->uiManager_->missilePresetMessage_ =
 		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を保存しました。";
 	return true;
 }
@@ -132,13 +132,13 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
 	const std::string trimmedName = TrimActionName(presetName);
 	if (trimmedName.empty()) {
-		scene_->missilePresetMessage_ = "読み込むミサイル設定名がありません。";
+		scene_->uiManager_->missilePresetMessage_ = "読み込むミサイル設定名がありません。";
 		return false;
 	}
 
 	std::ifstream ifs(filePath);
 	if (!ifs.is_open()) {
-		scene_->missilePresetMessage_ = "ミサイル設定ファイルが見つかりません。";
+		scene_->uiManager_->missilePresetMessage_ = "ミサイル設定ファイルが見つかりません。";
 		return false;
 	}
 
@@ -146,13 +146,13 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 	try {
 		ifs >> root;
 	} catch (...) {
-		scene_->missilePresetMessage_ = "ミサイル設定ファイルを読み込めませんでした。";
+		scene_->uiManager_->missilePresetMessage_ = "ミサイル設定ファイルを読み込めませんでした。";
 		return false;
 	}
 
 	const char *keys[] = { "normal", "homing" };
 	if (!root.contains(keys[typeIndex]) || !root[keys[typeIndex]].is_array()) {
-		scene_->missilePresetMessage_ = "選択した種類の保存設定がありません。";
+		scene_->uiManager_->missilePresetMessage_ = "選択した種類の保存設定がありません。";
 		return false;
 	}
 
@@ -164,7 +164,7 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 		}
 	}
 	if (!preset) {
-		scene_->missilePresetMessage_ = "選択したミサイル設定が見つかりません。";
+		scene_->uiManager_->missilePresetMessage_ = "選択したミサイル設定が見つかりません。";
 		return false;
 	}
 
@@ -183,7 +183,7 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 	}
 	scene_->missileMuzzleOffset = ReadJsonFloat(*preset, "muzzleOffset", scene_->missileMuzzleOffset);
 
-	scene_->missilePresetMessage_ =
+	scene_->uiManager_->missilePresetMessage_ =
 		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を読み込みました。";
 	return true;
 }
@@ -195,38 +195,38 @@ void MissilePresetManager::DrawMissileSettingsUI() {
 
 	ImGui::Separator();
 	const char *presetTypes[] = { "通常弾", "ホーミング" };
-	ImGui::Combo("保存する種類", &scene_->missilePresetTypeIndex_, presetTypes, IM_ARRAYSIZE(presetTypes));
-	ImGui::InputText("ミサイル保存名", scene_->missilePresetName_, IM_ARRAYSIZE(scene_->missilePresetName_));
+	ImGui::Combo("保存する種類", &scene_->uiManager_->missilePresetTypeIndex_, presetTypes, IM_ARRAYSIZE(presetTypes));
+	ImGui::InputText("ミサイル保存名", scene_->uiManager_->missilePresetName_, IM_ARRAYSIZE(scene_->uiManager_->missilePresetName_));
 	if (ImGui::Button("この種類の設定を保存")) {
-		SaveMissilePreset(kMissilePresetsFilePath, scene_->missilePresetTypeIndex_, scene_->missilePresetName_);
+		SaveMissilePreset(kMissilePresetsFilePath, scene_->uiManager_->missilePresetTypeIndex_, scene_->uiManager_->missilePresetName_);
 	}
 	ImGui::SameLine();
 	if (ImGui::Button("ミサイル保存一覧を更新")) {
 		RefreshMissilePresetNames();
 	}
 
-	const int loadTypeIndex = std::clamp(scene_->missilePresetTypeIndex_, 0, 1);
-	if (!scene_->missilePresetNames_[loadTypeIndex].empty()) {
+	const int loadTypeIndex = std::clamp(scene_->uiManager_->missilePresetTypeIndex_, 0, 1);
+	if (!scene_->uiManager_->missilePresetNames_[loadTypeIndex].empty()) {
 		std::vector<const char *> presetItems;
-		presetItems.reserve(scene_->missilePresetNames_[loadTypeIndex].size());
-		for (const std::string &name : scene_->missilePresetNames_[loadTypeIndex]) {
+		presetItems.reserve(scene_->uiManager_->missilePresetNames_[loadTypeIndex].size());
+		for (const std::string &name : scene_->uiManager_->missilePresetNames_[loadTypeIndex]) {
 			presetItems.push_back(name.c_str());
 		}
-		if (scene_->selectedMissilePresetIndex_[loadTypeIndex] >= static_cast<int>(presetItems.size())) {
-			scene_->selectedMissilePresetIndex_[loadTypeIndex] = 0;
+		if (scene_->uiManager_->selectedMissilePresetIndex_[loadTypeIndex] >= static_cast<int>(presetItems.size())) {
+			scene_->uiManager_->selectedMissilePresetIndex_[loadTypeIndex] = 0;
 		}
-		ImGui::Combo("読み込む設定", &scene_->selectedMissilePresetIndex_[loadTypeIndex], presetItems.data(), static_cast<int>(presetItems.size()));
+		ImGui::Combo("読み込む設定", &scene_->uiManager_->selectedMissilePresetIndex_[loadTypeIndex], presetItems.data(), static_cast<int>(presetItems.size()));
 		if (ImGui::Button("選択したミサイル設定を読み込む")) {
 			ApplyMissilePreset(
 				kMissilePresetsFilePath,
 				loadTypeIndex,
-				scene_->missilePresetNames_[loadTypeIndex][scene_->selectedMissilePresetIndex_[loadTypeIndex]]);
+				scene_->uiManager_->missilePresetNames_[loadTypeIndex][scene_->uiManager_->selectedMissilePresetIndex_[loadTypeIndex]]);
 		}
 	} else {
 		ImGui::TextDisabled("%sの保存設定はまだありません。", presetTypes[loadTypeIndex]);
 	}
-	if (!scene_->missilePresetMessage_.empty()) {
-		ImGui::TextWrapped("%s", scene_->missilePresetMessage_.c_str());
+	if (!scene_->uiManager_->missilePresetMessage_.empty()) {
+		ImGui::TextWrapped("%s", scene_->uiManager_->missilePresetMessage_.c_str());
 	}
 
 	ImGui::Separator();

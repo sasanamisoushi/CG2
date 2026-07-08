@@ -47,6 +47,8 @@ void GamePlayScene::Initialize() {
 	//カメラ・シーンリソース
 	camera = std::make_unique<Camera>();
 	uiManager_ = std::make_unique<GamePlayUIManager>(this);
+	environmentRenderer_ = std::make_unique<EnvironmentRenderer>();
+	environmentRenderer_->Initialize();
 	camera->SetRotate({ 0.0f,0.0f,0.0f });
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
@@ -80,11 +82,9 @@ void GamePlayScene::Initialize() {
 	ceilingBoundaryAlertObject_->SetModel("BoundaryAlertPlane");
 
 	// SkyboxCommon に DirectX の惁Eを渡して初期化する！E
-	SkyboxCommon::GetInstance()->Initialize(DirectXCommon::GetInstance());
+	// SkyboxCommon is now initialized in Framework.cpp
 
 	// スカイボックスの生Eと初期匁E
-	skybox = std::make_unique<Skybox>();
-	skybox->Initialize("resources/SkyBox.dds");
 
 
 	//Model��・パ�EチE��クル
@@ -156,26 +156,13 @@ void GamePlayScene::Initialize() {
 
 
 	// リング
-	myRing = std::make_unique<Primitive>();
-	myRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Ring);
-	myRing->SetTranslate({ 0.0f, 0.0f, 0.0f }); // パ�EチE��クルと同じ中忁E��置に合わせる
 
 	// 部刁E��ング (三日朁E
-	myPartialRing = std::make_unique<Primitive>();
-	myPartialRing->Initialize(Object3dCommon::GetInstance(), PrimitiveType::PartialRing);
-	myPartialRing->SetTranslate({ 0.0f, 0.0f, 0.0f });
 
 	// 冁E��エフェクチE
-	myCylinder = std::make_unique<Primitive>();
-	myCylinder->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Cylinder);
-	myCylinder->SetTranslate({ 0.0f, 0.0f, 0.0f });
-	myCylinder->SetScale({ 2.0f, 2.0f, 2.0f });
 
 	//パ�EチE��クル
-	particleManager = std::make_unique<ParticleManager>();
-	particleManager->Initialize(DirectXCommon::GetInstance());
-	particleManager->CreateParticleGroup("test", "resources/circle.png");
-	particleEmitter = std::make_unique<ParticleEmitter>("test", Vector3{ 0.0f,0.0f,0.0f }, particleManager.get());
+	environmentRenderer_->GetParticleManager()->CreateParticleGroup("test", "resources/circle.png");
 
 	//音声再生
 	soundData1 = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
@@ -210,7 +197,7 @@ void GamePlayScene::Initialize() {
 
 	// 爁E��エフェクチE
 	explosionManager_ = std::make_unique<ExplosionManager>();
-	explosionManager_->Initialize(particleManager.get());
+	explosionManager_->Initialize(environmentRenderer_->GetParticleManager());
 
 	//敵
 	enemies_.clear();
@@ -235,8 +222,8 @@ void GamePlayScene::Initialize() {
 
 	if (IsSimulationMode()) {
 		isEditorPreviewPlaying_ = false;
-		currentSimulationTarget_ = 2;
-		showSimulationWindow_ = true;
+		uiManager_->currentSimulationTarget_ = 2;
+		uiManager_->showSimulationWindow_ = true;
 		SetDebugCameraActive(true);
 	}
 
@@ -321,7 +308,7 @@ void GamePlayScene::ResetEditorPreview() {
 		enemyBulletManager_->Initialize();
 	}
 	if (explosionManager_) {
-		explosionManager_->Initialize(particleManager.get());
+		explosionManager_->Initialize(environmentRenderer_->GetParticleManager());
 	}
 
 	ReloadSceneJson();
@@ -458,43 +445,6 @@ bool GamePlayScene::HasPendingEnemySpawns() const {
 
 
 
-void GamePlayScene::DrawGameplayActionControls() {
-#ifdef ENABLE_IMGUI
-	ImGui::Separator();
-	ImGui::Text("保存済みシミュレーション設定");
-	ImGui::TextWrapped("シミュレーション画面で保存した内容を、現在のゲーム側の設定値として読み込みます。");
-	if (ImGui::Button("保存一覧を更新")) {
-		simulationManager_->RefreshSimulationActionNames();
-	}
-
-	if (simulationActionNames_.empty()) {
-		ImGui::TextDisabled("保存されたシミュレーション設定がありません。");
-		if (!simulationActionMessage_.empty()) {
-			ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
-		}
-		return;
-	}
-
-	std::vector<const char *> actionNameItems;
-	actionNameItems.reserve(simulationActionNames_.size());
-	for (const std::string &name : simulationActionNames_) {
-		actionNameItems.push_back(name.c_str());
-	}
-
-	if (selectedSimulationActionIndex_ >= static_cast<int>(actionNameItems.size())) {
-		selectedSimulationActionIndex_ = 0;
-	}
-
-	ImGui::Combo("読み込む設定", &selectedSimulationActionIndex_, actionNameItems.data(), static_cast<int>(actionNameItems.size()));
-	if (ImGui::Button("この設定をゲームに読み込む")) {
-		simulationManager_->ApplySimulationAction(kSimulationActionsFilePath, simulationActionNames_[selectedSimulationActionIndex_]);
-	}
-
-	if (!simulationActionMessage_.empty()) {
-		ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
-	}
-#endif
-}
 
 
 
@@ -633,7 +583,7 @@ void GamePlayScene::Update() {
 
 		std::vector<Vector3> playerHitPos = { player_->GetPosition() };
 		if (explosionManager_) {
-			explosionManager_->CreateExplosions(playerHitPos);
+			explosionManager_->CreateDestructionEffects(playerHitPos);
 		}
 
 		if (pVoice2) {
@@ -672,14 +622,14 @@ void GamePlayScene::Update() {
 	}
 	shouldUpdateGame = shouldUpdateGame && isEditorPreviewPlaying_;
 	const bool isSimulation = IsSimulationMode();
-	const bool isFullFlowPreview = !isSimulation || simulationPlaybackMode_ == 1;
-	const bool isSelectedOnlyPreview = isSimulation && simulationPlaybackMode_ == 0;
-	const bool updateSelectedPlayer = shouldUpdateGame && canUseKeyboardInput && (isFullFlowPreview || currentSimulationTarget_ == 0);
-	const bool updateSelectedMissiles = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 1);
-	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 2);
-	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || currentSimulationTarget_ == 3);
+	const bool isFullFlowPreview = !isSimulation || uiManager_->simulationPlaybackMode_ == 1;
+	const bool isSelectedOnlyPreview = isSimulation && uiManager_->simulationPlaybackMode_ == 0;
+	const bool updateSelectedPlayer = shouldUpdateGame && canUseKeyboardInput && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 0);
+	const bool updateSelectedMissiles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1);
+	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 2);
+	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 3);
 	const bool allowMouseMissileFire = shouldUpdateGame && canUseMouseInput && (!isSimulation || isFullFlowPreview);
-	const bool allowLockOnBehavior = !isGameOver_ && (isFullFlowPreview || currentSimulationTarget_ == 1 || currentSimulationTarget_ == 2);
+	const bool allowLockOnBehavior = !isGameOver_ && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1 || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
 	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
 
@@ -808,7 +758,7 @@ void GamePlayScene::Update() {
 
 		// 敵の弾が�Eレイヤーに当たった場合も爁E��を発生させる
 		if (explosionManager_ && !enemyBulletHits.empty()) {
-			explosionManager_->CreateExplosions(enemyBulletHits);
+			explosionManager_->CreateHitEffects(enemyBulletHits);
 		}
 
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
@@ -863,7 +813,6 @@ void GamePlayScene::Update() {
 		} else {
 			debugFlyCamera_->Camera::Update();
 		}
-		skybox->Update(debugFlyCamera_.get());
 	} else {
 		if (player_) {
 			Vector3* targetPos = nullptr;
@@ -875,7 +824,6 @@ void GamePlayScene::Update() {
 			player_->UpdateCamera(camera.get(), targetPos);
 		}
 		camera->Update();
-		skybox->Update(camera.get());
 	}
 
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
@@ -891,74 +839,6 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	if (myRing && showNormalRing) {
-		static float ringTime = 0.0f;
-		ringTime += 0.05f;
-
-		// オブジェクト�E体�E回転めE��縮は行わず、UVスクロールのみでエフェクトを表現する
-		// パ�EチE��クルのエフェクトを囲むようにスケールを調整
-		myRing->SetRotate({ 0.0f, 0.0f, 0.0f });
-		myRing->SetScale({ 2.0f, 2.0f, 1.0f });
-
-		// UVスクロールとスケーリング
-		Model* ringModel = myRing->GetModel();
-		if (ringModel) {
-			Vector3 uvScale = { 10.0f, 1.0f, 1.0f }; // U方向にScaleして細かい模様にする
-			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
-			// 賁E��の持E��通り、U方向！E成�E�E�を時間でスクロールさせて冁E��回転させめE
-			Vector3 uvTranslate = { ringTime * 0.1f, 0.0f, 0.0f }; 
-			
-			MyMath math;
-			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
-			ringModel->SetUvTransform(uvTransform);
-		}
-		myRing->Update();
-	}
-
-	if (myPartialRing && showPartialRing) {
-		static float pRingTime = 0.0f;
-		pRingTime += 0.05f;
-
-		// 部刁E��ングはV方向をスクロールさせたり、Z軸回転させたりしてアニメーションできる
-		myPartialRing->SetRotate({ 0.0f, 0.0f, pRingTime * -0.5f }); // Z回転で三日月を回す
-		myPartialRing->SetScale({ 2.0f, 2.0f, 1.0f });
-
-		Model* pRingModel = myPartialRing->GetModel();
-		if (pRingModel) {
-			Vector3 uvScale = { 1.0f, 10.0f, 1.0f };
-			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
-			Vector3 uvTranslate = { 0.0f, pRingTime * 0.1f, 0.0f }; // V方向へスクロール
-			
-			MyMath math;
-			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
-			pRingModel->SetUvTransform(uvTransform);
-		}
-		myPartialRing->Update();
-	}
-
-	if (myCylinder && showCylinder) {
-		cylinderUVOffset[0] += cylinderUVScrollSpeed[0];
-		cylinderUVOffset[1] += cylinderUVScrollSpeed[1];
-
-		Model* cModel = myCylinder->GetModel();
-		if (cModel) {
-			Vector3 uvScale = { 1.0f, 1.0f, 1.0f };
-			Vector3 uvRotate = { 0.0f, 0.0f, 0.0f };
-			Vector3 uvTranslate = { cylinderUVOffset[0], cylinderUVOffset[1], 0.0f };
-			
-			MyMath math;
-			Matrix4x4 uvTransform = math.MakeAffineMatrix(uvScale, uvRotate, uvTranslate);
-			cModel->SetUvTransform(uvTransform);
-			cModel->SetAlphaReference(cylinderAlphaReference);
-		}
-		
-		// ImGuiの変数をCylinderに適用
-		myCylinder->SetTranslate({ cylinderPos[0], cylinderPos[1], cylinderPos[2] });
-		myCylinder->SetScale({ cylinderScale[0], cylinderScale[1], cylinderScale[2] });
-
-		myCylinder->Update();
-	}
-
 	for (Object3d *object3d : objects) {
 		object3d->Update();
 	}
@@ -970,8 +850,7 @@ void GamePlayScene::Update() {
 
 	lockOnManager_->UpdateLockOn(activeCamera, allowLockOnBehavior);
 
-	if (showParticles && updateSelectedParticles) {
-		particleEmitter->Update();
+	if (environmentRenderer_->GetShowParticles() && updateSelectedParticles) {
 	}
 
 
@@ -1009,14 +888,17 @@ void GamePlayScene::Update() {
 	// 弾の更新処琁E
 	// ==========================================
 	std::vector<Vector3> hitPositions;
+	std::vector<Vector3> destroyedPositions;
 	if (updateSelectedMissiles) {
 		if (missileManager_) {
-			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, lockedEnemy_);
+			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, destroyedPositions, lockedEnemy_);
 		}
 
-		// 爁E��マネージャーに座標リストを渡して、発生を依頼するだけ！E
 		if (explosionManager_ && !hitPositions.empty()) {
-			explosionManager_->CreateExplosions(hitPositions);
+			explosionManager_->CreateHitEffects(hitPositions);
+		}
+		if (explosionManager_ && !destroyedPositions.empty()) {
+			explosionManager_->CreateDestructionEffects(destroyedPositions);
 		}
 
 	} else {
@@ -1032,7 +914,6 @@ void GamePlayScene::Update() {
 
 	// 大允E�Eパ�EチE��クル全体�E更新
 	if (!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) {
-		particleManager->Update(activeCamera);
 	}
 
 	// ==========================================
@@ -1041,9 +922,9 @@ void GamePlayScene::Update() {
 	if (showDebugColliders && updateDebugWireframes && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
 		std::vector<VertexData> colliderVertices;
 		const bool drawAllDebugFrames = !isSelectedOnlyPreview || isFullFlowPreview;
-		const bool drawPlayerDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 0;
-		const bool drawMissileDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 1;
-		const bool drawEnemyDebugFrame = drawAllDebugFrames || currentSimulationTarget_ == 2;
+		const bool drawPlayerDebugFrame = drawAllDebugFrames || uiManager_->currentSimulationTarget_ == 0;
+		const bool drawMissileDebugFrame = drawAllDebugFrames || uiManager_->currentSimulationTarget_ == 1;
+		const bool drawEnemyDebugFrame = drawAllDebugFrames || uiManager_->currentSimulationTarget_ == 2;
 		const bool drawObstacleDebugFrame = drawAllDebugFrames;
 
 		auto pushLine = [&](const Vector3& start, const Vector3& end, const Vector4& color) {
@@ -1226,7 +1107,10 @@ void GamePlayScene::Update() {
 	}
 
 #ifdef ENABLE_IMGUI
-	UpdateUI();
+	if (uiManager_) {
+		if (environmentRenderer_) environmentRenderer_->Update(camera.get());
+		uiManager_->UpdateUI();
+	}
 #endif
 	sprite->Update();
 }
@@ -1348,16 +1232,13 @@ void GamePlayScene::Draw() {
 	if (showDebugColliders && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
 		debugColliderLinesObject->Draw();
 	}
-
-	if (showSkybox && skybox) {
-		skybox->Draw();
-	}
 	
 	// エフェクト系の描画 (深度書き込み無効)
 	Object3dCommon::GetInstance()->SetEffectDrawSettings();
-	if (myRing && showNormalRing) myRing->Draw();
-	if (myPartialRing && showPartialRing) myPartialRing->Draw();
-	if (myCylinder && showCylinder) myCylinder->Draw();
+	if (environmentRenderer_) environmentRenderer_->Draw();
+
+	// explosionManagerはObject3d(リング)を描画するため、再度設定を呼び出す
+	Object3dCommon::GetInstance()->SetEffectDrawSettings();
 	if (explosionManager_) explosionManager_->Draw();
 
 
@@ -1369,8 +1250,6 @@ void GamePlayScene::Draw() {
 	}
 
 	DrawOverlay();
-
-	particleManager->Draw();
 }
 
 void GamePlayScene::DrawOverlay() {
@@ -1389,17 +1268,4 @@ void GamePlayScene::DrawOverlay() {
 	} else {
 		DrawAimCursorOverlaySprite(aimCursorSprite_.get());
 	}
-}
-
-
-
-
-
-
-void GamePlayScene::UpdateUI() {
-#ifdef ENABLE_IMGUI
-	if (uiManager_) {
-		uiManager_->UpdateUI();
-	}
-#endif
 }
