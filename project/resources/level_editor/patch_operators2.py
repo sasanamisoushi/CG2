@@ -1,6 +1,6 @@
-import sys
+ï»¿import sys
 
-op_file = r'c:\Users\k024g\OneDrive\ƒfƒXƒNƒgƒbƒv\2”N\2”N‘OŠú\CG2\CG2\project\resources\level_editor\operators.py'
+op_file = r'c:\Users\k024g\OneDrive\ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—\2å¹´\2å¹´å‰æœŸ\CG2\CG2\project\resources\level_editor\operators.py'
 
 with open(op_file, 'r', encoding='utf-8') as f:
     text = f.read()
@@ -42,7 +42,7 @@ chunk2_old = '''def _build_ai_level_obstacles(context, obstacles_to_create, shap
     scene = context.scene
     created_objs = []
     
-    # ‹«ŠEƒ{ƒbƒNƒX‚Ìæ“¾
+    # å¢ƒç•Œãƒœãƒƒã‚¯ã‚¹ã®å–å¾—
     from mathutils import Vector
     center = Vector((0,0,0))
     extents = Vector((20,20,20))
@@ -57,7 +57,7 @@ chunk2_new = '''def _build_ai_level_obstacles(context, obstacles_to_create, shap
     scene = context.scene
     created_objs = []
     
-    # ‹«ŠEƒ{ƒbƒNƒX‚Ìæ“¾
+    # å¢ƒç•Œãƒœãƒƒã‚¯ã‚¹ã®å–å¾—
     from mathutils import Vector
     center, extents = _get_target_bounds(scene, prompt)'''
 

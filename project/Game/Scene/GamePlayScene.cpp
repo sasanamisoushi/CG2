@@ -100,7 +100,7 @@ void GamePlayScene::Initialize() {
 	groundModel = std::make_unique<Object3d>();
 	groundModel->Initialize(Object3dCommon::GetInstance());
 	groundModel->SetModel("plane.obj");
-	groundModel->SetScale({ 100.0f, 1.0f, 100.0f });
+	groundModel->SetScale({ 3000.0f, 1.0f, 3000.0f });
 	groundModel->SetTranslate({ 0.0f, 0.0f, 0.0f });
 	objects.push_back(groundModel.get());
 
@@ -385,9 +385,15 @@ void GamePlayScene::TriggerEnemyReinforcements(const std::string &deadEnemyName)
 	}
 
 	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-		const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
-		if (spawnData.reinforcementTriggerName == deadEnemyName) {
-			ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
+		EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
+		if (!spawnData.remainingReinforcementTriggers.empty()) {
+			auto it = std::find(spawnData.remainingReinforcementTriggers.begin(), spawnData.remainingReinforcementTriggers.end(), deadEnemyName);
+			if (it != spawnData.remainingReinforcementTriggers.end()) {
+				spawnData.remainingReinforcementTriggers.erase(it);
+				if (spawnData.remainingReinforcementTriggers.empty()) {
+					ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
+				}
+			}
 		}
 	}
 }
@@ -1134,13 +1140,21 @@ void GamePlayScene::Draw() {
 		enemyBulletManager_->Draw();
 	}
 
-	// 敵の描画
-	for (const auto &enemy : enemies_) {
-		enemy->Draw();
-	}
-
 	Vector4 frustumPlanes[6];
 	MyMath::ExtractFrustumPlanes(camera->GetViewProjectionMatrix(), frustumPlanes);
+
+	// 敵の描画
+	for (const auto &enemy : enemies_) {
+		Sphere enemySphere;
+		enemySphere.center = enemy->GetPosition();
+		enemySphere.radius = enemy->GetCollisionRadius();
+
+		// 画面外の場合に描画しない（カリング）
+		if (MyMath::IsInFrustum(enemySphere, frustumPlanes)) {
+			enemy->Draw();
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
+	}
 
 	// 障害物の描画
 	for (const auto &obstacle : obstacles_) {

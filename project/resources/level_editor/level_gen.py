@@ -1,4 +1,4 @@
-import bpy
+ï»¿import bpy
 from mathutils import Vector
 import random
 import math
@@ -24,30 +24,30 @@ def _parse_ai_level_prompt(prompt):
     }
 
     # Style
-    if _prompt_has(normalized, "sŠX’n", "ƒrƒ‹", "ŠX", "city", "grid"):
+    if _prompt_has(normalized, "å¸‚è¡—åœ°", "ãƒ“ãƒ«", "è¡—", "city", "grid"):
         level_plan["style"] = "CITY"
         level_plan["shape"] = "PILLAR"
-    elif _prompt_has(normalized, "–À˜H", "ƒƒCƒY", "maze"):
+    elif _prompt_has(normalized, "è¿·è·¯", "ãƒ¡ã‚¤ã‚º", "maze"):
         level_plan["style"] = "MAZE"
         level_plan["shape"] = "WALL"
-    elif _prompt_has(normalized, "–h‰qü", "ƒ‰ƒCƒ“", "‰¡ˆê—ñ", "line", "defense"):
+    elif _prompt_has(normalized, "é˜²è¡›ç·š", "ãƒ©ã‚¤ãƒ³", "æ¨ªä¸€åˆ—", "line", "defense"):
         level_plan["style"] = "DEFENSE_LINE"
         level_plan["shape"] = "WALL"
-    elif _prompt_has(normalized, "ƒAƒŠ[ƒi", "’†‰›", "ˆÍ‚Ş", "arena"):
+    elif _prompt_has(normalized, "ã‚¢ãƒªãƒ¼ãƒŠ", "ä¸­å¤®", "å›²ã‚€", "arena"):
         level_plan["style"] = "ARENA"
 
     # Shape
-    if _prompt_has(normalized, "•Ç", "’·‚¢", "wall"):
+    if _prompt_has(normalized, "å£", "é•·ã„", "wall"):
         level_plan["shape"] = "WALL"
-    elif _prompt_has(normalized, "’Œ", "‚‚¢", "ƒ^ƒ[", "pillar", "tower"):
+    elif _prompt_has(normalized, "æŸ±", "é«˜ã„", "ã‚¿ãƒ¯ãƒ¼", "pillar", "tower"):
         level_plan["shape"] = "PILLAR"
-    elif _prompt_has(normalized, "¬‚³‚¢", "U‚ç‚Î", "U‚ç‚·", "ƒuƒƒbƒN", "block"):
+    elif _prompt_has(normalized, "å°ã•ã„", "æ•£ã‚‰ã°", "æ•£ã‚‰ã™", "ãƒ–ãƒ­ãƒƒã‚¯", "block"):
         level_plan["shape"] = "BLOCK"
 
     # Density
     import re
     custom_mult = None
-    mult_match = re.search(r'(?:[xX‚˜‚w~*]\s*(\d+(?:\.\d+)?))|(?:(\d+(?:\.\d+)?)\s*(?:”{|[xX‚˜‚w~*]))', prompt)
+    mult_match = re.search(r'(?:[xXï½˜ï¼¸Ã—*]\s*(\d+(?:\.\d+)?))|(?:(\d+(?:\.\d+)?)\s*(?:å€|[xXï½˜ï¼¸Ã—*]))', prompt)
     if mult_match:
         try:
             custom_mult = float(mult_match.group(1) or mult_match.group(2))
@@ -56,17 +56,17 @@ def _parse_ai_level_prompt(prompt):
 
     if custom_mult is not None:
         level_plan["density_multiplier"] = custom_mult
-    elif _prompt_has(normalized, "‘½‚­", "‚½‚­‚³‚ñ", "–§W", "many"):
+    elif _prompt_has(normalized, "å¤šã", "ãŸãã•ã‚“", "å¯†é›†", "many"):
         level_plan["density_multiplier"] = 2.0
-    elif _prompt_has(normalized, "­‚È‚­", "ƒXƒJƒXƒJ", "few"):
+    elif _prompt_has(normalized, "å°‘ãªã", "ã‚¹ã‚«ã‚¹ã‚«", "few"):
         level_plan["density_multiplier"] = 0.5
 
     return level_plan
 
 class MYADDON_OT_ai_generate_level_obstacles(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_ai_generate_level_obstacles"
-    bl_label = "AI‚ÅáŠQ•¨‚ğ©“®”z’u"
-    bl_description = "ƒRƒ“ƒZƒvƒg‚É‡‚í‚¹‚ÄƒtƒB[ƒ‹ƒh“à‚ÉáŠQ•¨‚ğ©“®¶¬E”z’u‚µ‚Ü‚·"
+    bl_label = "AIã§éšœå®³ç‰©ã‚’è‡ªå‹•é…ç½®"
+    bl_description = "ã‚³ãƒ³ã‚»ãƒ—ãƒˆã«åˆã‚ã›ã¦ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰å†…ã«éšœå®³ç‰©ã‚’è‡ªå‹•ç”Ÿæˆãƒ»é…ç½®ã—ã¾ã™"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
@@ -82,10 +82,10 @@ class MYADDON_OT_ai_generate_level_obstacles(bpy.types.Operator):
         plan = _parse_ai_level_prompt(prompt)
         rng = random.Random(seed)
         
-        # ƒtƒB[ƒ‹ƒh‚Ìæ“¾
+        # ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰ã®å–å¾—
         center = Vector((0,0,0))
         extents = Vector((20,20,20))
-        # operators.py “à‚Ì _stage_bounds_box ‚Í‚·‚Å‚É’è‹`Ï‚İ‚È‚Ì‚ÅŒÄ‚Ño‚¹‚é‘O’ñ
+        # operators.py å†…ã® _stage_bounds_box ã¯ã™ã§ã«å®šç¾©æ¸ˆã¿ãªã®ã§å‘¼ã³å‡ºã›ã‚‹å‰æ
         try:
             from . import operators
             center, extents = operators._stage_bounds_box(scene)
@@ -209,5 +209,5 @@ class MYADDON_OT_ai_generate_level_obstacles(bpy.types.Operator):
             
             created_objs.append(obj)
             
-        self.report({'INFO'}, f"{len(created_objs)}ŒÂ‚ÌAIáŠQ•¨‚ğ”z’u‚µ‚Ü‚µ‚½")
+        self.report({'INFO'}, f"{len(created_objs)}å€‹ã®AIéšœå®³ç‰©ã‚’é…ç½®ã—ã¾ã—ãŸ")
         return {'FINISHED'}

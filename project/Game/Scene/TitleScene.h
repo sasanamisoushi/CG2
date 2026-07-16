@@ -19,7 +19,7 @@ private:
 
 	std::unique_ptr<Sprite> titleSprite;
 
-	//繝｢繝・Ν
+	// モデル
 	std::vector<Object3d *> objects;
 	std::unique_ptr<Object3d> objA;
 

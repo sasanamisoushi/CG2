@@ -32,7 +32,7 @@ Camera::Camera()
 	, horizontal_(0.45f)
 	, aspectRatio_(float(WinApp::kClientWidth) / float(WinApp::kClientHeight))
 	, nearClipRange_(0.1f)
-	, furClipRange_(100.0f) {
+	, furClipRange_(3000.0f) {
 
 	Update();
 }

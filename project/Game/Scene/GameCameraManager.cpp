@@ -8,9 +8,9 @@
 
 namespace {
 	constexpr float kNormalCameraFovY = 0.45f;
-	constexpr float kNormalCameraFarClip = 100.0f;
+	constexpr float kNormalCameraFarClip = 3000.0f;
 	constexpr float kCinematicCameraFovY = 0.70f;
-	constexpr float kCinematicCameraFarClip = 250.0f;
+	constexpr float kCinematicCameraFarClip = 3000.0f;
 	constexpr float kCinematicCameraFocusBlend = 0.18f;
 	constexpr float kCinematicCameraDirectionBlend = 0.10f;
 	constexpr float kCinematicCameraPositionBlend = 0.10f;

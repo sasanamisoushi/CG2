@@ -11,7 +11,7 @@ namespace {
 	constexpr int kEnemyRespawnDelayFrames = 180;
 	constexpr int kNoRespawnTimer = -1;
 	constexpr float kNormalCameraFovY = 0.45f;
-	constexpr float kNormalCameraFarClip = 100.0f;
+	constexpr float kNormalCameraFarClip = 220.0f;
 	constexpr float kCinematicCameraFovY = 0.70f;
 	constexpr float kCinematicCameraFarClip = 250.0f;
 	constexpr float kCinematicCameraFocusBlend = 0.18f;

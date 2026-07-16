@@ -1,7 +1,7 @@
 ﻿#include "EnemyBulletManager.h"
 #include "3D/Object3dCommon.h"
 #include "Game/Player/Player.h"
-#include "Game/obstacle/Obstacle.h" // 霑ｽ蜉
+#include "Game/obstacle/Obstacle.h" // 追加
 
 namespace {
     constexpr float kEnemyBulletScale = 0.2f;
@@ -14,20 +14,20 @@ void EnemyBulletManager::Initialize() {
     for (auto &bullet : bullets_) {
         bullet.object = std::make_unique<Object3d>();
         bullet.object->Initialize(Object3dCommon::GetInstance());
-        bullet.object->SetModel("EnemyBox"); // 閾ｪ讖溘ｄ謨ｵ縺ｨ蜷後§繝｢繝・Ν繧剃ｽｿ縺・屓縺・
-        bullet.object->SetScale({ kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale }); // 蟆上＆縺上☆繧・
+        bullet.object->SetModel("EnemyBox"); // 自機や敵と同じモデルを使い回し
+        bullet.object->SetScale({ kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale }); // 小さくする
         if (bullet.object->GetModel()) {
-            bullet.object->GetModel()->SetColor({ 1.0f, 0.2f, 0.2f, 1.0f }); // 襍､濶ｲ
+            bullet.object->GetModel()->SetColor({ 1.0f, 0.2f, 0.2f, 1.0f }); // 赤色
         }
-        bullet.isDead = true; // 譛蛻昴・髱槭い繧ｯ繝・ぅ繝悶↓險ｭ螳・
+        bullet.isDead = true; // 最初は非アクティブに設定
     }
 }
 
 void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositions, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
     for (auto &bullet : bullets_) {
-        if (bullet.isDead) continue; // 髱槭い繧ｯ繝・ぅ繝悶↑蠑ｾ縺ｯ繧ｹ繧ｭ繝・・
+        if (bullet.isDead) continue; // 非アクティブな弾はスキップ
 
-        // 1. 遘ｻ蜍募・逅・
+        // 1. 移動処理
         bullet.position.x += bullet.velocity.x;
         bullet.position.y += bullet.velocity.y;
         bullet.position.z += bullet.velocity.z;
@@ -35,14 +35,14 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
         bullet.object->SetTranslate(bullet.position);
         bullet.object->Update();
 
-        // 2. 蟇ｿ蜻ｽ繝√ぉ繝・け
+        // 2. 寿命チェック
         bullet.lifeTimer--;
         if (bullet.lifeTimer <= 0) {
             bullet.isDead = true;
             continue;
         }
 
-        // 3. 髫懷ｮｳ迚ｩ縺ｨ縺ｮ蠖薙◆繧雁愛螳・
+        // 3. 障害物との当たり判定
         bool hitObstacle = false;
         Sphere bulletSphere;
         bulletSphere.center = bullet.position;
@@ -62,15 +62,15 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
         }
 
         if (hitObstacle) {
-            continue; // 髫懷ｮｳ迚ｩ縺ｫ蠖薙◆縺｣縺溘ｉ莉･髯阪・蛻､螳壹・繧ｹ繧ｭ繝・・
+            continue; // 障害物に当たったら以降の判定はスキップ
         }
 
         if (!player->IsDead()) {
             OBB playerOBB = player->GetOBB();
             if (MyMath::IsCollision(bulletSphere, playerOBB)) {
-                bullet.isDead = true; // 蠑ｾ繧呈ｶ医☆
+                bullet.isDead = true; // 弾を消す
 
-                // 繝励Ξ繧､繝､繝ｼ縺ｫ繝繝｡繝ｼ繧ｸ繧剃ｸ弱∴繧具ｼ亥偵☆・会ｼ・
+                // プレイヤーにダメージを与える
                 player->TakeDamage(1);
 
                 if (!player->IsDead()) {
@@ -94,7 +94,7 @@ void EnemyBulletManager::UpdateModels() {
 
 void EnemyBulletManager::Draw() {
     for (auto &bullet : bullets_) {
-        if (!bullet.isDead) { // 繧｢繧ｯ繝・ぅ繝悶↑蠑ｾ縺ｮ縺ｿ謠冗判
+        if (!bullet.isDead) { // アクティブな弾のみ描画
             bullet.object->Draw();
         }
     }
@@ -102,7 +102,7 @@ void EnemyBulletManager::Draw() {
 
 void EnemyBulletManager::Shoot(const Vector3 &position, const Vector3 &velocity) {
     for (auto &bullet : bullets_) {
-        if (bullet.isDead) { // 菴ｿ逕ｨ蜿ｯ閭ｽ縺ｪ蠑ｾ繧呈､懃ｴ｢
+        if (bullet.isDead) { // 使用可能な弾を検索
             bullet.position = position;
             bullet.velocity = velocity;
             bullet.lifeTimer = 120;
@@ -110,7 +110,7 @@ void EnemyBulletManager::Shoot(const Vector3 &position, const Vector3 &velocity)
 
             bullet.object->SetTranslate(position);
             bullet.object->Update();
-            break; // 逋ｺ蟆・＠縺溘・縺ｧ邨ゆｺ・
+            break; // 発射したので終了
         }
     }
 }

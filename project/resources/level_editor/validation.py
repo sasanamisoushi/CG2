@@ -251,7 +251,15 @@ def _has_missing_uv_map(obj):
 
 
 def _has_ngon(obj):
-    return obj.type == "MESH" and any(len(polygon.vertices) > 4 for polygon in obj.data.polygons)
+    if obj.type != "MESH":
+        return False
+    mesh = obj.data
+    poly_count = len(mesh.polygons)
+    if poly_count == 0:
+        return False
+    counts = [0] * poly_count
+    mesh.polygons.foreach_get("loop_total", counts)
+    return max(counts) > 4
 
 
 def _has_unassigned_material(obj):
@@ -259,18 +267,24 @@ def _has_unassigned_material(obj):
         return False
 
     mesh = obj.data
-    if len(mesh.polygons) == 0:
+    poly_count = len(mesh.polygons)
+    if poly_count == 0:
         return False
 
-    if len(obj.material_slots) == 0:
+    slots_len = len(obj.material_slots)
+    if slots_len == 0:
         return True
 
-    for polygon in mesh.polygons:
-        if polygon.material_index >= len(obj.material_slots):
+    empty_slots = {i for i, slot in enumerate(obj.material_slots) if slot.material is None}
+    
+    indices = [0] * poly_count
+    mesh.polygons.foreach_get("material_index", indices)
+    unique_indices = set(indices)
+    
+    for idx in unique_indices:
+        if idx >= slots_len or idx in empty_slots:
             return True
-        if obj.material_slots[polygon.material_index].material is None:
-            return True
-
+            
     return False
 
 
@@ -685,11 +699,12 @@ def validate_scene(scene):
         if category == "ENEMY":
             trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
             if not _is_unset_text(trigger_name):
-                trigger_name = str(trigger_name).strip()
-                if trigger_name == obj.name:
-                    errors.append(f"{obj.name}: 増援トリガーに自分自身は指定できません。")
-                elif trigger_name not in enemies_by_name:
-                    errors.append(f"{obj.name}: 増援トリガー '{trigger_name}' が見つかりません。")
+                trigger_names = [t.strip() for t in str(trigger_name).split(",") if t.strip()]
+                for t_name in trigger_names:
+                    if t_name == obj.name:
+                        errors.append(f"{obj.name}: 増援トリガーに自分自身は指定できません。")
+                    elif t_name not in enemies_by_name:
+                        errors.append(f"{obj.name}: 増援トリガー '{t_name}' が見つかりません。")
 
         if obj.type == "MESH":
             if obj.name.startswith("StageBounds"):

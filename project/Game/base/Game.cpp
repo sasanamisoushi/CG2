@@ -85,6 +85,7 @@ void Game::Initialize() {
 void Game::Finalize() {
 
 	
+	Input::GetInstance()->SetMouseCursorClipEnabled(false);
 
 	SceneManager::GetInstance()->Finalize();
 
@@ -119,6 +120,7 @@ void Game::Update() {
 		postEffect_->DrawImGui();
 	} else {
 		FlyCamera::SetGameViewHovered(false);
+		Input::GetInstance()->ClearMouseCursorClipRect();
 	}
 #endif
 
@@ -211,6 +213,7 @@ void Game::Draw() {
 			io.MousePos.x >= imageMin.x && io.MousePos.x <= imageMax.x &&
 			io.MousePos.y >= imageMin.y && io.MousePos.y <= imageMax.y;
 		FlyCamera::SetGameViewBounds(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
+		Input::GetInstance()->SetMouseCursorClipRect(imageMin.x, imageMin.y, imageMax.x, imageMax.y);
 		FlyCamera::SetGameViewHovered(isMouseInGameView);
 		FlyCamera::SubmitGameViewMouseInput(
 			isMouseInGameView,
@@ -229,6 +232,7 @@ void Game::Draw() {
 	} else 
 #endif
 	{
+		Input::GetInstance()->ClearMouseCursorClipRect();
 		// ImGuiなし（または非表示）：ポストエフェクトを直接スワップチェーンに描画する
 		DirectXCommon::GetInstance()->PreDrawSwapchain();
 

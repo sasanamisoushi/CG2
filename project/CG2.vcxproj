@@ -163,6 +163,7 @@
     <ClCompile Include="Game\enemy\EnemyEventManager.cpp" />
     <ClCompile Include="engine\Particle\ExplosionManager.cpp" />
     <ClCompile Include="Game\enemy\Enemy.cpp" />
+    <ClCompile Include="Game\enemy\Boss.cpp" />
     <ClCompile Include="engine\Collision\Collider.cpp" />
     <ClCompile Include="engine\Collision\CollisionConfig.cpp" />
     <ClCompile Include="engine\Collision\CollisionManager.cpp" />
@@ -298,6 +299,7 @@
     <ClInclude Include="Game\enemy\EnemyEventManager.h" />
     <ClInclude Include="engine\Particle\ExplosionManager.h" />
     <ClInclude Include="Game\enemy\Enemy.h" />
+    <ClInclude Include="Game\enemy\Boss.h" />
     <ClInclude Include="engine\Collision\Collider.h" />
     <ClInclude Include="engine\Collision\CollisionConfig.h" />
     <ClInclude Include="engine\Collision\CollisionManager.h" />

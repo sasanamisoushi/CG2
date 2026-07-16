@@ -1,7 +1,7 @@
-import sys
+ï»¿import sys
 import json
 
-filepath = "c:/Users/k024g/OneDrive/ƒfƒXƒNƒgƒbƒv/2”N/2”N‘OŠú/CG2/CG2/project/resources/level_editor/operators.py"
+filepath = "c:/Users/k024g/OneDrive/ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—/2å¹´/2å¹´å‰æœŸ/CG2/CG2/project/resources/level_editor/operators.py"
 with open(filepath, 'r', encoding='utf-8') as f:
     code = f.read()
 
@@ -9,7 +9,7 @@ with open(filepath, 'r', encoding='utf-8') as f:
 if 'path_obj["myaddon_ai_motion_state"] = json.dumps(motion)' not in code:
     code = code.replace(
         'path_obj["myaddon_ai_motion_prompt"] = motion_prompt\n        path_obj["myaddon_ai_provider"] = provider_label',
-        'path_obj["myaddon_ai_motion_prompt"] = motion_prompt\n        path_obj["myaddon_ai_provider"] = provider_label\n        if motion_prompt:\n            pass # Gemini‚Ìê‡‚Ímotion‚ª‚È‚¢‚Ì‚Å‚»‚Ì‚Ü‚Ü'
+        'path_obj["myaddon_ai_motion_prompt"] = motion_prompt\n        path_obj["myaddon_ai_provider"] = provider_label\n        if motion_prompt:\n            pass # Geminiã®å ´åˆã¯motionãŒãªã„ã®ã§ãã®ã¾ã¾'
     )
 
 # 2. Update MYADDON_OT_ai_generate_enemy_plan

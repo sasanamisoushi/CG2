@@ -1,4 +1,4 @@
-#include "Enemy.h"
+﻿#include "Enemy.h"
 #include "3D/Object3dCommon.h"
 #include "engine/Math/MyMath.h"
 #include "Game/enemy/EnemyBulletManager.h"
@@ -176,15 +176,15 @@ void Enemy::Initialize(const Vector3 &position) {
     object_ = std::make_unique<Object3d>();
     object_->Initialize(Object3dCommon::GetInstance());
 
-    // 閾ｪ讖溘→蜷後§Box繝｢繝・Ν繧剃ｽｿ縺・屓縺・
+    // 自機と同じBoxモデルを使い回し
     object_->SetModel("EnemyBox");
 
-    // 謨ｵ縺｣縺ｽ縺剰ｵ､濶ｲ縺ｫ縺吶ｋ
+    // 敵らしく赤色にする
     if (object_->GetModel()) {
         object_->GetModel()->SetColor({ 0.8f, 0.1f, 0.1f, 1.0f });
     }
 
-    // 繝励Ξ繧､繝､繝ｼ縺ｨ蜷後§螟ｧ縺阪＆縺ｫ縺吶ｋ
+    // プレイヤーと同じ大きさにする
     scale_ = { 0.2f, 0.2f, 0.2f };
     object_->SetScale(scale_);
 
@@ -215,15 +215,15 @@ void Enemy::Initialize(const Vector3 &position) {
 
 void Enemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 
-    if (isDead_) return; // 豁ｻ繧薙〒縺・◆繧我ｽ輔ｂ縺励↑縺・
+    if (isDead_) return; // 死んでいたら何もしない
 
-    // 1. AI諤晁・→遘ｻ蜍・
+    // 1. AI思考と移動
     UpdateAI(playerPos, bulletManager);
 
-    // 2. 蠖薙◆繧雁愛螳夲ｼ域款縺怜・縺暦ｼ・
+    // 2. 当たり判定（押し出し）
     CheckCollision(obstacles);
 
-    // 莉翫・蜍輔°縺ｪ縺・・縺ｧ縲∝ｺｧ讓吶ｒ繧ｻ繝・ヨ縺励※譖ｴ譁ｰ縺吶ｋ縺縺・
+    // 今は動かないので、座標をセットして更新するだけ
     UpdateModel();
 }
 
@@ -282,7 +282,7 @@ OBB Enemy::GetOBB() const {
     return obb;
 }
 
-// 蠖薙◆縺｣縺滓凾縺ｮ蜃ｦ逅・
+// 当たった時の処理
 void Enemy::OnCollision() {
     isDead_ = true;
 }
@@ -452,31 +452,49 @@ void Enemy::UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bul
     Vector3 oldPosition = position_;
     Vector3 oldForward = forward_;
 
-    size_t nextIndex = ResolvePathIndex(static_cast<int>(flightPathSegmentIndex_ + 1), flightPathPoints_.size(), flightPathLoop_);
-    Vector3 segmentVector = Subtract(flightPathPoints_[nextIndex], flightPathPoints_[flightPathSegmentIndex_]);
-    float segmentLength = Length(segmentVector);
-    if (segmentLength < 0.001f) {
-        segmentLength = 0.001f;
-    }
-    flightPathSegmentT_ += flightPathSpeed_ / segmentLength;
-
-    while (flightPathSegmentT_ >= 1.0f) {
-        flightPathSegmentT_ -= 1.0f;
-        ++flightPathSegmentIndex_;
-
-        if (flightPathSegmentIndex_ >= segmentCount) {
-            if (flightPathLoop_) {
-                flightPathSegmentIndex_ = 0;
-            } else {
-                flightPathSegmentIndex_ = segmentCount - 1;
-                flightPathSegmentT_ = 1.0f;
-                break;
+    float remainingDistance = flightPathSpeed_;
+    while (remainingDistance > 0.0f) {
+        size_t nextIndex = ResolvePathIndex(static_cast<int>(flightPathSegmentIndex_ + 1), flightPathPoints_.size(), flightPathLoop_);
+        Vector3 segmentVector = Subtract(flightPathPoints_[nextIndex], flightPathPoints_[flightPathSegmentIndex_]);
+        float segmentLength = Length(segmentVector);
+        
+        if (segmentLength < 0.0001f) {
+            ++flightPathSegmentIndex_;
+            flightPathSegmentT_ = 0.0f;
+            if (flightPathSegmentIndex_ >= segmentCount) {
+                if (flightPathLoop_) {
+                    flightPathSegmentIndex_ = 0;
+                } else {
+                    flightPathSegmentIndex_ = segmentCount - 1;
+                    flightPathSegmentT_ = 1.0f;
+                    break;
+                }
             }
+            continue;
+        }
+
+        float distanceToSegmentEnd = segmentLength * (1.0f - flightPathSegmentT_);
+        if (remainingDistance >= distanceToSegmentEnd) {
+            remainingDistance -= distanceToSegmentEnd;
+            flightPathSegmentT_ = 0.0f;
+            ++flightPathSegmentIndex_;
+            if (flightPathSegmentIndex_ >= segmentCount) {
+                if (flightPathLoop_) {
+                    flightPathSegmentIndex_ = 0;
+                } else {
+                    flightPathSegmentIndex_ = segmentCount - 1;
+                    flightPathSegmentT_ = 1.0f;
+                    break;
+                }
+            }
+        } else {
+            flightPathSegmentT_ += remainingDistance / segmentLength;
+            remainingDistance = 0.0f;
         }
     }
 
     position_ = EvaluateFlightPath(flightPathPoints_, flightPathSegmentIndex_, flightPathSegmentT_, flightPathLoop_);
-    Vector3 pathForward = NormalizeOr(Subtract(position_, oldPosition), NormalizeOr(segmentVector, oldForward));
+    Vector3 pathForward = NormalizeOr(Subtract(position_, oldPosition), oldForward);
     forward_ = pathForward;
     currentSpeed_ = flightPathSpeed_;
     velocity_ = Scale(forward_, currentSpeed_);
@@ -502,10 +520,9 @@ void Enemy::UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bul
 
 void Enemy::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
     // =========================================================
-    //    謨ｵ縺ｨ髫懷ｮｳ迚ｩ縺ｮ蠖薙◆繧雁愛螳・
+    //    敵と障害物の当たり判定
     // =========================================================
     OBB enemyOBB = GetOBB();
-
     for (const auto &obstacle : obstacles) {
         if (!obstacle) {
             continue;

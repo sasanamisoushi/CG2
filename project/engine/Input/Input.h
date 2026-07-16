@@ -45,6 +45,9 @@ public:
 	long GetMouseDeltaY() const { return mouseState_.lY; }
 	// マウスホイールの回転量（上=正, 下=負）
 	long GetMouseWheel() const { return mouseState_.lZ; }
+	void SetMouseCursorClipEnabled(bool enabled);
+	void SetMouseCursorClipRect(float minX, float minY, float maxX, float maxY);
+	void ClearMouseCursorClipRect();
 
 
 
@@ -77,6 +80,13 @@ private:
 	ComPtr<IDirectInputDevice8> mouse_;
 	DIMOUSESTATE mouseState_ = {};
 	DIMOUSESTATE mouseStatePre_ = {};
+	bool isMouseCursorClipEnabled_ = false;
+	bool isMouseCursorClipped_ = false;
+	bool hasMouseCursorClipRect_ = false;
+	RECT mouseCursorClipRect_ = {};
+
+	void ApplyMouseCursorClip();
+	bool GetClientMouseCursorClipRect(RECT& rect) const;
 };
 
 

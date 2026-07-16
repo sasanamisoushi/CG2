@@ -43,19 +43,19 @@ public:
 
 	explicit GamePlayScene(Mode mode = Mode::Gameplay);
 
-	//蛻晄悄蛹・
+	// 初期化
 	void Initialize() override;
 
-	//邨ゆｺ・
+	// 終了
 	void Finalize() override;
 
-	//豈弱ヵ繝ｬ繝ｼ繝譖ｴ譁ｰ
+	// 毎フレーム更新
 	void Update() override;
 
-	//謠冗判
+	// 描画
 	void Draw() override;
 
-	// UI縺ｮ譖ｴ譁ｰ
+	// UIの更新
 
 private:
 	friend class SimulationManager;
@@ -78,7 +78,7 @@ private:
 	void UpdateCinematicLockOnCamera();
 	Mode mode_ = Mode::Gameplay;
 
-	//繧ｷ繝ｼ繝ｳ繝ｪ繧ｽ繝ｼ繧ｹ
+	// シーンリソース
 	std::unique_ptr<Camera> camera;
 	std::unique_ptr<Sprite> sprite;
 	std::unique_ptr<Object3d> groundModel;
@@ -90,36 +90,36 @@ private:
 	std::unique_ptr<Object3d> ceilingBoundaryAlertObject_;
 
 
-	//繝代・繝・ぅ繧ｯ繝ｫ
+	// パーティクル
 
-	//繝｢繝・Ν
+	// モデル
 	std::vector<Object3d *> objects;
 
-	//髻ｳ螢ｰ繝・・繧ｿ
+	// 音声データ
 	SoundData soundData1;
 	SoundData soundData2;
 
-	// 蜀咲函荳ｭ縺ｮ繝懊う繧ｹ繧堤ｮ｡逅・☆繧九・繧､繧､繝ｳ繧ｿ
+	// 再生中のボイスを管理するポインタ
 	IXAudio2SourceVoice *pVoice1 = nullptr;
 	IXAudio2SourceVoice *pVoice2 = nullptr;
 
-	// 繝励Μ繝溘ユ繧｣繝・
+	// プリミティブ
 	std::unique_ptr<Primitive> myBox;
 
 	std::unique_ptr<Object3d> myModelObject;
 
-	// 陦ｨ遉ｺ蛻・崛繝輔Λ繧ｰ
+	// 表示切り替えフラグ
 
-	// Partial Ring逕ｨ繝代Λ繝｡繝ｼ繧ｿ
+	// Partial Ring用パラメータ
 
-	// Cylinder逕ｨ繝代Λ繝｡繝ｼ繧ｿ
+	// Cylinder用パラメータ
 
-	// 繧｢繝九Γ繝ｼ繧ｷ繝ｧ繝ｳ逕ｨ
+	// アニメーション用
 	Animation animationData;
 	float animationTime = 0.0f;
 	bool playAnimation = true;
 
-	// 繧ｹ繧ｱ繝ｫ繝医Φ
+	// スケルトン
 	Skeleton skeleton;
 	bool showBones = false;
 	bool showPlane = false;
@@ -130,13 +130,13 @@ private:
 	std::unique_ptr<Model> skeletonLinesModel;
 	std::unique_ptr<Object3d> skeletonLinesObject;
 
-	// 繝・ヰ繝・げ逕ｨ縺ｮ繧ｳ繝ｩ繧､繝繝ｼ謠冗判
+	// デバッグ用のコライダー描画
 	std::unique_ptr<Object3d> debugColliderLinesObject;
 	bool showDebugColliders = false;
 
 	// =====================================================
-	// 繝・ヰ繝・げ逕ｨ繝輔Μ繝ｼ繧ｫ繝｡繝ｩ
-	// 繝輔Μ繝ｼ繧ｫ繝｡繝ｩ荳ｭ縺ｯ WASD: 遘ｻ蜍・ 遏｢蜊ｰ: 蝗櫁ｻ｢, Q/E: 繝ｭ繝ｼ繝ｫ
+	// デバッグ用フリーカメラ
+	// フリーカメラ中は WASD: 移動, 矢印: 回転, Q/E: ロール
 	// =====================================================
 	std::unique_ptr<FlyCamera> debugFlyCamera_;
 	bool isDebugCameraActive_ = false;
@@ -150,26 +150,26 @@ private:
 	float cinematicLockOnCameraSideSign_ = 1.0f;
 	float cinematicLockOnCameraSeparation_ = 0.0f;
 
-	// UI縺ｨ迥ｶ諷狗ｮ｡逅・
+	// UIと状態管理
 	bool showModel = false;
-	bool enableSkinning = true; // 繧ｹ繧ｭ繝九Φ繧ｰ・医ぎ繝ｯ繧貞虚縺九☆・峨・蛻・ｊ譖ｿ縺・
+	bool enableSkinning = true; // スキニング（ガワを動かす）の切り替え
 	float modelScale = 1.0f;
 	int currentAnimationIndex = 0;
 
 
-	std::unique_ptr<Trail> missileTrail;        // 霆瑚ｷ｡縺ｮ險育ｮ励ｒ陦後≧繧ｯ繝ｩ繧ｹ
-	std::unique_ptr<Object3d> trailObject;      // 霆瑚ｷ｡繧呈緒逕ｻ縺吶ｋ螳滉ｽ・
+	std::unique_ptr<Trail> missileTrail;        // 軌跡の計算を行うクラス
+	std::unique_ptr<Object3d> trailObject;      // 軌跡を描画する実体
 
-	float missileNormalSpeed = 1.5f; // 騾壼ｸｸ蠑ｾ縺ｮ騾溷ｺｦ
+	float missileNormalSpeed = 1.5f; // 通常弾の速度
 	float missileNormalScale = 0.3f;
 	float missileNormalCollisionRadius = 0.3f;
 	int missileNormalLifeTime = 120;
-	float missileSpeed = 0.75f;   // 繝帙・繝溘Φ繧ｰ繝溘し繧､繝ｫ縺ｮ騾溷ｺｦ
-	float missileAmpX = 15.0f;   // X霆ｸ縺ｮ譌句屓蜊雁ｾ・ｼ域険繧雁ｹ・ｼ・
-	float missileAmpZ = 15.0f;   // Z霆ｸ縺ｮ譌句屓蜊雁ｾ・
-	float missileAmpY = 3.0f;    // 荳贋ｸ九↓豕｢謇薙▽鬮倥＆
-	float missileFreqY = 4.0f;    // 荳贋ｸ九↓豕｢謇薙▽邏ｰ縺九＆・亥捉豕｢謨ｰ・・
-	float missileBaseY = 5.0f;    // 蝓ｺ貅悶→縺ｪ繧矩｣幄｡碁ｫ伜ｺｦ
+	float missileSpeed = 0.75f;   // ホーミングミサイルの速度
+	float missileAmpX = 15.0f;   // X軸の旋回半径（横の広さ）
+	float missileAmpZ = 15.0f;   // Z軸の旋回半径
+	float missileAmpY = 3.0f;    // 上下に波打つ高さ
+	float missileFreqY = 4.0f;    // 上下に波打つ細かさ（振動数）
+	float missileBaseY = 5.0f;    // 基準となる飛行高度
 	float missileHomingStrength = 0.085f;
 	float missileHomingScale = 0.5f;
 	float missileHomingCollisionRadius = 0.5f;
@@ -179,11 +179,11 @@ private:
 
 	std::unique_ptr<Player> player_;
 
-	// 逕ｻ髱｢荳翫↓蟄伜惠縺吶ｋ縺吶∋縺ｦ縺ｮ繝溘し繧､繝ｫ繧堤ｮ｡逅・☆繧九Μ繧ｹ繝・
+	// 画面上に存在するミサイルを管理するマネージャ
 	std::unique_ptr<MissileManager> missileManager_;
 
 
-	// 謨ｵ
+	// 敵
 	std::list<std::unique_ptr<Enemy>> enemies_;
 	std::unique_ptr<EnemyBulletManager> enemyBulletManager_;
 	std::vector<EnemySpawnData> enemySpawns_;
@@ -192,20 +192,20 @@ private:
 	Enemy *lockedEnemy_ = nullptr;
 
 
-	// 髫懷ｮｳ迚ｩ
+	// 障害物
 	std::list<std::unique_ptr<Obstacle>> obstacles_;
 
-	// ImGui縺ｧ謨ｵ繧貞・縺吶◆繧√・蠎ｧ讓吝､画焚
+	// ImGuiで敵を出すための座標変数
 	float newEnemyPos[3] = { 0.0f, 0.0f, 50.0f };
 
-	// 辷・ｴ繧ｨ繝輔ぉ繧ｯ繝・
+	// 爆発エフェクト
 	std::unique_ptr<ExplosionManager> explosionManager_;
 
-	// 繧ｲ繝ｼ繝繧ｪ繝ｼ繝舌・貍泌・逕ｨ
+	// ゲームオーバー演出用
 	bool isGameOver_ = false;
 	int gameOverTimer_ = 0;
 
-	// 繧ｷ繝溘Η繝ｬ繝ｼ繧ｷ繝ｧ繝ｳ繝・・繝ｫUI逕ｨ
+	// シミュレーションツールUI用
 
 
 	// =====================================================
@@ -219,7 +219,7 @@ std::unique_ptr<GameCameraManager> cameraManager_;
 	std::unique_ptr<EnvironmentRenderer> environmentRenderer_;
 	std::unique_ptr<GamePlayUIManager> uiManager_;
 
-	// JSON繝輔ぃ繧､繝ｫ縺梧怙蠕後↓譖ｴ譁ｰ縺輔ｌ縺滓律譎ゅｒ險倬鹸縺吶ｋ螟画焚
+	// JSONファイルが最後に更新された日時を記録する変数
 	std::filesystem::file_time_type lastJsonWriteTime_;
 	Enemy* aimAssistEnemy_ = nullptr;
 	std::vector<Enemy*> multiLockTargets_;

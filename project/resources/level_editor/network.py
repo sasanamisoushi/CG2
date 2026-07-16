@@ -200,7 +200,25 @@ def build_scene_data(scene):
             if path_id != "None":
                 obj_data["path_id"] = path_id
 
+            wave_num = getattr(obj, "enemy_wave_number", 0)
             trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
+            
+            if wave_num > 0:
+                import bpy
+                scene = bpy.context.scene
+                prev_wave_enemies = [
+                    e for e in scene.objects
+                    if getattr(e, "game_obj_type", "NONE") == 'ENEMY'
+                    and getattr(e, "enemy_wave_number", 0) == wave_num - 1
+                ]
+                auto_trigger = ", ".join([e.name for e in prev_wave_enemies])
+                
+                if auto_trigger:
+                    if is_unset_text(trigger_name):
+                        trigger_name = auto_trigger
+                    else:
+                        trigger_name = auto_trigger + ", " + trigger_name
+
             if not is_unset_text(trigger_name):
                 obj_data["reinforcement"] = {
                     "trigger": str(trigger_name).strip(),

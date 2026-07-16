@@ -1,4 +1,4 @@
-import bpy
+﻿import bpy
 import mathutils
 import gpu
 from gpu_extras.batch import batch_for_shader

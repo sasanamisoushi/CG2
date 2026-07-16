@@ -1,4 +1,4 @@
-﻿import json
+import json
 import math
 import os
 import random
@@ -128,12 +128,12 @@ def _get_world_transform(obj):
 def _is_enemy_path_object(obj):
     if obj.type != 'CURVE':
         return False
-    path_id = obj.get("enemy_path_id", "None")
+    path_id = getattr(obj, "enemy_path_id", "None")
     return path_id != "None" or obj.name.startswith("EnemyPath")
 
 
 def _get_enemy_path_id(obj):
-    path_id = obj.get("enemy_path_id", "None")
+    path_id = getattr(obj, "enemy_path_id", "None")
     if path_id != "None":
         return path_id
     return obj.name.split(".", 1)[0]
@@ -328,17 +328,8 @@ def _save_ai_learning(data):
 def _is_prompt_complex(prompt_text):
     if not prompt_text:
         return False
-        
     text = str(prompt_text).strip()
-    
-    if len(text) > 25:
-        return True
-        
-    complex_kws = ["複雑", "ランダム", "時間差", "徐々に", "変則", "特殊", "トリッキー", "みたいな", "のような", "だんだん", "途中で"]
-    if any(kw in text for kw in complex_kws):
-        return True
-        
-    return False
+    return len(text) > 0
 
 
 def _parse_ai_enemy_prompt(prompt_text):
@@ -765,10 +756,10 @@ def _sanitize_enemy_plan_data(plan_data, count, center, extents, player):
     scene = bpy.context.scene
     enemies = plan_data.get("enemies") if isinstance(plan_data, dict) else None
     if not isinstance(enemies, list) or not enemies:
-        raise ValueError("Geminiから敵データが返ってきませんでした。")
+        raise ValueError("AIから敵データが返ってきませんでした。")
 
     blueprints = []
-    margin = Vector((1.0, 1.0, 0.8))
+    margin = Vector((0.5, 0.5, 0.5))
     for index, enemy in enumerate(enemies[:count]):
         if not isinstance(enemy, dict):
             continue
@@ -883,7 +874,9 @@ def _build_gemini_enemy_prompt(count, seed, style, motion_prompt, wave_delay, ce
         f"Player spawn JSON: {json.dumps(player_data, ensure_ascii=False)}\n"
         f"Designer request: {motion_prompt}\n"
         "Rules:\n"
-        "- Every spawn and path point must stay inside the field bounds.\n"
+        "- Every spawn and path point must stay inside the field bounds. DO NOT cluster points near the center.\n"
+        "- Actively use the entire field bounds (min to max). Scatter enemies dynamically!\n"
+        "- If requested to place at edge/corner/far side, use coordinates near bounds min/max limits.\n"
         "- spawn should be the first path point or very close to it.\n"
         "- Each path must contain 3 to 10 points.\n"
         "- Use loop=true for patrol, orbit, lap, circle, one-lap, or field-edge movement.\n"
@@ -915,7 +908,7 @@ def _parse_gemini_json_text(text):
         raise
 
 
-def _request_gemini_enemy_plan(scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
+def _request_ollama_enemy_plan(scene, count, seed, style, motion_prompt, wave_delay, center, extents, player):
     api_key = _resolve_gemini_api_key(scene)
     if not api_key:
         raise ValueError("Gemini APIキーが設定されていません。")
@@ -947,7 +940,7 @@ def _request_gemini_enemy_plan(scene, count, seed, style, motion_prompt, wave_de
         method="POST",
     )
 
-    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_gemini_timeout", 25)))
+    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 25)))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             response_data = json.loads(response.read().decode("utf-8"))
@@ -1070,19 +1063,23 @@ def _build_gemini_enemy_prompt(count, seed, history_msgs, wave_delay, center, ex
     prompt = (
         "You are an AI level designer assistant for a 3D side-scrolling action game.\n"
         "Based on the conversation history below, determine the final enemy spawn plan.\n"
-        "Return ONLY JSON that matches the provided schema. Do NOT output markdown code blocks.\n"
+        "Return ONLY valid JSON matching the schema.\n"
         "Coordinate system: X is left/right, Y is field depth, Z is height. Unit is Blender world unit.\n"
-        f"Enemy count should be roughly {count}, but you can adjust if the user specifically asked for a different number.\n"
+        f"Enemy count MUST be exactly {count} unless the user explicitly requested a different amount.\n"
         f"Seed hint: {seed}. Default reinforcement delay: {wave_delay} frames.\n"
         f"Field bounds JSON: {json.dumps(bounds, ensure_ascii=False)}\n"
         f"Player spawn JSON: {json.dumps(player_data, ensure_ascii=False)}\n"
         "Rules:\n"
-        "- Every spawn and path point must stay inside the field bounds.\n"
+        "- Every spawn and path point must stay inside the field bounds. DO NOT cluster points near the center.\n"
+        "- Actively use the entire field bounds (min to max). Scatter enemies dynamically!\n"
+        "- If requested to place at edge/corner/far side, use coordinates near bounds min/max limits.\n"
         "- If `enemy_path_id` is provided by the user (e.g. 'Path_001'), specify it. If specified, the generated `path` points might be ignored, but provide a single dummy point in `path` to satisfy schema.\n"
         "- If `enemy_path_id` is empty, generate 3 to 10 points for `path`.\n"
+        "- Use handle_type=\"VECTOR\" for paths that must not bulge outside the field.\n"
         "- Use `enemy_type` as requested (e.g. 'VF1-1', 'VF1').\n"
         "- Use `loop=true` for patrol, orbit, circle.\n"
         "- `trigger_index` is -1 for enemies that appear immediately. To make an enemy appear when another is defeated, set `trigger_index` to the array index of that target enemy.\n"
+        "- You MUST output exactly {count} enemies in the JSON array unless specifically requested otherwise.\n"
     )
     if baseline_plan:
         prompt += f"\nBaseline Plan generated by Built-in AI:\n{json.dumps(baseline_plan, ensure_ascii=False)}\n\n"
@@ -1115,51 +1112,44 @@ def _parse_gemini_json_text(text):
             return json.loads(stripped[start:end + 1])
         raise
 
-def _request_gemini_enemy_plan(context, scene, count, seed, history_msgs, wave_delay, center, extents, player, baseline_plan=None):
-    api_key = _resolve_gemini_api_key(context)
-    if not api_key:
-        raise ValueError("Gemini APIキーが設定されていません。環境変数 GEMINI_API_KEY を設定するか、パネルから入力してください。")
-
-    model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+def _request_ollama_enemy_plan(context, scene, count, seed, history_msgs, wave_delay, center, extents, player, baseline_plan=None):
+    model = getattr(scene, "myaddon_ai_ollama_model", "llama3")
+    url = "http://localhost:11434/api/generate"
+    
     prompt = _build_gemini_enemy_prompt(count, seed, history_msgs, wave_delay, center, extents, player, baseline_plan)
+    prompt += "\n\nJSON Schema:\n" + json.dumps(_ai_enemy_plan_schema(), indent=2)
+    prompt += "\n\nYou MUST return only valid JSON matching the exact schema."
+
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                ],
-            },
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": _ai_enemy_plan_schema(),
-            "maxOutputTokens": 4096,
-        },
+        "model": model,
+        "prompt": prompt,
+        "format": "json",
+        "stream": False
     }
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
         },
         method="POST",
     )
 
-    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_gemini_timeout", 25)))
+    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 25)))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             response_data = json.loads(response.read().decode("utf-8"))
-        candidates = response_data.get("candidates", [])
-        if not candidates:
-            return None
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(part.get("text", "") for part in parts)
-        return _parse_gemini_json_text(text)
+            
+        response_text = response_data.get("response", "")
+        if not response_text.strip():
+            raise RuntimeError("Ollamaからの応答が空欄です。")
+            
+        return _parse_gemini_json_text(response_text)
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Ollamaに接続できません。起動しているか確認してください: {exc.reason}") from exc
     except Exception as exc:
-        print(f"Gemini Enemy Plan error: {exc}")
-        return None
+        print(f"Ollama Enemy Plan error: {exc}")
+        raise RuntimeError(str(exc))
 def _ai_level_plan_schema():
     return {
         "type": "OBJECT",
@@ -1192,51 +1182,38 @@ Conversation History:
     prompt += "\nNow, output the JSON."
     return prompt
 
-def _request_gemini_level_plan(context, scene, history_msgs):
-    api_key = _resolve_gemini_api_key(context)
-    if not api_key:
-        return None
-        
-    model = urllib.parse.quote(_gemini_model_name(scene), safe="/")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+def _request_ollama_level_plan(context, scene, history_msgs):
+    model = getattr(scene, "myaddon_ai_ollama_model", "llama3")
+    url = "http://localhost:11434/api/generate"
     prompt = _build_gemini_level_prompt(history_msgs)
+    prompt += "\n\nJSON Schema:\n" + json.dumps(_ai_level_plan_schema(), indent=2)
+    prompt += "\n\nYou MUST return only valid JSON matching the exact schema."
+
     payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                ],
-            },
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseSchema": _ai_level_plan_schema(),
-            "maxOutputTokens": 1024,
-        },
+        "model": model,
+        "prompt": prompt,
+        "format": "json",
+        "stream": False
     }
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
-            "x-goog-api-key": api_key,
         },
         method="POST",
     )
 
-    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_gemini_timeout", 25)))
+    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 25)))
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             text = response.read().decode("utf-8")
+            
         data = json.loads(text)
-        candidates = data.get("candidates", [{}])
-        if not candidates:
-            return None
-        parts = candidates[0].get("content", {}).get("parts", [])
-        content_text = "".join(part.get("text", "") for part in parts)
-        return _parse_gemini_json_text(content_text)
+        response_text = data.get("response", "")
+        return _parse_gemini_json_text(response_text)
     except Exception as exc:
-        print(f"Gemini Level Plan error: {exc}")
+        print(f"Ollama Level Plan error: {exc}")
         return None
 
 
@@ -1301,7 +1278,7 @@ def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, moti
         elif trigger_index == -1:
             ui_trigger_target = getattr(scene, "myaddon_ai_enemy_trigger_target", None)
             if ui_trigger_target:
-                trigger_name = ui_trigger_target.name
+                trigger_name = ui_trigger_target
 
         enemy_name = f"AIEnemy_{index + 1:02d}"
         enemy_obj = _create_ai_enemy_spawn(
@@ -1379,12 +1356,30 @@ def _build_object_data(obj, model_filenames=None):
             "type": obj.enemy_type,
         }
 
-    if obj.get("game_obj_type", "NONE") == 'ENEMY':
-        path_id = obj.get("enemy_path_id", "None")
+    if getattr(obj, "game_obj_type", "NONE") == 'ENEMY':
+        path_id = getattr(obj, "enemy_path_id", "None")
         if path_id != "None":
             obj_data["path_id"] = path_id
 
+        wave_num = getattr(obj, "enemy_wave_number", 0)
         trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
+        
+        if wave_num > 0:
+            import bpy
+            scene = bpy.context.scene
+            prev_wave_enemies = [
+                e for e in scene.objects
+                if getattr(e, "game_obj_type", "NONE") == 'ENEMY'
+                and getattr(e, "enemy_wave_number", 0) == wave_num - 1
+            ]
+            auto_trigger = ", ".join([e.name for e in prev_wave_enemies])
+            
+            if auto_trigger:
+                if _is_unset_text(trigger_name):
+                    trigger_name = auto_trigger
+                else:
+                    trigger_name = auto_trigger + ", " + trigger_name
+
         if not _is_unset_text(trigger_name):
             obj_data["reinforcement"] = {
                 "trigger": str(trigger_name).strip(),
@@ -2057,7 +2052,7 @@ class MYADDON_OT_ai_generate_level_obstacles(bpy.types.Operator):
         
         gemini_plan = None
         if _is_prompt_complex(latest_text):
-            gemini_plan = _request_gemini_level_plan(context, scene, history)
+            gemini_plan = _request_ollama_level_plan(context, scene, history)
             if gemini_plan:
                 plan["style"] = gemini_plan.get("style", plan["style"])
                 plan["shape"] = gemini_plan.get("shape", plan["shape"])
@@ -2252,9 +2247,9 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
         rng = random.Random(seed)
         provider = getattr(scene, "myaddon_ai_enemy_provider", 'BUILTIN')
 
-        if provider == 'GEMINI':
+        if provider == 'OLLAMA':
             try:
-                plan_data = _request_gemini_enemy_plan(
+                plan_data = _request_ollama_enemy_plan(
                     context,
                     scene,
                     count,
@@ -2275,7 +2270,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                     blueprints,
                     motion_prompt,
                     player,
-                    "GEMINI",
+                    "OLLAMA",
                 )
 
                 bpy.ops.object.select_all(action='DESELECT')
@@ -2288,17 +2283,17 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 _auto_export_scene_json()
 
                 if errors:
-                    self.report({'WARNING'}, f"Geminiで生成しましたが、チェックエラーが{len(errors)}件あります。")
+                    self.report({'WARNING'}, f"Ollamaで生成しましたが、チェックエラーが{len(errors)}件あります。")
                 elif warnings:
-                    self.report({'WARNING'}, f"Geminiで生成しました。警告{len(warnings)}件があります。")
+                    self.report({'WARNING'}, f"Ollamaで生成しました。警告{len(warnings)}件があります。")
                 else:
                     self.report({'INFO'}, f"Geminiで敵プランを生成しました: 敵{len(generated_enemies)} / パス{len(generated_enemies)}")
                 return {'FINISHED'}
             except Exception as exc:
-                if not getattr(scene, "myaddon_ai_enemy_gemini_fallback", True):
-                    self.report({'ERROR'}, f"Gemini生成に失敗しました: {exc}")
+                if not getattr(scene, "myaddon_ai_enemy_ollama_fallback", True):
+                    self.report({'ERROR'}, f"Ollama生成に失敗しました: {exc}")
                     return {'CANCELLED'}
-                self.report({'WARNING'}, f"Gemini生成に失敗したため内蔵AIで生成します: {exc}")
+                self.report({'WARNING'}, f"Ollama生成に失敗したため内蔵AIで生成します: {exc}")
 
         latest_msg = history[-1].content if history else ""
 
@@ -2319,7 +2314,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
             opener_count = count
         elif motion.get("opener") == "ONE":
             opener_count = 1
-        margin = Vector((2.0, 2.0, 1.2))
+        margin = Vector((0.5, 0.5, 0.5))
         if getattr(scene, "myaddon_ai_enemy_clear_existing", True):
             _delete_ai_generated_objects(scene)
 
@@ -2393,11 +2388,11 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
             builtin_plan["enemies"].append(enemy_plan)
 
         blueprints = None
-        gemini_used = False
+        ollama_used = False
 
         if _is_prompt_complex(latest_msg):
             try:
-                plan_data = _request_gemini_enemy_plan(
+                plan_data = _request_ollama_enemy_plan(
                     context,
                     scene,
                     count,
@@ -2411,7 +2406,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 )
                 if plan_data:
                     blueprints = _sanitize_enemy_plan_data(plan_data, count, center, extents, player)
-                    gemini_used = True
+                    ollama_used = True
                     
                     # Learning from Gemini feedback
                     if "enemies" in plan_data and len(plan_data["enemies"]) > 0 and len(builtin_plan["enemies"]) > 0:
@@ -2445,7 +2440,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
             blueprints,
             full_text,
             player,
-            "GEMINI" if gemini_used else "BUILTIN",
+            "OLLAMA" if ollama_used else "BUILTIN",
         )
 
         bpy.ops.object.select_all(action='DESELECT')
@@ -2460,8 +2455,8 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
         msg_ai = scene.myaddon_ai_enemy_chat_history.add()
         msg_ai.role = "AI"
         
-        if gemini_used:
-            msg_ai.content = f"{len(generated_enemies)}体の敵を生成しました (Gemini最適化済)"
+        if ollama_used:
+            msg_ai.content = f"{len(generated_enemies)}体の敵を生成しました (Ollama最適化済)"
             msg_ai.gemini_ratio = 100
         else:
             msg_ai.content = f"{len(generated_enemies)}体の敵を配置しました (内蔵AI)"
@@ -2566,19 +2561,42 @@ class MYADDON_OT_assign_selected_reinforcement_trigger(bpy.types.Operator):
 
         selected_triggers = [
             obj for obj in context.selected_objects
-            if obj != active and obj.get("game_obj_type", "NONE") == "ENEMY"
+            if obj != active and getattr(obj, "game_obj_type", "NONE") == "ENEMY"
         ]
 
         if not selected_triggers:
-            self.report({'ERROR'}, "jgK[ɂʂ̓GX|[n_ꏏɑIĂB")
+            self.report({'ERROR'}, "トリガーにする敵オブジェクトを選択してください。")
             return {'CANCELLED'}
 
-        active.enemy_reinforcement_trigger_name = selected_triggers[0].name
+        active.enemy_reinforcement_trigger_name = ", ".join([obj.name for obj in selected_triggers])
         if getattr(active, "enemy_reinforcement_delay_frames", 0) < 0:
             active.enemy_reinforcement_delay_frames = 0
 
         validation.validate_and_store(context.scene)
-        self.report({'INFO'}, f"{selected_triggers[0].name} |ꂽ {active.name} o܂B")
+        self.report({'INFO'}, f"[{active.enemy_reinforcement_trigger_name}] が倒されたら {active.name} が出現します。")
+        return {'FINISHED'}
+
+
+class MYADDON_OT_assign_ai_reinforcement_trigger(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_assign_ai_reinforcement_trigger"
+    bl_label = "選択中の敵をAIの増援トリガーに設定"
+    bl_description = "現在選択されている敵オブジェクトをAI増援のトリガーとして設定します"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selected_triggers = [
+            obj for obj in context.selected_objects
+            if getattr(obj, "game_obj_type", "NONE") == "ENEMY"
+        ]
+
+        if not selected_triggers:
+            self.report({'ERROR'}, "トリガーにする敵オブジェクトを選択してください。")
+            return {'CANCELLED'}
+
+        names = ", ".join([obj.name for obj in selected_triggers])
+        context.scene.myaddon_ai_enemy_trigger_target = names
+
+        self.report({'INFO'}, f"AI増援トリガーに設定しました: {names}")
         return {'FINISHED'}
 
 
@@ -2689,7 +2707,7 @@ class MYADDON_OT_ai_edit_selected_obstacle(bpy.types.Operator):
         
         gemini_plan = None
         if len(history) > 0:
-            gemini_plan = _request_gemini_level_plan(context, scene, history)
+            gemini_plan = _request_ollama_level_plan(context, scene, history)
             if gemini_plan:
                 plan["style"] = gemini_plan.get("style", plan["style"])
                 plan["shape"] = gemini_plan.get("shape", plan["shape"])
@@ -2864,7 +2882,8 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
         layout = self.layout
         layout.prop(self, "motion_prompt")
         layout.prop(self, "seed")
-        layout.label(text="LLM有効時はこの位置・プロンプトで1体分のみ再生成します", icon='INFO')
+        layout.label(text="※複数選択時は各パスに対して1回ずつAIが生成を行います", icon='INFO')
+        layout.label(text="(シード値はパスごとに自動でずらして重なりを防ぎます)", icon='INFO')
 
     def execute(self, context):
         scene = context.scene
@@ -2901,7 +2920,7 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
         rng = random.Random(self.seed)
         wave_delay = max(0, int(getattr(scene, "myaddon_ai_enemy_wave_delay", 90)))
         
-        gemini_used = False
+        ollama_used = False
         updated_count = 0
         for path_obj in selected_paths:
             path_id = getattr(path_obj, "enemy_path_id", path_obj.name)
@@ -2926,16 +2945,40 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
                             self.seed = 1
                     temp_history = [DummyMsg(f"IMPORTANT: Partial regeneration. Enemy count must be exactly 1. Current spawn point is {{'x': {spawn.x}, 'y': {spawn.y}, 'z': {spawn.z}}}, but you MAY move the spawn location if the designer's request explicitly asks for it. Ignore global rules. {self.motion_prompt}")]
                     
-                    plan_data = _request_gemini_enemy_plan(
+                    existing_points = []
+                    if path_obj.type == 'CURVE' and path_obj.data.splines:
+                        spline = path_obj.data.splines[0]
+                        for bp in spline.bezier_points:
+                            existing_points.append([bp.co.x + path_obj.location.x, bp.co.y + path_obj.location.y, bp.co.z + path_obj.location.z])
+                    else:
+                        existing_points.append([spawn.x, spawn.y, spawn.z])
+                    
+                    loop_val = False
+                    if path_obj.type == 'CURVE' and path_obj.data.splines:
+                        loop_val = path_obj.data.splines[0].use_cyclic_u
+                        
+                    baseline_plan = [{
+                        "spawn": [spawn.x, spawn.y, spawn.z],
+                        "path": existing_points,
+                        "loop": loop_val,
+                        "speed": 0.05,
+                        "enemy_type": "VF1-1",
+                        "trigger_index": -1,
+                        "delay_frames": 0,
+                        "handle_type": "AUTO"
+                    }]
+
+                    plan_data = _request_ollama_enemy_plan(
                         context,
                         scene,
                         1,
-                        self.seed,
+                        self.seed + updated_count,
                         temp_history,
                         wave_delay,
                         center,
                         extents,
                         player,
+                        baseline_plan=baseline_plan
                     )
                     blueprints = _sanitize_enemy_plan_data(plan_data, 1, center, extents, player)
                     if blueprints:
@@ -2943,14 +2986,14 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
                         loop = blueprints[0]["loop"]
                         speed = blueprints[0]["speed"]
                         handle_type = blueprints[0]["handle_type"]
-                        gemini_used = True
+                        ollama_used = True
                     else:
                         points = []
                         loop = False
                         speed = 0.05
                         handle_type = 'AUTO'
                 except Exception as exc:
-                    self.report({'ERROR'}, f"Gemini再生成に失敗しました: {exc}")
+                    self.report({'ERROR'}, f"Ollama再生成に失敗しました: {exc}")
                     continue
             else:
                 points = _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, 0, rng, __import__('mathutils').Vector((0,0,0)))
@@ -2990,8 +3033,8 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
 
             msg_ai = scene.myaddon_ai_enemy_chat_history.add()
             msg_ai.role = "AI"
-            if gemini_used:
-                msg_ai.content = f"{updated_count}個のパスを再生成しました (Gemini最適化済)"
+            if ollama_used:
+                msg_ai.content = f"{updated_count}個のパスを再生成しました (Ollama最適化済)"
                 msg_ai.gemini_ratio = 100
             else:
                 msg_ai.content = f"{updated_count}個のパスを再生成しました (内蔵AI)"
@@ -3112,6 +3155,7 @@ classes = (
     MYADDON_OT_create_enemy_path,
     MYADDON_OT_assign_selected_enemy_path,
     MYADDON_OT_assign_selected_reinforcement_trigger,
+    MYADDON_OT_assign_ai_reinforcement_trigger,
     MYADDON_OT_create_stage_bounds,
     MYADDON_OT_create_spawn_point,
 )

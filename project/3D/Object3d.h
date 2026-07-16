@@ -120,4 +120,3 @@ private:
 	bool useQuaternion_ = false;
 	Quaternion quaternionRotate_ = {0.0f, 0.0f, 0.0f, 1.0f};
 };
-

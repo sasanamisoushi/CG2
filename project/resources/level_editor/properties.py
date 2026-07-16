@@ -10,6 +10,9 @@ def register():
     bpy.utils.register_class(MYADDON_PropertyGroup_AIChatMessage)
     bpy.types.Scene.myaddon_ai_chat_history = bpy.props.CollectionProperty(type=MYADDON_PropertyGroup_AIChatMessage)
     bpy.types.Scene.myaddon_ai_enemy_chat_history = bpy.props.CollectionProperty(type=MYADDON_PropertyGroup_AIChatMessage)
+    bpy.types.Scene.myaddon_ai_enemy_force_params = bpy.props.StringProperty(name="Force Enemy Params", default="")
+    bpy.types.Scene.myaddon_ai_level_force_params = bpy.props.StringProperty(name="Force Level Params", default="")
+    bpy.types.Scene.myaddon_ai_ollama_model = bpy.props.StringProperty(name="Ollamaモデル名", default="llama3", description="Ollamaで使用するローカルAIモデル名（例: llama3, gemma2）")
     # プロパティ登録
     bpy.types.Scene.myaddon_custom_string = bpy.props.StringProperty(name="カスタム文字列")
     bpy.types.Scene.myaddon_game_exe_path = bpy.props.StringProperty(
@@ -49,19 +52,19 @@ def register():
         description="指定すると、新しくパスを生成せず既存のパスを指定します",
         default=""
     )
-    bpy.types.Scene.myaddon_ai_enemy_trigger_target = bpy.props.PointerProperty(
+    bpy.types.Scene.myaddon_ai_enemy_trigger_target = bpy.props.StringProperty(
         name="倒されたら出現",
-        description="このターゲットが倒された時に生成した敵を出撃させます",
-        type=bpy.types.Object
+        description="このターゲット（複数可、カンマ区切り）が倒された時に生成した敵を出撃させます",
+        default=""
     )
-    bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key = bpy.props.StringProperty(
+    bpy.types.WindowManager.myaddon_ai_enemy_ollama_api_key = bpy.props.StringProperty(
         name="Gemini APIキー",
         description="このBlender起動中だけ使う一時入力です。空欄なら環境変数 GEMINI_API_KEY を使います",
         default="",
         subtype='PASSWORD',
         options={'SKIP_SAVE'},
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_model = bpy.props.EnumProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_model = bpy.props.EnumProperty(
         name="Geminiモデル",
         items=[
             ('gemini-3.5-flash', "Gemini 3.5 Flash", "安定版。敵ルート生成の標準候補です"),
@@ -72,13 +75,13 @@ def register():
         ],
         default='gemini-3.5-flash',
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_timeout = bpy.props.IntProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_timeout = bpy.props.IntProperty(
         name="待ち時間(秒)",
         default=25,
         min=5,
         max=120,
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_fallback = bpy.props.BoolProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_fallback = bpy.props.BoolProperty(
         name="失敗時は内蔵AIで生成",
         default=True,
     )
@@ -86,23 +89,23 @@ def register():
         name="生成方式",
         items=[
             ('BUILTIN', "内蔵AI", "高速なルールベース生成を使います"),
-            ('GEMINI', "Gemini API", "生成AIに敵配置と飛行ルートを作らせます"),
+            ('OLLAMA', "Ollama (ローカルAI)", "ローカルAIに敵配置と飛行ルートを作らせます"),
         ],
-        default='BUILTIN',
+        default='OLLAMA',
     )
     bpy.types.Scene.myaddon_ai_enemy_motion_prompt = bpy.props.StringProperty(
         name="動きの指定",
         description="例: 時計回りに一周 / 左右にジグザグしながら上昇 / まっすぐ突撃",
         default="左右に旋回して接近",
     )
-    bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key = bpy.props.StringProperty(
+    bpy.types.WindowManager.myaddon_ai_enemy_ollama_api_key = bpy.props.StringProperty(
         name="Gemini APIキー",
         description="このBlender起動中だけ使う一時入力です。空欄なら環境変数 GEMINI_API_KEY を使います",
         default="",
         subtype='PASSWORD',
         options={'SKIP_SAVE'},
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_model = bpy.props.EnumProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_model = bpy.props.EnumProperty(
         name="Geminiモデル",
         items=[
             ('gemini-3.5-flash', "Gemini 3.5 Flash", "安定版。敵ルート生成の標準候補です"),
@@ -113,13 +116,13 @@ def register():
         ],
         default='gemini-3.5-flash',
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_timeout = bpy.props.IntProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_timeout = bpy.props.IntProperty(
         name="待ち時間(秒)",
         default=25,
         min=5,
         max=120,
     )
-    bpy.types.Scene.myaddon_ai_enemy_gemini_fallback = bpy.props.BoolProperty(
+    bpy.types.Scene.myaddon_ai_enemy_ollama_fallback = bpy.props.BoolProperty(
         name="失敗時は内蔵AIで生成",
         default=True,
     )
@@ -171,6 +174,12 @@ def register():
     bpy.types.Object.enemy_path_id = bpy.props.StringProperty(name="飛行パスID", default="None")
     bpy.types.Object.enemy_path_loop = bpy.props.BoolProperty(name="ループ", default=False)
     bpy.types.Object.enemy_path_speed = bpy.props.FloatProperty(name="速度", default=0.05, min=0.001)
+    bpy.types.Object.enemy_wave_number = bpy.props.IntProperty(
+        name="ウェーブ番号",
+        description="0=初期出現。1以上は前のウェーブが全滅すると出現します",
+        default=0,
+        min=0,
+    )
     bpy.types.Object.enemy_reinforcement_trigger_name = bpy.props.StringProperty(
         name="増援トリガー",
         description="この敵を出現させるきっかけになる敵リスポーン地点名",
@@ -201,6 +210,10 @@ def unregister():
     if hasattr(bpy.types.Scene, "myaddon_ai_chat_history"):
         del bpy.types.Scene.myaddon_ai_chat_history
         del bpy.types.Scene.myaddon_ai_enemy_chat_history
+    if hasattr(bpy.types.Scene, "myaddon_ai_enemy_force_params"):
+        del bpy.types.Scene.myaddon_ai_enemy_force_params
+        del bpy.types.Scene.myaddon_ai_level_force_params
+        del bpy.types.Scene.myaddon_ai_ollama_model
     try:
         bpy.utils.unregister_class(MYADDON_PropertyGroup_AIChatMessage)
     except:
@@ -215,10 +228,10 @@ def unregister():
     del bpy.types.Scene.myaddon_ai_enemy_base_type
     del bpy.types.Scene.myaddon_ai_enemy_base_path_id
     del bpy.types.Scene.myaddon_ai_enemy_trigger_target
-    del bpy.types.WindowManager.myaddon_ai_enemy_gemini_api_key
-    del bpy.types.Scene.myaddon_ai_enemy_gemini_model
-    del bpy.types.Scene.myaddon_ai_enemy_gemini_timeout
-    del bpy.types.Scene.myaddon_ai_enemy_gemini_fallback
+    del bpy.types.WindowManager.myaddon_ai_enemy_ollama_api_key
+    del bpy.types.Scene.myaddon_ai_enemy_ollama_model
+    del bpy.types.Scene.myaddon_ai_enemy_ollama_timeout
+    del bpy.types.Scene.myaddon_ai_enemy_ollama_fallback
     del bpy.types.Scene.myaddon_ai_enemy_wave_delay
     del bpy.types.Scene.myaddon_ai_enemy_clear_existing
     
@@ -236,6 +249,7 @@ def unregister():
     del bpy.types.Object.enemy_path_id
     del bpy.types.Object.enemy_path_loop
     del bpy.types.Object.enemy_path_speed
+    del bpy.types.Object.enemy_wave_number
     del bpy.types.Object.enemy_reinforcement_trigger_name
     del bpy.types.Object.enemy_reinforcement_delay_frames
     del bpy.types.Object.game_obj_type

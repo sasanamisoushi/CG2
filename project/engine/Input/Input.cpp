@@ -73,6 +73,7 @@ void Input::Update() {
 			mouseState_.lZ = 0;
 		}
 	}
+	ApplyMouseCursorClip();
 
 }
 
@@ -106,4 +107,94 @@ bool Input::TriggerMouseButton(int button) const {
 	if (button < 0 || button > 3) return false;
 	return ((mouseState_.rgbButtons[button] & 0x80) != 0) &&
 	       ((mouseStatePre_.rgbButtons[button] & 0x80) == 0);
+}
+
+void Input::SetMouseCursorClipEnabled(bool enabled) {
+	if (isMouseCursorClipEnabled_ == enabled) {
+		return;
+	}
+
+	isMouseCursorClipEnabled_ = enabled;
+	ApplyMouseCursorClip();
+}
+
+void Input::SetMouseCursorClipRect(float minX, float minY, float maxX, float maxY) {
+	RECT rect{
+		static_cast<LONG>(minX),
+		static_cast<LONG>(minY),
+		static_cast<LONG>(maxX),
+		static_cast<LONG>(maxY)
+	};
+
+	hasMouseCursorClipRect_ = rect.right > rect.left && rect.bottom > rect.top;
+	if (hasMouseCursorClipRect_) {
+		mouseCursorClipRect_ = rect;
+	}
+	ApplyMouseCursorClip();
+}
+
+void Input::ClearMouseCursorClipRect() {
+	hasMouseCursorClipRect_ = false;
+	ApplyMouseCursorClip();
+}
+
+void Input::ApplyMouseCursorClip() {
+	if (!winApp_) {
+		return;
+	}
+
+	const HWND hwnd = winApp_->GetHwnd();
+	const bool canClip =
+		isMouseCursorClipEnabled_ &&
+		hwnd != nullptr &&
+		GetForegroundWindow() == hwnd &&
+		!IsIconic(hwnd);
+
+	if (!canClip) {
+		if (isMouseCursorClipped_) {
+			ClipCursor(nullptr);
+			isMouseCursorClipped_ = false;
+		}
+		return;
+	}
+
+	RECT clipRect{};
+	if (hasMouseCursorClipRect_) {
+		clipRect = mouseCursorClipRect_;
+	} else if (!GetClientMouseCursorClipRect(clipRect)) {
+		if (isMouseCursorClipped_) {
+			ClipCursor(nullptr);
+			isMouseCursorClipped_ = false;
+		}
+		return;
+	}
+
+	if (clipRect.right <= clipRect.left || clipRect.bottom <= clipRect.top) {
+		return;
+	}
+
+	if (ClipCursor(&clipRect)) {
+		isMouseCursorClipped_ = true;
+	}
+}
+
+bool Input::GetClientMouseCursorClipRect(RECT& rect) const {
+	if (!winApp_ || !winApp_->GetHwnd()) {
+		return false;
+	}
+
+	RECT clientRect{};
+	if (!GetClientRect(winApp_->GetHwnd(), &clientRect)) {
+		return false;
+	}
+
+	POINT leftTop{ clientRect.left, clientRect.top };
+	POINT rightBottom{ clientRect.right, clientRect.bottom };
+	if (!ClientToScreen(winApp_->GetHwnd(), &leftTop) ||
+		!ClientToScreen(winApp_->GetHwnd(), &rightBottom)) {
+		return false;
+	}
+
+	rect = { leftTop.x, leftTop.y, rightBottom.x, rightBottom.y };
+	return rect.right > rect.left && rect.bottom > rect.top;
 }

@@ -69,11 +69,40 @@ std::unordered_map<std::string, EnemyFlightPath> LoadFlightPaths(const json &roo
 	return paths;
 }
 
+std::vector<std::string> SplitStringByComma(const std::string& str) {
+	std::vector<std::string> result;
+	size_t start = 0;
+	size_t end = str.find(',');
+	while (end != std::string::npos) {
+		std::string token = str.substr(start, end - start);
+		// trim
+		token.erase(0, token.find_first_not_of(" \t"));
+		token.erase(token.find_last_not_of(" \t") + 1);
+		if (!token.empty()) {
+			result.push_back(token);
+		}
+		start = end + 1;
+		end = str.find(',', start);
+	}
+	std::string token = str.substr(start);
+	token.erase(0, token.find_first_not_of(" \t"));
+	token.erase(token.find_last_not_of(" \t") + 1);
+	if (!token.empty()) {
+		result.push_back(token);
+	}
+	return result;
+}
+
 EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position, const Vector3 &rotation, const std::unordered_map<std::string, EnemyFlightPath> &paths) {
 	EnemySpawnData spawnData;
 	spawnData.name = objData.value("name", "UnknownEnemy");
 	spawnData.position = position;
 	spawnData.rotation = rotation;
+
+	if (spawnData.name.find("Boss") == 0) {
+		spawnData.isBoss = true;
+		spawnData.isInitialSpawn = false;
+	}
 
 	if (objData.contains("path_id") && objData["path_id"].is_string()) {
 		auto pathIt = paths.find(objData["path_id"].get<std::string>());
@@ -85,6 +114,9 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	if (objData.contains("reinforcement") && objData["reinforcement"].is_object()) {
 		const auto &reinforcement = objData["reinforcement"];
 		spawnData.reinforcementTriggerName = reinforcement.value("trigger", "");
+		spawnData.reinforcementTriggerNames = SplitStringByComma(spawnData.reinforcementTriggerName);
+		spawnData.remainingReinforcementTriggers = spawnData.reinforcementTriggerNames;
+		
 		spawnData.reinforcementDelayFrames = reinforcement.value("delay", 0);
 		if (spawnData.reinforcementDelayFrames < 0) {
 			spawnData.reinforcementDelayFrames = 0;

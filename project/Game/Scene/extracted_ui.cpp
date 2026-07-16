@@ -36,13 +36,13 @@
 bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std::string &actionName) {
 	const std::string trimmedName = TrimActionName(actionName);
 	if (trimmedName.empty()) {
-		simulationActionMessage_ = "読み込む行動名がありません、E;
+		simulationActionMessage_ = "読み込む行動名がありません。";
 		return false;
 	}
 
 	std::ifstream ifs(filePath);
 	if (!ifs.is_open()) {
-		simulationActionMessage_ = "名前付き行動ファイルが見つかりません、E;
+		simulationActionMessage_ = "名前付き行動ファイルが見つかりません。";
 		return false;
 	}
 
@@ -50,12 +50,12 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 	try {
 		ifs >> root;
 	} catch (...) {
-		simulationActionMessage_ = "名前付き行動ファイルを読み込めませんでした、E;
+		simulationActionMessage_ = "名前付き行動ファイルを読み込めませんでした。";
 		return false;
 	}
 
 	if (!root.contains("actions") || !root["actions"].is_array()) {
-		simulationActionMessage_ = "保存された行動がありません、E;
+		simulationActionMessage_ = "保存された行動がありません。";
 		return false;
 	}
 
@@ -68,7 +68,7 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 	}
 
 	if (!action) {
-		simulationActionMessage_ = "選択した行動が見つかりません、E;
+		simulationActionMessage_ = "選択した行動が見つかりません。";
 		return false;
 	}
 
@@ -215,7 +215,7 @@ bool GamePlayScene::ApplySimulationAction(const std::string &filePath, const std
 		missileManager_->UpdateModels(activeCamera);
 	}
 
-	simulationActionMessage_ = "設定、E + trimmedName + "」をゲームに読み込みました、E;
+	simulationActionMessage_ = "設定「" + trimmedName + "」をゲームに読み込みました。";
 	return true;
 }
 
@@ -263,7 +263,7 @@ bool GamePlayScene::SaveMissilePreset(const std::string &filePath, int missileTy
 	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
 	const std::string trimmedName = TrimActionName(presetName);
 	if (trimmedName.empty()) {
-		missilePresetMessage_ = "保存名を�E力してください、E;
+		missilePresetMessage_ = "保存名を入力してください。";
 		return false;
 	}
 
@@ -319,7 +319,7 @@ bool GamePlayScene::SaveMissilePreset(const std::string &filePath, int missileTy
 
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
-		missilePresetMessage_ = "ミサイル設定を保存できませんでした、E;
+		missilePresetMessage_ = "ミサイル設定を保存できませんでした。";
 		return false;
 	}
 
@@ -335,7 +335,7 @@ bool GamePlayScene::SaveMissilePreset(const std::string &filePath, int missileTy
 	}
 
 	missilePresetMessage_ =
-		std::string(typeIndex == 0 ? "通常弾" : "ホ�Eミング") + "設定、E + trimmedName + "」を保存しました、E;
+		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を保存しました。";
 	return true;
 }
 
@@ -343,13 +343,13 @@ bool GamePlayScene::ApplyMissilePreset(const std::string &filePath, int missileT
 	const int typeIndex = std::clamp(missileTypeIndex, 0, 1);
 	const std::string trimmedName = TrimActionName(presetName);
 	if (trimmedName.empty()) {
-		missilePresetMessage_ = "読み込むミサイル設定名がありません、E;
+		missilePresetMessage_ = "読み込むミサイル設定名がありません。";
 		return false;
 	}
 
 	std::ifstream ifs(filePath);
 	if (!ifs.is_open()) {
-		missilePresetMessage_ = "ミサイル設定ファイルが見つかりません、E;
+		missilePresetMessage_ = "ミサイル設定ファイルが見つかりません。";
 		return false;
 	}
 
@@ -357,13 +357,13 @@ bool GamePlayScene::ApplyMissilePreset(const std::string &filePath, int missileT
 	try {
 		ifs >> root;
 	} catch (...) {
-		missilePresetMessage_ = "ミサイル設定ファイルを読み込めませんでした、E;
+		missilePresetMessage_ = "ミサイル設定ファイルを読み込めませんでした。";
 		return false;
 	}
 
 	const char *keys[] = { "normal", "homing" };
 	if (!root.contains(keys[typeIndex]) || !root[keys[typeIndex]].is_array()) {
-		missilePresetMessage_ = "選択した種類�E保存設定がありません、E;
+		missilePresetMessage_ = "選択した種類の保存設定がありません。";
 		return false;
 	}
 
@@ -375,7 +375,7 @@ bool GamePlayScene::ApplyMissilePreset(const std::string &filePath, int missileT
 		}
 	}
 	if (!preset) {
-		missilePresetMessage_ = "選択したミサイル設定が見つかりません、E;
+		missilePresetMessage_ = "選択したミサイル設定が見つかりません。";
 		return false;
 	}
 
@@ -395,7 +395,7 @@ bool GamePlayScene::ApplyMissilePreset(const std::string &filePath, int missileT
 	missileMuzzleOffset = ReadJsonFloat(*preset, "muzzleOffset", missileMuzzleOffset);
 
 	missilePresetMessage_ =
-		std::string(typeIndex == 0 ? "通常弾" : "ホ�Eミング") + "設定、E + trimmedName + "」を読み込みました、E;
+		std::string(typeIndex == 0 ? "通常弾" : "ホーミング") + "設定「" + trimmedName + "」を読み込みました。";
 	return true;
 }
 
@@ -403,21 +403,21 @@ void GamePlayScene::DrawSimulationSaveControls() {
 #ifdef ENABLE_IMGUI
 	ImGui::Separator();
 	ImGui::InputText("保存名", simulationActionName_, IM_ARRAYSIZE(simulationActionName_));
-	if (ImGui::Button("名前を付けて行動を保孁E)) {
+	if (ImGui::Button("名前を付けて行動を保存")) {
 		SaveNamedSimulationAction(kSimulationActionsFilePath, simulationActionName_);
 	}
 
 void GamePlayScene::DrawGameplayActionControls() {
 #ifdef ENABLE_IMGUI
 	ImGui::Separator();
-	ImGui::Text("保存済みシミュレーション設宁E);
-	ImGui::TextWrapped("シミュレーション画面で保存した�E容を、現在のゲーム側の設定値として読み込みます、E);
+	ImGui::Text("保存済みシミュレーション設定");
+	ImGui::TextWrapped("シミュレーション画面で保存した内容を、現在のゲーム側の設定値として読み込みます。");
 	if (ImGui::Button("保存一覧を更新")) {
 		RefreshSimulationActionNames();
 	}
 
 	if (simulationActionNames_.empty()) {
-		ImGui::TextDisabled("保存されたシミュレーション設定がありません、E);
+		ImGui::TextDisabled("保存されたシミュレーション設定がありません。");
 		if (!simulationActionMessage_.empty()) {
 			ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
 		}
@@ -434,8 +434,8 @@ void GamePlayScene::DrawGameplayActionControls() {
 		selectedSimulationActionIndex_ = 0;
 	}
 
-	ImGui::Combo("読み込む設宁E, &selectedSimulationActionIndex_, actionNameItems.data(), static_cast<int>(actionNameItems.size()));
-	if (ImGui::Button("こ�E設定をゲームに読み込む")) {
+	ImGui::Combo("読み込む設定", &selectedSimulationActionIndex_, actionNameItems.data(), static_cast<int>(actionNameItems.size()));
+	if (ImGui::Button("この設定をゲームに読み込む")) {
 		ApplySimulationAction(kSimulationActionsFilePath, simulationActionNames_[selectedSimulationActionIndex_]);
 	}
 
@@ -447,14 +447,14 @@ void GamePlayScene::DrawGameplayActionControls() {
 
 void GamePlayScene::DrawMissileSettingsUI() {
 #ifdef ENABLE_IMGUI
-	ImGui::Text("ミサイル設宁E);
-	ImGui::DragFloat("発封E��置距離", &missileMuzzleOffset, 0.05f, 0.0f, 5.0f, "%.2f");
+	ImGui::Text("ミサイル設定");
+	ImGui::DragFloat("発射位置距離", &missileMuzzleOffset, 0.05f, 0.0f, 5.0f, "%.2f");
 
 	ImGui::Separator();
-	const char *presetTypes[] = { "通常弾", "ホ�Eミング" };
-	ImGui::Combo("保存する種顁E, &missilePresetTypeIndex_, presetTypes, IM_ARRAYSIZE(presetTypes));
+	const char *presetTypes[] = { "通常弾", "ホーミング" };
+	ImGui::Combo("保存する種類", &missilePresetTypeIndex_, presetTypes, IM_ARRAYSIZE(presetTypes));
 	ImGui::InputText("ミサイル保存名", missilePresetName_, IM_ARRAYSIZE(missilePresetName_));
-	if (ImGui::Button("こ�E種類�E設定を保孁E)) {
+	if (ImGui::Button("この種類の設定を保存")) {
 		SaveMissilePreset(kMissilePresetsFilePath, missilePresetTypeIndex_, missilePresetName_);
 	}
 
@@ -496,7 +496,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 		return;
 	}
 	ImGui::SameLine();
-	if (ImGui::Button("リセチE��")) {
+	if (ImGui::Button("リセット")) {
 		ResetEditorPreview();
 	}
 	ImGui::SameLine();
@@ -510,16 +510,16 @@ void GamePlayScene::DrawSimulationScreenUI() {
 	ImGui::SameLine();
 	ImGui::TextColored(
 		isEditorPreviewPlaying_ ? ImVec4(0.0f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.65f, 0.0f, 1.0f),
-		"状慁E %s",
+		"状態: %s",
 		isEditorPreviewPlaying_ ? "再生中" : "停止中");
 
 	ImGui::Separator();
-	const char *previewModes[] = { "選択中だけ確誁E, "全体確誁E };
-	ImGui::Combo("確認モーチE, &simulationPlaybackMode_, previewModes, IM_ARRAYSIZE(previewModes));
+	const char *previewModes[] = { "選択中だけ確認", "全体確認" };
+	ImGui::Combo("確認モード", &simulationPlaybackMode_, previewModes, IM_ARRAYSIZE(previewModes));
 	if (simulationPlaybackMode_ == 0) {
-		ImGui::TextDisabled("今選んでぁE��カチE��リだけ動きます。ミサイルはチE��ト発封E�Eタンでだけ�Eます、E);
+		ImGui::TextDisabled("今選んでいるカテゴリだけ動きます。ミサイルはテスト発射ボタンでだけ出ます。");
 	} else {
-		ImGui::TextDisabled("プレイヤー・敵・ミサイルをまとめて動かして全体�E流れを確認します、E);
+		ImGui::TextDisabled("プレイヤー・敵・ミサイルをまとめて動かして全体の流れを確認します。");
 	}
 
 	ImGui::Separator();
@@ -530,7 +530,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			SetDebugCameraActive(false);
 		}
 	} else {
-		if (ImGui::Button("フリーカメラに戻ぁE(F3)")) {
+		if (ImGui::Button("フリーカメラに戻す (F3)")) {
 			SetDebugCameraActive(true);
 		}
 	}
@@ -538,17 +538,17 @@ void GamePlayScene::DrawSimulationScreenUI() {
 	DrawSimulationSaveControls();
 
 	ImGui::Separator();
-	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベンチE, "パ�EチE��クル", "カメラ" };
-	ImGui::Combo("カチE��リ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
+	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
+	ImGui::Combo("カテゴリ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
 	ImGui::Separator();
 
 	if (currentSimulationTarget_ == 0) {
-		ImGui::Text("プレイヤー移動設宁E);
+		ImGui::Text("プレイヤー移動設定");
 		if (player_) {
 			auto mode = player_->GetCurrentMode();
 			const char* modeName = (mode == PlayerMode::Fighter) ? "ファイター (1キー)" : 
-								   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイチE(3キー)";
-			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形慁E %s", modeName);
+								   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイド (3キー)";
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形態: %s", modeName);
 			
 			PlayerModeParams& p = player_->GetModeParams(mode);
 			ImGui::SliderFloat("最大移動速度", &p.maxMoveSpeed, 0.01f, 1.0f);
@@ -559,40 +559,40 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
 
 			ImGui::Separator();
-			ImGui::Text("アニメーションチE��チE��");
+			ImGui::Text("アニメーションデバッグ");
 			bool isDebug = player_->IsAnimDebugActive();
-			if (ImGui::Checkbox("チE��チE��時間を強制", &isDebug)) {
+			if (ImGui::Checkbox("デバッグ時間を強制", &isDebug)) {
 				player_->SetAnimDebugActive(isDebug);
 			}
 			if (isDebug) {
 				float t = player_->GetTargetAnimationTime();
 				float duration = player_->GetAnimationDuration();
-				if (ImGui::SliderFloat("アニメーション時間 (私E", &t, 0.0f, duration, "%.3f私E)) {
+				if (ImGui::SliderFloat("アニメーション時間 (秒)", &t, 0.0f, duration, "%.3f秒")) {
 					player_->SetTargetAnimationTime(t);
 				}
-				ImGui::Text("対応フレーム (24fps換箁E: %.1f", t * 24.0f);
+				ImGui::Text("対応フレーム (24fps換算): %.1f", t * 24.0f);
 			} else {
-				ImGui::Text("アニメーション時間: %.3f私E(目樁E %.3f私E", player_->GetAnimationTime(), player_->GetTargetAnimationTime());
+				ImGui::Text("アニメーション時間: %.3f秒 (目標: %.3f秒)", player_->GetAnimationTime(), player_->GetTargetAnimationTime());
 			}
 		} else {
-			ImGui::Text("プレイヤーが�E期化されてぁE��せん、E);
+			ImGui::Text("プレイヤーが初期化されていません。");
 		}
 	} else if (currentSimulationTarget_ == 1) {
 		DrawMissileSettingsUI();
 	} else if (currentSimulationTarget_ == 2) {
-		ImGui::Text("=== 敵の出現とルーチE===");
+		ImGui::Text("=== 敵の出現とルート ===");
 		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
-		ImGui::Text("Tab: ターゲチE��ロチE�� / X: ロチE��解除 / F2: シミュレーションを閉じる");
-		ImGui::DragFloat3("出現座樁E(X,Y,Z)", newEnemyPos, 1.0f);
+		ImGui::Text("Tab: ターゲットロック / X: ロック解除 / F2: シミュレーションを閉じる");
+		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
 
-		if (ImGui::Button("敵を生成する！E)) {
+		if (ImGui::Button("敵を生成する")) {
 			auto newEnemy = std::make_unique<Enemy>();
 			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
 			enemies_.push_back(std::move(newEnemy));
 		}
 
 		ImGui::Separator();
-		ImGui::Text("敵のリスチE(総数: %d)", static_cast<int>(enemies_.size()));
+		ImGui::Text("敵のリスト (総数: %d)", static_cast<int>(enemies_.size()));
 		int index = 0;
 		for (const auto &enemy : enemies_) {
 			Vector3 pos = enemy->GetPosition();
@@ -601,7 +601,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 		}
 
 		ImGui::Separator();
-		ImGui::Text("イベントツール�E�増援設定！E);
+		ImGui::Text("イベントツール：増援設定");
 		static int selectedTrigger = 0;
 		static int selectedTarget = 0;
 		static int eventDelay = 60;
@@ -619,20 +619,20 @@ void GamePlayScene::DrawSimulationScreenUI() {
 			}
 
 			ImGui::Combo("トリガーとなる敵", &selectedTrigger, enemyNames.data(), static_cast<int>(enemyNames.size()));
-			ImGui::Combo("出現する敵(ターゲチE��)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
-			ImGui::DragInt("出現までのチE��レイ(フレーム)", &eventDelay, 1, 0, 600);
+			ImGui::Combo("出現する敵(ターゲット)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
+			ImGui::DragInt("出現までのディレイ(フレーム)", &eventDelay, 1, 0, 600);
 			if (ImGui::Button("イベントを追加")) {
 				enemyEventManager_.AddEvent(enemyNames[selectedTrigger], enemyNames[selectedTarget], eventDelay);
 				enemySpawns_[selectedTarget].isInitialSpawn = false;
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("イベントを保孁E)) {
+			if (ImGui::Button("イベントを保存")) {
 				enemyEventManager_.SaveEvents("resources/enemy_events.json");
 			}
 
 			for (size_t i = 0; i < enemyEventManager_.GetEvents().size(); ++i) {
 				const auto &event = enemyEventManager_.GetEvents()[i];
-				ImGui::Text("[%d] %s が死んだめE%d F後に %s が�E現",
+				ImGui::Text("[%d] %s が死んだら %d F後に %s が出現",
 					static_cast<int>(i),
 					event.triggerEnemyName.c_str(),
 					event.delayFrames,
@@ -644,7 +644,7 @@ void GamePlayScene::DrawSimulationScreenUI() {
 				}
 			}
 		} else {
-			ImGui::Text("敵の出現チE�Eタがありません、E);
+			ImGui::Text("敵の出現データがありません。");
 		}
 
 void GamePlayScene::UpdateUI() {
@@ -656,9 +656,9 @@ void GamePlayScene::UpdateUI() {
 		}
 
 		ImGui::Begin("Simulation");
-		ImGui::Text("シミュレーション設宁E);
-		ImGui::TextWrapped("保存済み設定�E読み込みはここで行えます。細かい保存や確認�E専用画面を開ぁE��ください、E);
-		if (ImGui::Button("シミュレーション画面を開ぁE(F2)")) {
+		ImGui::Text("シミュレーション設定");
+		ImGui::TextWrapped("保存済み設定の読み込みはここで行えます。細かい保存や確認は専用画面を開いてください。");
+		if (ImGui::Button("シミュレーション画面を開く (F2)")) {
 			LaunchSimulationExecutable();
 		}
 		DrawGameplayActionControls();
@@ -667,7 +667,7 @@ void GamePlayScene::UpdateUI() {
 
 		// --- シミュレーション起動用ミニウィンドウ ---
 		ImGui::Begin("シミュレーション", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-		if (ImGui::Button(showSimulationWindow_ ? "シミュレーションチE�Eルを閉じる" : "シミュレーションチE�Eルを開ぁE)) {
+		if (ImGui::Button(showSimulationWindow_ ? "シミュレーションツールを閉じる" : "シミュレーションツールを開く")) {
 			showSimulationWindow_ = !showSimulationWindow_;
 		}
 		ImGui::End();
@@ -675,19 +675,19 @@ void GamePlayScene::UpdateUI() {
 		// --- シミュレーション詳細ウィンドウ ---
 		if (showSimulationWindow_) {
 			ImGui::SetNextWindowSize(ImVec2(600.0f, 500.0f), ImGuiCond_Once);
-			ImGui::Begin("シミュレーションチE�Eル", &showSimulationWindow_);
+			ImGui::Begin("シミュレーションツール", &showSimulationWindow_);
 			
-			const char* categories[] = { "プレイヤー", "ミサイル", "敵 & イベンチE, "パ�EチE��クル", "カメラ" };
-			ImGui::Combo("カチE��リ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
+			const char* categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
+			ImGui::Combo("カテゴリ", &currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
 			ImGui::Separator();
 
 			if (currentSimulationTarget_ == 0) {
-				ImGui::Text("プレイヤー移動設宁E);
+				ImGui::Text("プレイヤー移動設定");
 				if (player_) {
 					auto mode = player_->GetCurrentMode();
 					const char* modeName = (mode == PlayerMode::Fighter) ? "ファイター (1キー)" : 
-										   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイチE(3キー)";
-					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形慁E %s", modeName);
+										   (mode == PlayerMode::Gerwalk) ? "ガウォーク (2キー)" : "バトロイド (3キー)";
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.5f, 1.0f), "現在の形態: %s", modeName);
 					
 					PlayerModeParams& p = player_->GetModeParams(mode);
 					ImGui::SliderFloat("最大移動速度", &p.maxMoveSpeed, 0.01f, 1.0f);
@@ -697,26 +697,26 @@ void GamePlayScene::UpdateUI() {
 					ImGui::SliderFloat("ヨー回転速度", &p.yawSpeed, 0.001f, 0.1f);
 					ImGui::SliderFloat("ロール回転速度", &p.rollSpeed, 0.001f, 0.1f);
 				} else {
-					ImGui::Text("プレイヤーが�E期化されてぁE��せん、E);
+					ImGui::Text("プレイヤーが初期化されていません。");
 				}
 			}
 			else if (currentSimulationTarget_ == 1) {
 				DrawMissileSettingsUI();
 			}
 			else if (currentSimulationTarget_ == 2) {
-				ImGui::Text("=== 敵の出現とルーチE===");
+				ImGui::Text("=== 敵の出現とルート ===");
 				ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
 				ImGui::Text("Tab: lock target / X: unlock");
-				ImGui::DragFloat3("出現座樁E(X,Y,Z)", newEnemyPos, 1.0f);
+				ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
 
-				if (ImGui::Button("敵を生成する！E)) {
+				if (ImGui::Button("敵を生成する")) {
 					auto newEnemy = std::make_unique<Enemy>();
 					newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
 					enemies_.push_back(std::move(newEnemy));
 				}
 
 				ImGui::Separator();
-				ImGui::Text("=== 敵のリスチE(総数: %d) ===", (int)enemies_.size());
+				ImGui::Text("=== 敵のリスト (総数: %d) ===", (int)enemies_.size());
 				int index = 0;
 				for (const auto& enemy : enemies_) {
 					Vector3 pos = enemy->GetPosition();
@@ -725,7 +725,7 @@ void GamePlayScene::UpdateUI() {
 				}
 
 				ImGui::Separator();
-				ImGui::Text("イベントツール�E�増援設定！E);
+				ImGui::Text("イベントツール：増援設定");
 				static int selectedTrigger = 0;
 				static int selectedTarget = 0;
 				static int eventDelay = 60;
@@ -737,19 +737,19 @@ void GamePlayScene::UpdateUI() {
 					if (selectedTrigger >= enemyNames.size()) selectedTrigger = 0;
 					if (selectedTarget >= enemyNames.size()) selectedTarget = 0;
 					ImGui::Combo("トリガーとなる敵", &selectedTrigger, enemyNames.data(), static_cast<int>(enemyNames.size()));
-					ImGui::Combo("出現する敵(ターゲチE��)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
-					ImGui::DragInt("出現までのチE��レイ(フレーム)", &eventDelay, 1, 0, 600);
+					ImGui::Combo("出現する敵(ターゲット)", &selectedTarget, enemyNames.data(), static_cast<int>(enemyNames.size()));
+					ImGui::DragInt("出現までのディレイ(フレーム)", &eventDelay, 1, 0, 600);
 					if (ImGui::Button("イベントを追加")) {
 						enemyEventManager_.AddEvent(enemyNames[selectedTrigger], enemyNames[selectedTarget], eventDelay);
 						enemySpawns_[selectedTarget].isInitialSpawn = false;
 					}
 					ImGui::SameLine();
-					if (ImGui::Button("イベントを保孁E)) {
+					if (ImGui::Button("イベントを保存")) {
 						enemyEventManager_.SaveEvents("resources/enemy_events.json");
 					}
 					for (size_t i = 0; i < enemyEventManager_.GetEvents().size(); ++i) {
 						const auto& ev = enemyEventManager_.GetEvents()[i];
-						ImGui::Text("[%d] %s が死んだめE%d F後に %s が�E現", (int)i, ev.triggerEnemyName.c_str(), ev.delayFrames, ev.targetEnemyName.c_str());
+						ImGui::Text("[%d] %s が死んだら %d F後に %s が出現", (int)i, ev.triggerEnemyName.c_str(), ev.delayFrames, ev.targetEnemyName.c_str());
 						ImGui::SameLine();
 						if (ImGui::Button(("削除##" + std::to_string(i)).c_str())) {
 							enemyEventManager_.RemoveEvent(i);
@@ -759,24 +759,24 @@ void GamePlayScene::UpdateUI() {
 				}
 
 				ImGui::Separator();
-				ImGui::Text("敵機ルート確誁E(Editor Preview)");
-				if (ImGui::Button("リセチE��")) ResetEditorPreview();
+				ImGui::Text("敵機ルート確認 (Editor Preview)");
+				if (ImGui::Button("リセット")) ResetEditorPreview();
 				ImGui::SameLine();
 				if (ImGui::Button("再生")) isEditorPreviewPlaying_ = true;
 				ImGui::SameLine();
-				if (ImGui::Button("ストッチE)) isEditorPreviewPlaying_ = false;
-				ImGui::TextColored(isEditorPreviewPlaying_ ? ImVec4(0.0f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.65f, 0.0f, 1.0f), "状慁E %s", isEditorPreviewPlaying_ ? "再生中" : "停止中");
+				if (ImGui::Button("ストップ")) isEditorPreviewPlaying_ = false;
+				ImGui::TextColored(isEditorPreviewPlaying_ ? ImVec4(0.0f, 1.0f, 0.3f, 1.0f) : ImVec4(1.0f, 0.65f, 0.0f, 1.0f), "状態: %s", isEditorPreviewPlaying_ ? "再生中" : "停止中");
 			}
 			else if (currentSimulationTarget_ == 3) {
 				ImGui::Text("=== GPU Particles ===");
 				bool gpuChanged = false;
 				if (auto *emitter = particleManager->GetEmitterSphere()) {
 					if (ImGui::DragFloat3("位置", &emitter->translate.x, 0.01f)) gpuChanged = true;
-					if (ImGui::DragFloat("封E�E半征E, &emitter->radius, 0.01f)) gpuChanged = true;
-					if (ImGui::DragInt("封E�E数", (int *) &emitter->count, 1, 0, 1000)) gpuChanged = true;
-					if (ImGui::DragFloat("封E�E間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
+					if (ImGui::DragFloat("射出半径", &emitter->radius, 0.01f)) gpuChanged = true;
+					if (ImGui::DragInt("射出数", (int *) &emitter->count, 1, 0, 1000)) gpuChanged = true;
+					if (ImGui::DragFloat("射出間隔", &emitter->frequency, 0.01f, 0.01f, 10.0f)) gpuChanged = true;
 				}
-				if (ImGui::Button("GPUパ�EチE��クルを�E初期匁E) || gpuChanged) {
+				if (ImGui::Button("GPUパーティクルを再初期化") || gpuChanged) {
 					particleManager->RequestGpuInitialize();
 				}
 				
@@ -787,13 +787,13 @@ void GamePlayScene::UpdateUI() {
 					ImGui::DragInt("発生数", &config.count, 1, 0, 1000);
 					ImGui::ColorEdit4("カラー", config.color);
 					ImGui::DragFloat("速度", &config.speed, 0.01f, 0.0f, 10.0f);
-					ImGui::DragFloat("速度ばらつぁE, &config.speedVariance, 0.01f, 0.0f, 5.0f);
+					ImGui::DragFloat("速度ばらつき", &config.speedVariance, 0.01f, 0.0f, 5.0f);
 					ImGui::DragFloat("スケール", &config.scale, 0.001f, 0.0f, 5.0f);
-					ImGui::DragFloat("スケールばらつぁE, &config.scaleVariance, 0.001f, 0.0f, 2.0f);
+					ImGui::DragFloat("スケールばらつき", &config.scaleVariance, 0.001f, 0.0f, 2.0f);
 					ImGui::DragFloat("最小寿命", &config.lifeTimeMin, 0.01f, 0.0f, 10.0f);
 					ImGui::DragFloat("最大寿命", &config.lifeTimeMax, 0.01f, 0.0f, 10.0f);
-					ImGui::DragFloat("位置ばらつぁE, &config.posVariance, 0.01f, 0.0f, 5.0f);
-					if (ImGui::Button("設定をJSONに保孁E)) explosionManager_->SaveToJson("resources/explosionConfig.json");
+					ImGui::DragFloat("位置ばらつき", &config.posVariance, 0.01f, 0.0f, 5.0f);
+					if (ImGui::Button("設定をJSONに保存")) explosionManager_->SaveToJson("resources/explosionConfig.json");
 					ImGui::SameLine();
 					if (ImGui::Button("設定をJSONから読込")) explosionManager_->LoadFromJson("resources/explosionConfig.json");
 				}
@@ -812,7 +812,7 @@ void GamePlayScene::UpdateUI() {
 					if (ImGui::DragFloat("回転感度 (マウス右)##fly", &sens, 0.0001f, 0.0001f, 0.05f, "%.4f")) debugFlyCamera_->SetMouseSensitivity(sens);
 					if (ImGui::DragFloat("スクロール速度##fly", &scroll, 0.1f, 0.1f, 20.0f)) debugFlyCamera_->SetScrollSpeed(scroll);
 					if (ImGui::DragFloat("パン速度 (中ボタン)##fly", &pan, 0.001f, 0.001f, 1.0f)) debugFlyCamera_->SetPanSpeed(pan);
-					if (ImGui::DragFloat("回転速度 (キーボ�EチE##fly",&rotSpd, 0.001f, 0.001f, 0.5f)) debugFlyCamera_->SetRotateSpeed(rotSpd);
+					if (ImGui::DragFloat("回転速度 (キーボード)##fly",&rotSpd, 0.001f, 0.001f, 0.5f)) debugFlyCamera_->SetRotateSpeed(rotSpd);
 					Vector3 flyPos = debugFlyCamera_->GetTranslate();
 					float flyPosArr[3] = { flyPos.x, flyPos.y, flyPos.z };
 					if (ImGui::DragFloat3("カメラ位置##fly", flyPosArr, 0.1f)) debugFlyCamera_->SetTranslate({ flyPosArr[0], flyPosArr[1], flyPosArr[2] });
@@ -823,7 +823,7 @@ void GamePlayScene::UpdateUI() {
 					ImGui::Text("Cinematic: %s", (isCinematicLockOnCameraEnabled_ && lockedEnemy_) ? "ACTIVE" : "OFF");
 					Vector3 camPos = camera->GetTranslate();
 					float camPosArr[3] = { camPos.x, camPos.y, camPos.z };
-					if (ImGui::DragFloat3("カメラ位置 (参老E##follow", camPosArr, 0.1f)) camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
+					if (ImGui::DragFloat3("カメラ位置 (参考)##follow", camPosArr, 0.1f)) camera->SetTranslate({ camPosArr[0], camPosArr[1], camPosArr[2] });
 				}
 			}
 

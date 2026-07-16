@@ -1,5 +1,6 @@
 import bpy
 import operators
+import async_gemini
 
 _MENU_HANDLER_KEY = "cg2_level_editor_topbar_menu_handler"
 
@@ -84,7 +85,8 @@ class OBJECT_PT_file_name(bpy.types.Panel):
             game_box.prop(obj, "enemy_path_id", text="飛行パスID")
             game_box.separator()
             game_box.label(text="Reinforcement")
-            game_box.prop_search(obj, "enemy_reinforcement_trigger_name", context.scene, "objects", text="倒されたら出現")
+            game_box.prop(obj, "enemy_wave_number", text="ウェーブ番号(0=初期)")
+            game_box.prop(obj, "enemy_reinforcement_trigger_name", text="手動トリガー(上級者向)")
             game_box.prop(obj, "enemy_reinforcement_delay_frames", text="ディレイ(F)")
             game_box.operator(
                 operators.MYADDON_OT_assign_selected_reinforcement_trigger.bl_idname,
@@ -194,11 +196,10 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
 
-        gemini_box = layout.box()
-        gemini_box.label(text="Gemini API設定", icon='WORLD')
-        gemini_box.prop(context.window_manager, "myaddon_ai_enemy_gemini_api_key", text="APIキー")
-        gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_model", text="モデル")
-        gemini_box.prop(context.scene, "myaddon_ai_enemy_gemini_timeout", text="待ち時間(秒)")
+        ollama_box = layout.box()
+        ollama_box.label(text="Ollama API設定", icon='WORLD')
+        ollama_box.prop(context.scene, "myaddon_ai_ollama_model", text="モデル")
+        ollama_box.prop(context.scene, "myaddon_ai_enemy_ollama_timeout", text="待ち時間(秒)")
         
         ai_box = layout.box()
         ai_box.label(text="AI敵ジェネレーター", icon='MOD_PARTICLES')
@@ -216,13 +217,19 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
                     op.target_index = i
                 else:
                     ratio = getattr(msg, "gemini_ratio", -1)
-                    ratio_text = f" [Gemini {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
+                    ratio_text = f" [Ollama {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
                     row.label(text=f"AI: {msg.content}{ratio_text}", icon='MONKEY')
         enemy_chat_box.operator(operators.MYADDON_OT_ai_enemy_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_base_type", text="敵のタイプ")
         ai_box.prop(context.scene, "myaddon_ai_enemy_base_path_id", text="飛行パスID")
-        ai_box.prop(context.scene, "myaddon_ai_enemy_trigger_target", text="倒されたら出現")
+        row = ai_box.row(align=True)
+        row.prop(context.scene, "myaddon_ai_enemy_trigger_target", text="倒されたら出現")
+        row.operator(
+            operators.MYADDON_OT_assign_ai_reinforcement_trigger.bl_idname,
+            text="",
+            icon='EYEDROPPER'
+        )
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_prompt", text="コンセプト")
         
@@ -232,7 +239,7 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
         ai_count_row.operator(operators.MYADDON_OT_randomize_ai_seed.bl_idname, text="", icon='FILE_REFRESH')
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
-        ai_box.operator(operators.MYADDON_OT_ai_generate_enemy_plan.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+        ai_box.operator(async_gemini.MYADDON_OT_ai_generate_enemy_plan_async.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
         ai_box.operator(operators.MYADDON_OT_ai_edit_selected_enemy_path.bl_idname, text="選択したパスだけをAIで再生成（編集）", icon='GREASEPENCIL')
 
         level_box = layout.box()
@@ -251,7 +258,7 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
                     op.target_index = i
                 else:
                     ratio = getattr(msg, "gemini_ratio", -1)
-                    ratio_text = f" [Gemini {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
+                    ratio_text = f" [Ollama {ratio}% / 内蔵 {100 - ratio}%]" if ratio >= 0 else ""
                     row.label(text=f"AI: {msg.content}{ratio_text}", icon='MONKEY')
         chat_box.operator(operators.MYADDON_OT_ai_chat_clear.bl_idname, text="履歴をクリア", icon='TRASH')
         
@@ -263,7 +270,7 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
         level_count_row.operator(operators.MYADDON_OT_randomize_ai_level_seed.bl_idname, text="", icon='FILE_REFRESH')
         
         level_box.prop(context.scene, "myaddon_ai_level_clear_existing", text="前回生成の障害物を削除")
-        level_box.operator(operators.MYADDON_OT_ai_generate_level_obstacles.bl_idname, text="AIで障害物を自動配置", icon='MESH_CUBE')
+        level_box.operator(async_gemini.MYADDON_OT_ai_generate_level_obstacles_async.bl_idname, text="AIで障害物を自動配置", icon='MESH_CUBE')
         level_box.operator(operators.MYADDON_OT_ai_edit_selected_obstacle.bl_idname, text="選択した障害物だけを再生成", icon='MOD_BUILD')
 
 

@@ -57,6 +57,7 @@ private:
 	std::vector<int> enemyRespawnTimers_;
 	EnemyEventManager enemyEventManager_;
 	Enemy* lockedEnemy_ = nullptr;
+	bool isBossSpawned_ = false;
 
 	std::list<std::unique_ptr<Obstacle>> obstacles_;
 };

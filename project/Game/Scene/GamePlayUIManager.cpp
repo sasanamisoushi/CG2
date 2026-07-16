@@ -10,6 +10,92 @@
 #include "engine/Camera/FlyCamera.h"
 #include "engine/math/MyMath.h"
 #include "externals/json.hpp"
+#include <Windows.h>
+#include <filesystem>
+#include <shellapi.h>
+#include <vector>
+
+#if defined(ENABLE_IMGUI)
+namespace {
+	std::string gBlenderLaunchMessage;
+
+	std::filesystem::path FindStageBlendPath() {
+		const std::filesystem::path relativeBlendPath = L"resources\\level_editor\\stage.blend";
+		std::vector<std::filesystem::path> searchStarts;
+
+		try {
+			searchStarts.push_back(std::filesystem::current_path());
+		} catch (...) {
+		}
+
+		wchar_t modulePath[MAX_PATH] = {};
+		const DWORD modulePathLength = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+		if (modulePathLength > 0) {
+			searchStarts.push_back(std::filesystem::path(modulePath).parent_path());
+		}
+
+		for (const std::filesystem::path &startPath : searchStarts) {
+			std::filesystem::path cursor = startPath;
+			while (!cursor.empty()) {
+				const std::filesystem::path candidates[] = {
+					cursor / relativeBlendPath,
+					cursor / L"project" / relativeBlendPath
+				};
+
+				for (const std::filesystem::path &candidate : candidates) {
+					if (std::filesystem::exists(candidate)) {
+						return std::filesystem::absolute(candidate);
+					}
+				}
+
+				if (cursor == cursor.root_path()) {
+					break;
+				}
+				cursor = cursor.parent_path();
+			}
+		}
+
+		return {};
+	}
+
+	bool OpenStageBlendFile() {
+		const std::filesystem::path blendPath = FindStageBlendPath();
+		if (blendPath.empty()) {
+			gBlenderLaunchMessage = "stage.blend が見つかりません。";
+			OutputDebugStringA("[OpenBlender] resources/level_editor/stage.blend not found.\n");
+			return false;
+		}
+
+		HINSTANCE result = ShellExecuteW(
+			nullptr,
+			L"open",
+			blendPath.c_str(),
+			nullptr,
+			blendPath.parent_path().c_str(),
+			SW_SHOWNORMAL);
+
+		if (reinterpret_cast<intptr_t>(result) <= 32) {
+			result = ShellExecuteW(
+				nullptr,
+				L"open",
+				L"blender.exe",
+				blendPath.c_str(),
+				blendPath.parent_path().c_str(),
+				SW_SHOWNORMAL);
+		}
+
+		if (reinterpret_cast<intptr_t>(result) <= 32) {
+			gBlenderLaunchMessage = "Blender を起動できませんでした。関連付けまたは PATH を確認してください。";
+			OutputDebugStringW((L"[OpenBlender] Failed: " + blendPath.wstring() + L"\n").c_str());
+			return false;
+		}
+
+		gBlenderLaunchMessage = "Blender を起動しました。";
+		OutputDebugStringW((L"[OpenBlender] Opened: " + blendPath.wstring() + L"\n").c_str());
+		return true;
+	}
+}
+#endif
 
 #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
 	bool gShowStageValidationWindow = true;
@@ -936,8 +1022,10 @@ void GamePlayUIManager::UpdateUI() {
 
 		// もしボタンが押されたら { } の中が実行される
 		if (ImGui::Button("Open Blender")) {
-			// ここでBlenderを起動！
-			ShellExecuteA(nullptr, "open", "resources\\stage.blend", nullptr, nullptr, SW_SHOW);
+			OpenStageBlendFile();
+		}
+		if (!gBlenderLaunchMessage.empty()) {
+			ImGui::TextWrapped("%s", gBlenderLaunchMessage.c_str());
 		}
 
 		ImGui::Separator();

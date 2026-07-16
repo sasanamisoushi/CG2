@@ -20,19 +20,20 @@ enum class EnemyState {
 
 class Enemy {
 public:
+    virtual ~Enemy() = default;
     static constexpr size_t kNoSpawnPoint = static_cast<size_t>(-1);
 
     // 初期化（発生位置を渡す）
-    void Initialize(const Vector3 &position);
+    virtual void Initialize(const Vector3 &position);
 
     // 毎フレームの更新
-    void Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles);
+    virtual void Update(const Vector3 &playerPos, EnemyBulletManager *bulletManager, const std::list<std::unique_ptr<Obstacle>> &obstacles);
 
     // 描画
-    void Draw();
+    virtual void Draw();
 
     // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
-    void UpdateModel();
+    virtual void UpdateModel();
 
     // ミサイルに狙われるためのゲッター
     Vector3 GetPosition() const { return position_; }
@@ -68,7 +69,11 @@ public:
     // 当たり判定処理
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); 
 
-private:
+    // ボス判定
+    bool IsBoss() const { return isBoss_; }
+    void SetIsBoss(bool isBoss) { isBoss_ = isBoss; }
+
+protected:
     void UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager);
 
     // AI用の変数
@@ -98,6 +103,7 @@ private:
 
     // 死んだかどうかのフラグ
     bool isDead_ = false;
+    bool isBoss_ = false; // ボスフラグ
     size_t spawnPointIndex_ = kNoSpawnPoint;
 };
 

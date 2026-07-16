@@ -107,6 +107,8 @@ public:
     void SetAnimDebugActive(bool active) { isAnimDebugActive_ = active; }
 
 private:
+    void ApplyBattroidProceduralWalk();
+
 	std::unique_ptr<Object3d> object_;
 	std::string modelName_;
 	Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
@@ -129,8 +131,10 @@ private:
     Skeleton skeleton_;
     float animationTime_ = 0.0f;
     float targetAnimationTime_ = 0.0f;
+    float battroidWalkTime_ = 0.0f;
     bool enableSkinning_ = false;
     bool isAnimDebugActive_ = false;
+    bool isBattroidWalking_ = false;
 
     // 境界接近警告用
     bool isNearBoundary_ = false;

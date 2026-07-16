@@ -15,7 +15,7 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 	{
 		std::ifstream ifs(filePath);
 		if (!ifs.is_open()) {
-			scene_->uiManager_->simulationSaveMessage_ = "scene.json が見つからなぁE��め保存できませんでした";
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json が見つからないため保存できませんでした";
 			OutputDebugStringA(("[SimulationSave] File not found: " + filePath + "\n").c_str());
 			return false;
 		}
@@ -30,7 +30,7 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 	}
 
 	if (!root.contains("objects") || !root["objects"].is_array()) {
-		scene_->uiManager_->simulationSaveMessage_ = "scene.json に objects がなぁE��め保存できませんでした";
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json に objects がないため保存できませんでした";
 		OutputDebugStringA("[SimulationSave] objects array not found.\n");
 		return false;
 	}
@@ -133,7 +133,7 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 	} catch (...) {
 	}
 
-	scene_->uiManager_->simulationSaveMessage_ = "現在の配置めEscene.json に保存しました。実ゲームにも反映されます";
+	scene_->uiManager_->simulationSaveMessage_ = "現在の配置を scene.json に保存しました。実ゲームにも反映されます";
 	OutputDebugStringA(("[SimulationSave] Saved " + std::to_string(savedCount) + " transforms.\n").c_str());
 	return true;
 }

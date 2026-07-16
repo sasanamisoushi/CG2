@@ -7,6 +7,13 @@
 
 namespace {
 	constexpr const char *kDefaultPlayerBoxModelName = "PlayerBox";
+	constexpr float kBattroidGravity = 0.006f;
+	constexpr float kBattroidMaxFallSpeed = 0.16f;
+	constexpr float kBattroidIdleAnimationTime = 5.0f;
+	constexpr float kBattroidWalkFrequency = 4.5f;
+	constexpr float kBattroidFootSwingAngle = 0.14f;
+	constexpr float kBattroidFootStepDistance = 0.18f;
+	constexpr float kBattroidFootLiftDistance = 0.08f;
 
 	bool UsesNaturalPlayerModelScale(const std::string &modelName) {
 		return modelName != kDefaultPlayerBoxModelName;
@@ -114,6 +121,56 @@ namespace {
 			return 0.0f;
 		}
 		return std::clamp(-std::asin(std::clamp(normalizedForward.y, -1.0f, 1.0f)), -1.2f, 1.2f);
+	}
+
+	void CancelVerticalVelocityIntoPush(Vector3 &velocity, const Vector3 &pushOut) {
+		if ((pushOut.y > 0.0f && velocity.y < 0.0f) || (pushOut.y < 0.0f && velocity.y > 0.0f)) {
+			velocity.y = 0.0f;
+		}
+	}
+
+	std::string StripNodeIndexSuffix(const std::string &name) {
+		const size_t underscore = name.find_last_of('_');
+		if (underscore == std::string::npos || underscore + 1 >= name.size()) {
+			return name;
+		}
+
+		for (size_t index = underscore + 1; index < name.size(); ++index) {
+			if (name[index] < '0' || name[index] > '9') {
+				return name;
+			}
+		}
+		return name.substr(0, underscore);
+	}
+
+	int32_t FindJointByBaseName(const Skeleton &skeleton, const std::string &baseName) {
+		for (const Joint &joint : skeleton.joints) {
+			if (StripNodeIndexSuffix(joint.name) == baseName) {
+				return joint.index;
+			}
+		}
+		return -1;
+	}
+
+	void AddJointLocalRotation(Skeleton &skeleton, const std::string &baseName, const Vector3 &axis, float angle) {
+		const int32_t jointIndex = FindJointByBaseName(skeleton, baseName);
+		if (jointIndex < 0 || jointIndex >= static_cast<int32_t>(skeleton.joints.size())) {
+			return;
+		}
+
+		Quaternion extraRotation = MyMath::MakeAxisAngle(axis, angle);
+		Joint &joint = skeleton.joints[jointIndex];
+		joint.transform.rotate = MyMath::Normalize(MyMath::Multiply(joint.transform.rotate, extraRotation));
+	}
+
+	void AddJointLocalTranslation(Skeleton &skeleton, const std::string &baseName, const Vector3 &translation) {
+		const int32_t jointIndex = FindJointByBaseName(skeleton, baseName);
+		if (jointIndex < 0 || jointIndex >= static_cast<int32_t>(skeleton.joints.size())) {
+			return;
+		}
+
+		Joint &joint = skeleton.joints[jointIndex];
+		joint.transform.translate = Add(joint.transform.translate, translation);
 	}
 }
 
@@ -262,7 +319,7 @@ void Player::UpdateModel() {
             } else if (currentMode_ == PlayerMode::Gerwalk) {
                 targetAnimationTime_ = 1.71f;  // Frame 41 (Gerwalk pose matching 02:11 in Sketchfab)
             } else {
-                targetAnimationTime_ = 5.0f;   // Frame 120 (Battroid)
+                targetAnimationTime_ = kBattroidIdleAnimationTime;   // Frame 120 (Battroid)
             }
 
             // 補間でなめらかに変形させる
@@ -274,6 +331,9 @@ void Player::UpdateModel() {
         }
 
         ApplyAnimation(skeleton_, animationData_, animationTime_);
+        if (!isAnimDebugActive_ && currentMode_ == PlayerMode::Battroid && isBattroidWalking_) {
+            ApplyBattroidProceduralWalk();
+        }
         ::Update(skeleton_);
 
         if (enableSkinning_ && object_ && object_->GetModel()) {
@@ -292,6 +352,34 @@ void Player::UpdateModel() {
 	    object_->SetQuaternionRotate(quaternion_);
 	    object_->Update();
     }
+}
+
+void Player::ApplyBattroidProceduralWalk() {
+	const PlayerModeParams &p = modeParams_[static_cast<int>(PlayerMode::Battroid)];
+	const float horizontalSpeed = Length({ velocity_.x, 0.0f, velocity_.z });
+	const float speedRatio = std::clamp(horizontalSpeed / (std::max)(0.0001f, p.maxMoveSpeed), 0.35f, 1.0f);
+
+	battroidWalkTime_ += (1.0f / 60.0f) * (0.8f + speedRatio * 1.2f);
+
+	const float phase = battroidWalkTime_ * kBattroidWalkFrequency;
+	const float step = std::sin(phase) * kBattroidFootStepDistance * speedRatio;
+	const float footSwing = std::cos(phase) * kBattroidFootSwingAngle * speedRatio;
+	const float leftLift = (std::max)(0.0f, std::sin(phase)) * kBattroidFootLiftDistance * speedRatio;
+	const float rightLift = (std::max)(0.0f, -std::sin(phase)) * kBattroidFootLiftDistance * speedRatio;
+
+	AddJointLocalTranslation(skeleton_, "FootFront", { 0.0f, rightLift, step });
+	AddJointLocalTranslation(skeleton_, "FootRear", { 0.0f, rightLift, step });
+	AddJointLocalTranslation(skeleton_, "FootGuardFront", { 0.0f, rightLift, step });
+	AddJointLocalTranslation(skeleton_, "FootGuardRear", { 0.0f, rightLift, step });
+	AddJointLocalRotation(skeleton_, "FootFront", { 1.0f, 0.0f, 0.0f }, -footSwing);
+	AddJointLocalRotation(skeleton_, "FootRear", { 1.0f, 0.0f, 0.0f }, -footSwing * 0.7f);
+
+	AddJointLocalTranslation(skeleton_, "FootFront.001", { 0.0f, leftLift, -step });
+	AddJointLocalTranslation(skeleton_, "FootRear.001", { 0.0f, leftLift, -step });
+	AddJointLocalTranslation(skeleton_, "FootGuardFront.001", { 0.0f, leftLift, -step });
+	AddJointLocalTranslation(skeleton_, "FootGuardRear.001", { 0.0f, leftLift, -step });
+	AddJointLocalRotation(skeleton_, "FootFront.001", { 1.0f, 0.0f, 0.0f }, footSwing);
+	AddJointLocalRotation(skeleton_, "FootRear.001", { 1.0f, 0.0f, 0.0f }, footSwing * 0.7f);
 }
 
 void Player::Draw() {
@@ -548,6 +636,10 @@ void Player::Move() {
 	const bool moveLeft = input->PushKey(DIK_A);
 	const bool moveUp = input->PushKey(DIK_SPACE);
 	const bool moveDown = input->PushKey(DIK_LSHIFT);
+	isBattroidWalking_ = currentMode_ == PlayerMode::Battroid && (moveForward || moveBackward || moveRight || moveLeft);
+	if (!isBattroidWalking_) {
+		battroidWalkTime_ = 0.0f;
+	}
 
 	float pitch = 0.0f;
 	float yaw = 0.0f;
@@ -630,12 +722,13 @@ void Player::Move() {
 		if (moveDown) localMove.y -= 1.0f;
 		
 	} else if (currentMode_ == PlayerMode::Battroid) {
-		// バトロイド形態：重力あり。上空へは上を向いて前進（加速）して飛ぶ。
+		// バトロイド形態：ガウォークと同じ全方位移動
 		if (moveForward) localMove.z += 1.0f;
 		if (moveBackward) localMove.z -= 1.0f;
 		if (moveRight) localMove.x += 1.0f;
 		if (moveLeft) localMove.x -= 1.0f;
-		// カニ歩き的な上下移動（moveUp, moveDown）は廃止
+		if (moveUp) localMove.y += 1.0f;
+		if (moveDown) localMove.y -= 1.0f;
 	}
 
 	Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
@@ -696,10 +789,8 @@ void Player::Move() {
 		}
 	}
 
-	// 重力処理（バトロイド形態のみ）
-	if (currentMode_ == PlayerMode::Battroid) {
-		float gravity = 0.008f; // 重力加速度
-		velocity_.y -= gravity;
+	if (currentMode_ == PlayerMode::Battroid && !moveUp) {
+		velocity_.y = (std::max)(velocity_.y - kBattroidGravity, -kBattroidMaxFallSpeed);
 	}
 
 	position_ = Add(position_, velocity_);
@@ -843,6 +934,7 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 						position_.x += pushVector.x;
 						position_.y += pushVector.y;
 						position_.z += pushVector.z;
+						CancelVerticalVelocityIntoPush(velocity_, pushVector);
 						
 						for (auto& otherSphere : playerSpheres) {
 							otherSphere.center.x += pushVector.x;
@@ -978,6 +1070,7 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				position_.x += worldPushOut.x;
 				position_.y += worldPushOut.y;
 				position_.z += worldPushOut.z;
+				CancelVerticalVelocityIntoPush(velocity_, worldPushOut);
 				playerOBB.center = Add(playerOBB.center, worldPushOut);
 			}
 		} 
@@ -1005,6 +1098,7 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				position_.x += worldPushOut.x;
 				position_.y += worldPushOut.y;
 				position_.z += worldPushOut.z;
+				CancelVerticalVelocityIntoPush(velocity_, worldPushOut);
 				playerOBB.center = Add(playerOBB.center, worldPushOut);
 			}
 		}

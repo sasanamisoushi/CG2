@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <DisableRegistryUse>true</DisableRegistryUse>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
+    <WindowsSdkDir>C:\Program Files (x86)\Windows Kits\10\</WindowsSdkDir>
+    <TargetPlatformSdkPath>C:\Program Files (x86)\Windows Kits\10\</TargetPlatformSdkPath>
+    <UniversalCRTSdkDir_10>C:\Program Files (x86)\Windows Kits\10\</UniversalCRTSdkDir_10>
+    <TargetPlatformDisplayName>Windows10SDK</TargetPlatformDisplayName>
+    <VCInstallDir_170>C:\Program Files\Microsoft Visual Studio\2022\Community\VC\</VCInstallDir_170>
+    <VCToolsVersion>14.44.35207</VCToolsVersion>
+    <VCToolsInstallDir_170>C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\</VCToolsInstallDir_170>
+  </PropertyGroup>
+</Project>

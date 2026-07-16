@@ -1,4 +1,5 @@
 #include "LevelManager.h"
+#include "Game/Enemy/Boss.h"
 #include <algorithm>
 
 namespace {
@@ -49,6 +50,26 @@ void LevelManager::Update(std::vector<Vector3>& enemyBulletHits) {
 			++it;
 		} catch (...) {
 			it = enemies_.erase(it);
+		}
+	}
+
+	// 雑魚敵全滅チェックとボス出現
+	if (!isBossSpawned_) {
+		int aliveNormalEnemyCount = 0;
+		for (const auto& enemy : enemies_) {
+			if (enemy && !enemy->IsBoss() && !enemy->IsDead()) {
+				aliveNormalEnemyCount++;
+			}
+		}
+
+		if (aliveNormalEnemyCount == 0) {
+			// ボスをスポーンさせる
+			for (size_t i = 0; i < enemySpawns_.size(); ++i) {
+				if (enemySpawns_[i].isBoss) {
+					SpawnEnemyFromSpawnPoint(i);
+				}
+			}
+			isBossSpawned_ = true;
 		}
 	}
 
@@ -103,7 +124,12 @@ void LevelManager::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 	}
 
 	const EnemySpawnData& spawnData = enemySpawns_[spawnPointIndex];
-	auto enemy = std::make_unique<Enemy>();
+	std::unique_ptr<Enemy> enemy;
+	if (spawnData.isBoss) {
+		enemy = std::make_unique<Boss>();
+	} else {
+		enemy = std::make_unique<Enemy>();
+	}
 	enemy->Initialize(spawnData.position);
 	enemy->SetRotation(spawnData.rotation);
 	
@@ -168,9 +194,15 @@ void LevelManager::TriggerEnemyReinforcements(const std::string& deadEnemyName) 
 	}
 
 	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
-		const EnemySpawnData& spawnData = enemySpawns_[spawnPointIndex];
-		if (spawnData.reinforcementTriggerName == deadEnemyName) {
-			ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
+		EnemySpawnData& spawnData = enemySpawns_[spawnPointIndex];
+		if (!spawnData.remainingReinforcementTriggers.empty()) {
+			auto it = std::find(spawnData.remainingReinforcementTriggers.begin(), spawnData.remainingReinforcementTriggers.end(), deadEnemyName);
+			if (it != spawnData.remainingReinforcementTriggers.end()) {
+				spawnData.remainingReinforcementTriggers.erase(it);
+				if (spawnData.remainingReinforcementTriggers.empty()) {
+					ScheduleEnemySpawn(spawnPointIndex, spawnData.reinforcementDelayFrames);
+				}
+			}
 		}
 	}
 }
