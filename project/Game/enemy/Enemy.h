@@ -5,6 +5,7 @@
 #include <memory>
 #include <list>
 #include <vector>
+#include "3D/Primitive.h"
 
 
 class Obstacle;
@@ -59,6 +60,10 @@ public:
     void SetRotation(const Vector3 &rotation);
     void SetFlightPath(const std::vector<Vector3> &points, bool loop, float speed);
 
+    // 全敵の飛行ルート表示を切り替える（デバッグ表示用）。
+    static void SetPathVisualizationEnabled(bool enabled) { pathVisualizationEnabled_ = enabled; }
+    static bool IsPathVisualizationEnabled() { return pathVisualizationEnabled_; }
+
     // Blenderで配置したリスポーン地点との対応
     void SetSpawnPointIndex(size_t index) { spawnPointIndex_ = index; }
     size_t GetSpawnPointIndex() const { return spawnPointIndex_; }
@@ -75,6 +80,7 @@ public:
 
 protected:
     void UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager);
+    void BuildPathVisualizers();
 
     // AI用の変数
     EnemyState state_ = EnemyState::Approach; // 今の状態（最初は「接近」）
@@ -105,5 +111,10 @@ protected:
     bool isDead_ = false;
     bool isBoss_ = false; // ボスフラグ
     size_t spawnPointIndex_ = kNoSpawnPoint;
+
+    // ルート可視化用
+    // デバッグ用の経路球は大量のGPUリソースを生成するため通常は無効。
+    inline static bool pathVisualizationEnabled_ = false;
+    std::vector<std::unique_ptr<class Primitive>> pathVisualizers_;
 };
 

@@ -20,6 +20,7 @@ struct EnemyFlightPath {
 struct EnemySpawnData {
 	std::string name; // Blenderでのオブジェクト名
 	bool isBoss = false; // ボスかどうか
+	bool isJammer = false; // ジャミング敵かどうか
 	bool isInitialSpawn = true; // 最初から出現するかどうか
 	Vector3 position = { 0.0f, 0.0f, 0.0f };
 	Vector3 rotation = { 0.0f, 0.0f, 0.0f };

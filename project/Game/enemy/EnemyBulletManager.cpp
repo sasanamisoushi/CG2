@@ -46,7 +46,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
         bool hitObstacle = false;
         Sphere bulletSphere;
         bulletSphere.center = bullet.position;
-        bulletSphere.radius = kEnemyBulletRadius;
+        bulletSphere.radius = bullet.collisionRadius;
 
         for (const auto& obstacle : obstacles) {
             if (obstacle->IsStageBounds()) {
@@ -71,7 +71,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
                 bullet.isDead = true; // 弾を消す
 
                 // プレイヤーにダメージを与える
-                player->TakeDamage(1);
+                player->TakeDamage(bullet.damage);
 
                 if (!player->IsDead()) {
                     hitPositions.push_back(player->GetPosition());
@@ -101,13 +101,31 @@ void EnemyBulletManager::Draw() {
 }
 
 void EnemyBulletManager::Shoot(const Vector3 &position, const Vector3 &velocity) {
+    ShootConfigured(position, velocity, { kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale },
+                    kEnemyBulletRadius, 1, 120, "EnemyBox");
+}
+
+void EnemyBulletManager::ShootHeavyCannon(const Vector3 &position, const Vector3 &velocity) {
+    ShootConfigured(position, velocity, { 1.2f, 1.2f, 2.8f }, 1.2f, 2, 240, "BossCannon");
+}
+
+void EnemyBulletManager::ShootBeam(const Vector3 &position, const Vector3 &velocity) {
+    ShootConfigured(position, velocity, { 3.5f, 3.5f, 14.0f }, 3.5f, 3, 150, "BossBeam");
+}
+
+void EnemyBulletManager::ShootConfigured(const Vector3 &position, const Vector3 &velocity, const Vector3 &scale,
+                                         float collisionRadius, int damage, int lifeTimer, const char *modelName) {
     for (auto &bullet : bullets_) {
         if (bullet.isDead) { // 使用可能な弾を検索
             bullet.position = position;
             bullet.velocity = velocity;
-            bullet.lifeTimer = 120;
+            bullet.lifeTimer = lifeTimer;
+            bullet.collisionRadius = collisionRadius;
+            bullet.damage = damage;
             bullet.isDead = false;
 
+            bullet.object->SetModel(modelName);
+            bullet.object->SetScale(scale);
             bullet.object->SetTranslate(position);
             bullet.object->Update();
             break; // 発射したので終了

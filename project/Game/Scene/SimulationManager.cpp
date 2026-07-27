@@ -1,4 +1,4 @@
-﻿#include "SimulationManager.h"
+#include "SimulationManager.h"
 #include "MissilePresetManager.h"
 #include "LockOnManager.h"
 #include "GamePlayScene.h"
@@ -8,7 +8,11 @@
 #include "engine/Input/Input.h"
 #include "engine/math/MyMath.h"
 
-SimulationManager::SimulationManager(GamePlayScene* scene) : scene_(scene) {}
+#include <filesystem>
+
+SimulationManager::SimulationManager(GamePlayScene* scene) : scene_(scene) {
+	RefreshActionAnimationsList();
+}
 
 bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath) {
 	json root;
@@ -536,13 +540,10 @@ void SimulationManager::DrawSimulationScreenUI() {
 	if (panelX < 20.0f) {
 		panelX = 20.0f;
 	}
-	ImGui::SetNextWindowPos(ImVec2(panelX, 20.0f), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(panelWidth, panelHeight), ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(panelX, 20.0f), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(panelWidth, panelHeight), ImGuiCond_FirstUseEver);
 
-	const ImGuiWindowFlags windowFlags =
-		ImGuiWindowFlags_NoMove |
-		ImGuiWindowFlags_NoResize |
-		ImGuiWindowFlags_NoCollapse;
+	const ImGuiWindowFlags windowFlags = 0;
 
 	if (!ImGui::Begin("シミュレーション画面", nullptr, windowFlags)) {
 		ImGui::End();
@@ -599,7 +600,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 	DrawSimulationSaveControls();
 
 	ImGui::Separator();
-	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ" };
+	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ", "アニメーション編集" };
 	ImGui::Combo("カテゴリ", &scene_->uiManager_->currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
 	ImGui::Separator();
 
@@ -757,9 +758,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 			float panSpeed = scene_->debugFlyCamera_->GetPanSpeed();
 			if (ImGui::DragFloat("移動速度 (WASD)##fly", &moveSpeed, 0.01f, 0.01f, 20.0f)) scene_->debugFlyCamera_->SetMoveSpeed(moveSpeed);
 			if (ImGui::DragFloat("回転感度 (マウス右)##fly", &sensitivity, 0.0001f, 0.0001f, 0.05f, "%.4f")) scene_->debugFlyCamera_->SetMouseSensitivity(sensitivity);
-			if (ImGui::DragFloat("スクロール速度##fly", &scrollSpeed, 0.1f, 0.1f, 20.0f)) scene_->debugFlyCamera_->SetScrollSpeed(scrollSpeed);
-			if (ImGui::DragFloat("パン速度 (中ボタン)##fly", &panSpeed, 0.001f, 0.001f, 1.0f)) scene_->debugFlyCamera_->SetPanSpeed(panSpeed);
-			if (ImGui::DragFloat("回転速度 (キーボード)##fly", &rotateSpeed, 0.001f, 0.001f, 0.5f)) scene_->debugFlyCamera_->SetRotateSpeed(rotateSpeed);
+		scene_->debugFlyCamera_->SetRotateSpeed(rotateSpeed);
 
 			Vector3 flyPos = scene_->debugFlyCamera_->GetTranslate();
 			float flyPosArr[3] = { flyPos.x, flyPos.y, flyPos.z };
@@ -776,6 +775,8 @@ void SimulationManager::DrawSimulationScreenUI() {
 			}
 			ImGui::Text("Cinematic: %s", (scene_->isCinematicLockOnCameraEnabled_ && scene_->lockedEnemy_) ? "ACTIVE" : "OFF");
 		}
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 5) {
+		DrawAnimationEditorUI();
 	}
 
 	ImGui::End();
@@ -799,4 +800,347 @@ void SimulationManager::DrawSimulationSaveControls() {
 	}
 #endif
 }
+void SimulationManager::RefreshActionAnimationsList() {
+	availableActionAnimations_.clear();
+	std::string path = "resources/animations";
+	if (std::filesystem::exists(path)) {
+		for (const auto& entry : std::filesystem::directory_iterator(path)) {
+			if (entry.path().extension() == ".bana") {
+				availableActionAnimations_.push_back(entry.path().stem().string());
+			}
+		}
+	}
+}
 
+
+void SimulationManager::DrawAnimationEditorUI() {
+#ifdef ENABLE_IMGUI
+	ImGui::Text("=== アニメーション編集ツール ===");
+	ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "[Shortcuts] Space:Play/Pause | Esc:Deselect | Del:Clear Key | Ctrl+Z/Y:Undo/Redo");
+	
+	if (!scene_->player_) {
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), "プレイヤーがいません");
+		return;
+	}
+
+	ImGui::InputText("アクション名", actionName_, IM_ARRAYSIZE(actionName_));
+	std::string currentPath = "resources/animations/" + std::string(actionName_) + ".bana";
+	
+	if (ImGui::Button("バイナリからロード")) {
+		if (LoadAnimationFromBinary(customAnimation_, currentPath)) {
+			scene_->player_->SetOverrideAnimation(&customAnimation_);
+			scene_->player_->SetAnimDebugActive(true);
+		} else {
+			OutputDebugStringA(("Failed to load animation binary: " + currentPath + "\n").c_str());
+		}
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("バイナリへ保存")) {
+		if (SaveAnimationToBinary(customAnimation_, currentPath)) {
+			RefreshActionAnimationsList();
+		} else {
+			OutputDebugStringA(("Failed to save animation binary: " + currentPath + "\n").c_str());
+		}
+	}
+
+	if (!availableActionAnimations_.empty()) {
+		if (ImGui::BeginCombo("既存ファイル", "")) {
+			for (const auto& name : availableActionAnimations_) {
+				if (ImGui::Selectable(name.c_str())) {
+					strcpy_s(actionName_, name.c_str());
+				}
+			}
+			ImGui::EndCombo();
+		}
+	}
+
+
+	ImGui::Separator();
+	ImGui::Checkbox("再生する", &isAnimationPlaying_);
+	ImGui::SameLine();
+	ImGui::Checkbox("ループ", &isLooping_);
+
+	if (customAnimation_.duration <= 0.0f) {
+		ImGui::Text("カスタムアニメーションがロードされていません");
+		if (ImGui::Button("現在の状態から新規作成")) {
+			customAnimation_ = Animation();
+			customAnimation_.duration = 2.0f; // 2秒の空アニメーション
+			scene_->player_->SetOverrideAnimation(&customAnimation_);
+			scene_->player_->SetAnimDebugActive(true);
+		}
+		return;
+	}
+
+	ImGui::SliderFloat("全体の尺 (秒)", &customAnimation_.duration, 0.1f, 10.0f);
+
+	if (isAnimationPlaying_) {
+		currentFrameTime_ += 1.0f / 60.0f;
+		if (currentFrameTime_ > customAnimation_.duration) {
+			currentFrameTime_ = isLooping_ ? 0.0f : customAnimation_.duration;
+			if (!isLooping_) isAnimationPlaying_ = false;
+		}
+	}
+	ImGui::SliderFloat("タイムライン", &currentFrameTime_, 0.0f, customAnimation_.duration, "%.3f秒");
+	scene_->player_->SetTargetAnimationTime(currentFrameTime_);
+
+	ImGui::Separator();
+	ImGui::Text("ボーン選択とキーフレーム編集");
+
+	// 複数選択用の表示文字列を作成
+	std::string selectedNamesStr = "";
+	if (selectedBoneNames_.empty()) {
+		selectedNamesStr = "(未選択)";
+	} else if (selectedBoneNames_.size() == 1) {
+		selectedNamesStr = *selectedBoneNames_.begin();
+	} else {
+		selectedNamesStr = std::to_string(selectedBoneNames_.size()) + "個のボーンを選択中";
+	}
+
+	// 簡略化のためノード一覧をドロップダウンで表示（コンボ内では複数選択可能）
+	if (ImGui::BeginCombo("編集するボーン", selectedNamesStr.c_str())) {
+		// すでにキーがあるノード
+		for (const auto& pair : customAnimation_.nodeAnimations) {
+			bool is_selected = (selectedBoneNames_.count(pair.first) > 0);
+			if (ImGui::Selectable(pair.first.c_str(), is_selected, ImGuiSelectableFlags_DontClosePopups)) {
+				if (ImGui::GetIO().KeyShift) {
+					if (is_selected) selectedBoneNames_.erase(pair.first);
+					else selectedBoneNames_.insert(pair.first);
+				} else {
+					selectedBoneNames_.clear();
+					selectedBoneNames_.insert(pair.first);
+				}
+			}
+		}
+		ImGui::EndCombo();
+	}
+
+	static char newBoneName[128] = "";
+	ImGui::InputText("新規ボーン名", newBoneName, IM_ARRAYSIZE(newBoneName));
+	ImGui::SameLine();
+	if (ImGui::Button("ボーン追加")) {
+		if (strlen(newBoneName) > 0) {
+			customAnimation_.nodeAnimations[newBoneName] = NodeAnimation();
+			selectedBoneNames_.clear();
+			selectedBoneNames_.insert(newBoneName);
+		}
+	}
+
+	if (!selectedBoneNames_.empty()) {
+		std::string previewName = *selectedBoneNames_.begin();
+		if (customAnimation_.nodeAnimations.count(previewName)) {
+			NodeAnimation& nodeAnim = customAnimation_.nodeAnimations[previewName];
+			ImGui::Text("--- %s %s の編集 ---", previewName.c_str(), selectedBoneNames_.size() > 1 ? "他" : "");
+
+			// Translate
+			ImGui::Text("Translate (キー数: %d)", (int)nodeAnim.translate.keyframes.size());
+			static float tVal[3] = {0,0,0};
+			ImGui::DragFloat3("位置", tVal, 0.01f);
+			if (ImGui::Button("現在時刻にTranslateキーを打つ")) {
+				KeyframeVector3 kf;
+				kf.time = currentFrameTime_;
+				kf.value = {tVal[0], tVal[1], tVal[2]};
+				nodeAnim.translate.keyframes.push_back(kf);
+				// ソートしておく
+				std::sort(nodeAnim.translate.keyframes.begin(), nodeAnim.translate.keyframes.end(), [](auto& a, auto& b){ return a.time < b.time; });
+			}
+
+			// Rotate
+			ImGui::Text("Rotate (キー数: %d)", (int)nodeAnim.rotate.keyframes.size());
+			static float rVal[3] = {0,0,0}; // Euler angles for easy editing
+			ImGui::DragFloat3("回転 (XYZ度)", rVal, 1.0f);
+			if (ImGui::Button("現在時刻にRotateキーを打つ")) {
+				KeyframeQuaternion kf;
+				kf.time = currentFrameTime_;
+				// 簡単なEuler to Quaternion変換
+				Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, rVal[0] * 3.141592f / 180.0f);
+				Quaternion qYaw   = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, rVal[1] * 3.141592f / 180.0f);
+				Quaternion qRoll  = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, rVal[2] * 3.141592f / 180.0f);
+				kf.value = MyMath::Normalize(MyMath::Multiply(MyMath::Multiply(qYaw, qPitch), qRoll));
+				nodeAnim.rotate.keyframes.push_back(kf);
+				std::sort(nodeAnim.rotate.keyframes.begin(), nodeAnim.rotate.keyframes.end(), [](auto& a, auto& b){ return a.time < b.time; });
+			}
+			
+			// Scale
+			ImGui::Text("Scale (キー数: %d)", (int)nodeAnim.scale.keyframes.size());
+			static float sVal[3] = {1,1,1};
+			ImGui::DragFloat3("スケール", sVal, 0.01f);
+			if (ImGui::Button("現在時刻にScaleキーを打つ")) {
+				KeyframeVector3 kf;
+				kf.time = currentFrameTime_;
+				kf.value = {sVal[0], sVal[1], sVal[2]};
+				nodeAnim.scale.keyframes.push_back(kf);
+				std::sort(nodeAnim.scale.keyframes.begin(), nodeAnim.scale.keyframes.end(), [](auto& a, auto& b){ return a.time < b.time; });
+			}
+		}
+	}
+#endif
+}
+
+void SimulationManager::AddBoneRotationFromDrag(const std::string& boneName, float deltaX, float deltaY) {
+    if (boneName.empty()) return;
+    
+    // まだアニメーションに登録されていないボーンなら自動で登録する
+    if (customAnimation_.nodeAnimations.count(boneName) == 0) {
+        customAnimation_.nodeAnimations[boneName] = NodeAnimation();
+    }
+    
+    NodeAnimation& nodeAnim = customAnimation_.nodeAnimations[boneName];
+    
+    Quaternion currentRot = { 0.0f, 0.0f, 0.0f, 1.0f };
+    if (!nodeAnim.rotate.keyframes.empty()) {
+        currentRot = CalculateValue(nodeAnim.rotate.keyframes, currentFrameTime_);
+    }
+    
+    float speed = 0.01f;
+    Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, deltaX * speed);
+    Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, deltaY * speed);
+    
+    Quaternion deltaRot = MyMath::Multiply(qYaw, qPitch);
+    currentRot = MyMath::Normalize(MyMath::Multiply(currentRot, deltaRot));
+    
+    bool found = false;
+    for (auto& kf : nodeAnim.rotate.keyframes) {
+        if (std::abs(kf.time - currentFrameTime_) < 0.001f) {
+            kf.value = currentRot;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        KeyframeQuaternion newKf;
+        newKf.time = currentFrameTime_;
+        newKf.value = currentRot;
+        nodeAnim.rotate.keyframes.push_back(newKf);
+        std::sort(nodeAnim.rotate.keyframes.begin(), nodeAnim.rotate.keyframes.end(), [](auto& a, auto& b){ return a.time < b.time; });
+    }
+}
+
+void SimulationManager::AddBoneTranslationFromDrag(const std::string& boneName, float deltaX, float deltaY) {
+    if (boneName.empty()) return;
+    
+    // まだアニメーションに登録されていないボーンなら自動で登録する
+    if (customAnimation_.nodeAnimations.count(boneName) == 0) {
+        customAnimation_.nodeAnimations[boneName] = NodeAnimation();
+    }
+    
+    NodeAnimation& nodeAnim = customAnimation_.nodeAnimations[boneName];
+    
+    Vector3 currentTrans = { 0.0f, 0.0f, 0.0f };
+    if (!nodeAnim.translate.keyframes.empty()) {
+        currentTrans = CalculateValue(nodeAnim.translate.keyframes, currentFrameTime_);
+    }
+    
+    float speed = 0.05f;
+    currentTrans.x += deltaX * speed;
+    currentTrans.y -= deltaY * speed; // 画面のY軸は下向きなので反転させる
+    
+    bool found = false;
+    for (auto& kf : nodeAnim.translate.keyframes) {
+        if (std::abs(kf.time - currentFrameTime_) < 0.001f) {
+            kf.value = currentTrans;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        KeyframeVector3 newKf;
+        newKf.time = currentFrameTime_;
+        newKf.value = currentTrans;
+        nodeAnim.translate.keyframes.push_back(newKf);
+        std::sort(nodeAnim.translate.keyframes.begin(), nodeAnim.translate.keyframes.end(), [](auto& a, auto& b){ return a.time < b.time; });
+    }
+}
+
+
+void SimulationManager::UpdateShortcuts() {
+	if (!scene_ || !scene_->uiManager_ || scene_->uiManager_->currentSimulationTarget_ != 5) return;
+
+	ImGuiIO& io = ImGui::GetIO();
+	
+	// ドラッグ中かどうかの判定とUndoへの記録
+	if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+		if (!isDragging_ && !selectedBoneNames_.empty()) {
+			isDragging_ = true;
+			PushUndo(); // ドラッグ開始時に状態を保存
+		}
+	} else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+		if (isDragging_) {
+			isDragging_ = false;
+		}
+	}
+
+	// Space: Play/Pause (UI入力中でない時)
+	if (ImGui::IsKeyPressed(ImGuiKey_Space) && !io.WantTextInput) {
+		isAnimationPlaying_ = !isAnimationPlaying_;
+	}
+
+	// Esc: Deselect all
+	if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+		selectedBoneNames_.clear();
+	}
+
+	// Delete/Backspace: Delete current keyframe for selected bones
+	if ((ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) && !io.WantTextInput) {
+		PushUndo();
+		DeleteSelectedBonesKeyframes();
+	}
+
+	// Ctrl+Z: Undo
+	if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+		Undo();
+	}
+
+	// Ctrl+Y: Redo
+	if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y)) {
+		Redo();
+	}
+}
+
+void SimulationManager::PushUndo() {
+	undoHistory_.push_back(customAnimation_);
+	if (undoHistory_.size() > 50) { // 最大50履歴
+		undoHistory_.erase(undoHistory_.begin());
+	}
+	redoHistory_.clear(); // 新しい操作をしたらRedo履歴は消去
+}
+
+void SimulationManager::Undo() {
+	if (undoHistory_.empty()) return;
+	
+	redoHistory_.push_back(customAnimation_);
+	customAnimation_ = undoHistory_.back();
+	undoHistory_.pop_back();
+	
+	if (scene_ && scene_->player_) {
+		scene_->player_->SetOverrideAnimation(&customAnimation_);
+	}
+}
+
+void SimulationManager::Redo() {
+	if (redoHistory_.empty()) return;
+	
+	undoHistory_.push_back(customAnimation_);
+	customAnimation_ = redoHistory_.back();
+	redoHistory_.pop_back();
+	
+	if (scene_ && scene_->player_) {
+		scene_->player_->SetOverrideAnimation(&customAnimation_);
+	}
+}
+
+void SimulationManager::DeleteSelectedBonesKeyframes() {
+	for (const auto& boneName : selectedBoneNames_) {
+		if (customAnimation_.nodeAnimations.count(boneName)) {
+			auto& keys = customAnimation_.nodeAnimations[boneName].rotate.keyframes;
+			for (auto it = keys.begin(); it != keys.end(); ) {
+				if (std::abs(it->time - currentFrameTime_) < 0.001f) {
+					it = keys.erase(it);
+				} else {
+					++it;
+				}
+			}
+		}
+	}
+}

@@ -11,6 +11,8 @@ public:
     // 移動・回転速度の調整
     void SetMoveSpeed(float speed) { moveSpeed_ = speed; }
     void SetRotateSpeed(float speed) { rotateSpeed_ = speed; }
+    void SetQuaternion(const Quaternion& q) { quaternion_ = q; Camera::SetQuaternion(q); }
+    void SetCanUseKeyboard(bool canUse) { canUseKeyboard_ = canUse; }
 
     // マウス操作パラメーター
     void SetMouseSensitivity(float sens) { mouseSensitivity_ = sens; }
@@ -26,6 +28,8 @@ public:
     static void SetGameViewHovered(bool isHovered) { sGameViewHovered_ = isHovered; }
     static void SetGameViewBounds(float minX, float minY, float maxX, float maxY);
     static bool GetGameViewBounds(float &minX, float &minY, float &maxX, float &maxY);
+    static bool GetGameViewMousePos(float mouseX, float mouseY, Vector2& outPos);
+    static void GetGameViewSize(float& width, float& height);
     static void SubmitGameViewMouseInput(
         bool isHovered,
         bool isRightClicked,
@@ -36,6 +40,8 @@ public:
         float deltaY,
         float wheel);
 
+    void AddYawPitch(float yaw, float pitch);
+
 private:
     float moveSpeed_ = 0.5f;
     float rotateSpeed_ = 0.03f;
@@ -43,7 +49,7 @@ private:
     // マウス操作パラメーター
     float mouseSensitivity_ = 0.003f;  // 右ドラッグ回転感度
     float scrollSpeed_ = 1.5f;         // ホイール前後移動速度
-    float panSpeed_ = 0.05f;           // 中クリックパン速度
+    float panSpeed_ = 0.2f;           // 中クリックパン速度
 
     // カメラ自身の現在のクォータニオン
     Quaternion quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -60,5 +66,7 @@ private:
     static float sPendingMouseWheel_;
     static bool sPendingRightDown_;
     static bool sPendingMiddleDown_;
+
+    bool canUseKeyboard_ = true;
 };
 

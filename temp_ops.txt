@@ -1,0 +1,50 @@
+﻿    text = str(prompt_text).strip()
+    return len(text) > 0
+
+
+def _parse_ai_enemy_prompt(prompt_text):
+    normalized = str(prompt_text or "").casefold()
+    
+    style = 'BALANCED'
+    if _prompt_has(normalized, "謖溘∩謦・■", "閭悟ｾ・, "蝗槭ｊ霎ｼ", "ambush"):
+        style = 'AMBUSH'
+    elif _prompt_has(normalized, "鄒､繧・, "髮・屮", "荳蝗｣", "螟ｧ驥・, "swarm"):
+        style = 'SWARM'
+    elif _prompt_has(normalized, "蟾｡蝗・, "繝代ヨ繝ｭ繝ｼ繝ｫ", "patrol"):
+        style = 'PATROL'
+        
+    motion = {
+        "pattern": "DEFAULT",
+        "vertical": "NONE",
+        "turn_sign": 1.0,
+        "loop": True,
+        "speed_multiplier": 1.0,
+        "amplitude_multiplier": 1.0,
+        "opener": None,
+        "keep_formation": False,
+        "respect_bounds": True,
+        "edge_margin": 2.0,
+        "enemy_type": None,
+        "enemy_path_id": None,
+    }
+    
+    if _prompt_has(normalized, "vf1-1"):
+        motion["enemy_type"] = "VF1-1"
+    elif _prompt_has(normalized, "vf1"):
+        motion["enemy_type"] = "VF1"
+
+    if _prompt_has(normalized, "蜿肴凾險・, "蟾ｦ蝗槭ｊ", "counter", "ccw"):
+        motion["turn_sign"] = -1.0
+    elif _prompt_has(normalized, "譎りｨ・, "蜿ｳ蝗槭ｊ", "clockwise", "cw"):
+        motion["turn_sign"] = 1.0
+
+    wants_edge = _prompt_has(normalized, "繝輔ぅ繝ｼ繝ｫ繝・, "螟門捉", "遶ｯ", "遶ｯ豐ｿ縺・, "縺弱ｊ縺弱ｊ", "繧ｮ繝ｪ繧ｮ繝ｪ", "蠅・阜", "譫", "蝣ｴ螟・, "edge", "border", "boundary")
+    wants_orbit = _prompt_has(normalized, "蝗槭ｋ", "譌句屓", "蜀・, "荳蜻ｨ", "荳騾ｱ", "1蜻ｨ", "1騾ｱ", "蜻ｨ蝗・, "蟾｡蝗・, "繝ｫ繝ｼ繝・, "orbit", "circle", "loop")
+    if _prompt_has(normalized, "鄒､繧・, "髫雁・", "邱ｨ髫・, "繝輔か繝ｼ繝｡繝ｼ繧ｷ繝ｧ繝ｳ", "縺ｾ縺ｨ縺ｾ", "蟠ｩ縺・, "荳蝗｣", "formation", "swarm"):
+        motion["keep_formation"] = True
+        motion["opener"] = "ALL"
+    if _prompt_has(normalized, "螟悶↓蜃ｺ縺ｪ縺・, "螟悶∈蜃ｺ縺ｪ縺・, "縺ｯ縺ｿ蜃ｺ", "蜃ｺ縺ｪ縺・, "蜿弱ａ", "遽・峇蜀・, "inside", "bounds"):
+        motion["respect_bounds"] = True
+    if _prompt_has(normalized, "縺弱ｊ縺弱ｊ", "繧ｮ繝ｪ繧ｮ繝ｪ", "遶ｯ豐ｿ縺・, "螟門捉", "蠅・阜", "edge", "border"):
+        motion["edge_margin"] = 1.0
+

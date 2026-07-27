@@ -18,6 +18,8 @@ public:
 
     // 弾を発射する
     void Shoot(const Vector3 &position, const Vector3 &velocity);
+    void ShootHeavyCannon(const Vector3 &position, const Vector3 &velocity);
+    void ShootBeam(const Vector3 &position, const Vector3 &velocity);
 
     // 弾1発のデータ構造
     struct Bullet {
@@ -26,12 +28,16 @@ public:
         Vector3 velocity;
         bool isDead = true; // デフォルトは非アクティブ
         int lifeTimer = 120; // 120フレーム（2秒）で自然消滅
+        float collisionRadius = 0.2f;
+        int damage = 1;
     };
 
     // デバッグ表示用のゲッター
     const std::vector<Bullet>& GetBullets() const { return bullets_; }
 
 private:
+    void ShootConfigured(const Vector3 &position, const Vector3 &velocity, const Vector3 &scale,
+                         float collisionRadius, int damage, int lifeTimer, const char *modelName);
     static const size_t kMaxBullets = 200; // 弾の最大プール数
     std::vector<Bullet> bullets_;
 };

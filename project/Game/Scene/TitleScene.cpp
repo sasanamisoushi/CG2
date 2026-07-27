@@ -71,7 +71,7 @@ void TitleScene::Update() {
 
 	// スペースキーが押されたらシーンを切り替える
 	if (Input::GetInstance()->TriggerKey(DIK_SPACE)) {
-		SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+		SceneManager::GetInstance()->ChangeScene("LOADING");
 	}
 	if (Input::GetInstance()->TriggerKey(DIK_S)) {
 		LaunchSimulationExecutable();

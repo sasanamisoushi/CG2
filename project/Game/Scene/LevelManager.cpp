@@ -1,5 +1,6 @@
 #include "LevelManager.h"
-#include "Game/Enemy/Boss.h"
+#include "Game/enemy/Boss.h"
+#include "Game/enemy/JammerEnemy.h"
 #include <algorithm>
 
 namespace {
@@ -127,6 +128,8 @@ void LevelManager::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 	std::unique_ptr<Enemy> enemy;
 	if (spawnData.isBoss) {
 		enemy = std::make_unique<Boss>();
+	} else if (spawnData.isJammer) {
+		enemy = std::make_unique<JammerEnemy>();
 	} else {
 		enemy = std::make_unique<Enemy>();
 	}

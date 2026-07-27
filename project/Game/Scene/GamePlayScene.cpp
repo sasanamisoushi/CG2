@@ -19,6 +19,7 @@
 #include "engine/Utility/StageValidation.h"
 #include "externals/json.hpp"
 #include "Game/editor/EditorReceiver.h"
+#include "Game/enemy/Boss.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -32,6 +33,18 @@ using json = nlohmann::json;
 
 namespace {
 	constexpr int kNoEnemyRespawnTimer = -1;
+	constexpr float kSpecialAttackCost = 50.0f;
+	constexpr float kSpGaugeRecoveryPerFrame = 3.0f / 60.0f;
+	constexpr int kSpecialAttackDurationFrames = 180;
+	constexpr int kSpecialAttackFireIntervalFrames = 6;
+	constexpr int kNormalMagazineCapacity = 30;
+	constexpr int kNormalReserveCapacity = 120;
+	constexpr int kHomingMagazineCapacity = 8;
+	constexpr int kHomingReserveCapacity = 24;
+	constexpr int kReloadDurationFrames = 120;
+	constexpr int kKillsPerAmmoPickup = 5;
+	constexpr int kPickupNormalAmmo = 60;
+	constexpr int kPickupHomingAmmo = 12;
 }
 
 
@@ -39,6 +52,89 @@ namespace {
 
 GamePlayScene::GamePlayScene(Mode mode)
 	: mode_(mode) {
+}
+
+bool GamePlayScene::TryConsumeAmmo(MissileType type) {
+	if ((type == MissileType::Normal && isNormalReloading_) ||
+		(type == MissileType::MissileWithTrail && isHomingReloading_)) {
+		return false;
+	}
+	int &magazine = (type == MissileType::Normal) ? normalAmmoInMagazine_ : homingAmmoInMagazine_;
+	if (magazine <= 0) {
+		return false;
+	}
+	--magazine;
+	return true;
+}
+
+void GamePlayScene::UpdateReload() {
+	if (!player_ || player_->IsDead()) return;
+	Input *input = Input::GetInstance();
+	if (!isNormalReloading_ && input->TriggerKey(DIK_F) &&
+		normalAmmoInMagazine_ < kNormalMagazineCapacity && normalAmmoReserve_ > 0) {
+		isNormalReloading_ = true;
+		normalReloadFrame_ = 0;
+	}
+	if (!isHomingReloading_ && input->TriggerKey(DIK_G) &&
+		homingAmmoInMagazine_ < kHomingMagazineCapacity && homingAmmoReserve_ > 0) {
+		isHomingReloading_ = true;
+		homingReloadFrame_ = 0;
+	}
+
+	auto finishReload = [](int &magazine, int capacity, int &reserve) {
+		const int required = capacity - magazine;
+		const int loaded = (std::min)(required, reserve);
+		magazine += loaded;
+		reserve -= loaded;
+	};
+	if (isNormalReloading_ && ++normalReloadFrame_ >= kReloadDurationFrames) {
+		finishReload(normalAmmoInMagazine_, kNormalMagazineCapacity, normalAmmoReserve_);
+		isNormalReloading_ = false;
+		normalReloadFrame_ = 0;
+	}
+	if (isHomingReloading_ && ++homingReloadFrame_ >= kReloadDurationFrames) {
+		finishReload(homingAmmoInMagazine_, kHomingMagazineCapacity, homingAmmoReserve_);
+		isHomingReloading_ = false;
+		homingReloadFrame_ = 0;
+	}
+}
+
+void GamePlayScene::SpawnAmmoPickup(const Vector3 &position) {
+	AmmoPickup pickup;
+	pickup.basePosition = position;
+	pickup.basePosition.y += 2.0f;
+	pickup.phase = static_cast<float>(ammoPickups_.size()) * 0.8f;
+	pickup.object = std::make_unique<Object3d>();
+	pickup.object->Initialize(Object3dCommon::GetInstance());
+	pickup.object->SetModel("AmmoPickupSphere");
+	pickup.object->SetScale({ 1.2f, 1.2f, 1.2f });
+	pickup.object->SetTranslate(pickup.basePosition);
+	pickup.object->Update();
+	ammoPickups_.push_back(std::move(pickup));
+}
+
+void GamePlayScene::UpdateAmmoPickups() {
+	if (!player_) return;
+	const Vector3 playerPosition = player_->GetPosition();
+	for (auto it = ammoPickups_.begin(); it != ammoPickups_.end();) {
+		it->phase += 0.05f;
+		Vector3 displayPosition = it->basePosition;
+		displayPosition.y += std::sin(it->phase) * 0.5f;
+		it->object->SetTranslate(displayPosition);
+		it->object->SetRotate({ 0.0f, it->phase, 0.0f });
+		it->object->Update();
+
+		const float dx = displayPosition.x - playerPosition.x;
+		const float dy = displayPosition.y - playerPosition.y;
+		const float dz = displayPosition.z - playerPosition.z;
+		if (dx * dx + dy * dy + dz * dz <= 9.0f) {
+			normalAmmoReserve_ = (std::min)(kNormalReserveCapacity, normalAmmoReserve_ + kPickupNormalAmmo);
+			homingAmmoReserve_ = (std::min)(kHomingReserveCapacity, homingAmmoReserve_ + kPickupHomingAmmo);
+			it = ammoPickups_.erase(it);
+		} else {
+			++it;
+		}
+	}
 }
 
 
@@ -68,6 +164,85 @@ void GamePlayScene::Initialize() {
 	lockOnReticleSprite_->Initialize(SpriteCommon::GetInstance(), kLockOnReticleTexturePath);
 	lockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
 
+	TextureManager::GetInstance()->LoadTexture("resources/white1x1.png");
+	spGaugeBackgroundSprite_ = std::make_unique<Sprite>();
+	spGaugeBackgroundSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	spGaugeFillSprite_ = std::make_unique<Sprite>();
+	spGaugeFillSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	spGaugeCostMarkerSprite_ = std::make_unique<Sprite>();
+	spGaugeCostMarkerSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+
+	const char *hudTexturePaths[] = {
+		"resources/hud_panel_frame.png",
+		"resources/hud_label_hp.png",
+		"resources/hud_label_ammo.png",
+		"resources/hud_label_sp.png",
+		"resources/hud_digits.png",
+		"resources/hud_ammo_icons.png"
+	};
+	for (const char *path : hudTexturePaths) {
+		TextureManager::GetInstance()->LoadTexture(path);
+	}
+	hudPanelSprite_ = std::make_unique<Sprite>();
+	hudPanelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[0]);
+	hudAmmoPanelSprite_ = std::make_unique<Sprite>();
+	hudAmmoPanelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[0]);
+	hpGaugeBackgroundSprite_ = std::make_unique<Sprite>();
+	hpGaugeBackgroundSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	hpGaugeFillSprite_ = std::make_unique<Sprite>();
+	hpGaugeFillSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	hudHpLabelSprite_ = std::make_unique<Sprite>();
+	hudHpLabelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[1]);
+	hudAmmoLabelSprite_ = std::make_unique<Sprite>();
+	hudAmmoLabelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[2]);
+	hudSpLabelSprite_ = std::make_unique<Sprite>();
+	hudSpLabelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[3]);
+	hudNormalAmmoIconSprite_ = std::make_unique<Sprite>();
+	hudNormalAmmoIconSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[5]);
+	hudHomingAmmoIconSprite_ = std::make_unique<Sprite>();
+	hudHomingAmmoIconSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[5]);
+	hudNormalReloadGaugeSprite_ = std::make_unique<Sprite>();
+	hudNormalReloadGaugeSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	hudHomingReloadGaugeSprite_ = std::make_unique<Sprite>();
+	hudHomingReloadGaugeSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	TextureManager::GetInstance()->LoadTexture("resources/radar_frame.png");
+	radarFrameSprite_ = std::make_unique<Sprite>();
+	radarFrameSprite_->Initialize(SpriteCommon::GetInstance(), "resources/radar_frame.png");
+	radarFrameSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+	radarSweepSprite_ = std::make_unique<Sprite>();
+	radarSweepSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	radarSweepSprite_->SetAnchorPoint({ 0.0f, 0.5f });
+	for (auto &blipSprite : radarBlipSprites_) {
+		blipSprite = std::make_unique<Sprite>();
+		blipSprite->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+		blipSprite->SetAnchorPoint({ 0.5f, 0.5f });
+	}
+	for (auto &digitSprite : hudHpDigitSprites_) {
+		digitSprite = std::make_unique<Sprite>();
+		digitSprite->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[4]);
+	}
+	for (auto &digitSprite : hudNormalAmmoDigitSprites_) {
+		digitSprite = std::make_unique<Sprite>();
+		digitSprite->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[4]);
+	}
+	for (auto &digitSprite : hudHomingAmmoDigitSprites_) {
+		digitSprite = std::make_unique<Sprite>();
+		digitSprite->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[4]);
+	}
+	spGauge_ = 100.0f;
+	isSpecialAttackActive_ = false;
+	specialAttackFrame_ = 0;
+	normalAmmoInMagazine_ = kNormalMagazineCapacity;
+	normalAmmoReserve_ = 90;
+	homingAmmoInMagazine_ = kHomingMagazineCapacity;
+	homingAmmoReserve_ = 16;
+	isNormalReloading_ = false;
+	isHomingReloading_ = false;
+	normalReloadFrame_ = 0;
+	homingReloadFrame_ = 0;
+	defeatedSmallEnemyCount_ = 0;
+	ammoPickups_.clear();
+
 	ModelManager::GetInstance()->CreatePlaneModel("BoundaryAlertPlane");
 	Model* alertModel = ModelManager::GetInstance()->FindModel("BoundaryAlertPlane");
 	if (alertModel) {
@@ -91,6 +266,10 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
+	ModelManager::GetInstance()->CreateSphereModel("AmmoPickupSphere", 16);
+	if (Model *pickupModel = ModelManager::GetInstance()->FindModel("AmmoPickupSphere")) {
+		pickupModel->SetColor({ 0.15f, 1.0f, 0.35f, 1.0f });
+	}
 
 	//======================================================
 	// プリミティブE生EEE
@@ -167,9 +346,12 @@ void GamePlayScene::Initialize() {
 	//音声再生
 	soundData1 = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
 	soundData2 = AudioManager::GetInstance()->LoadAudio("resources/maou_bgm_fantasy15.mp3");
+	songSoundData = AudioManager::GetInstance()->LoadAudio("resources/song_bgm.mp3");
 
 	pVoice1=AudioManager::GetInstance()->PlayWave(soundData1, true);
 	pVoice2=AudioManager::GetInstance()->PlayWave(soundData2, true);
+	pSongVoice=AudioManager::GetInstance()->PlayWave(songSoundData, true);
+	if (pSongVoice) pSongVoice->SetVolume(0.0f);
 
 	// 1. マネージャー経由でトレイル専用Model��を作る
 	ModelManager::GetInstance()->CreateTrailModel("SmokeTrail");
@@ -186,6 +368,12 @@ void GamePlayScene::Initialize() {
 
 	ModelManager::GetInstance()->CreateBoxModel("PlayerBox");
 	ModelManager::GetInstance()->CreateBoxModel("EnemyBox");
+	ModelManager::GetInstance()->CreateBoxModel("BossHull");
+	ModelManager::GetInstance()->CreateBoxModel("BossCannon");
+	ModelManager::GetInstance()->CreateBoxModel("BossBeam");
+	if (Model *model = ModelManager::GetInstance()->FindModel("BossHull")) model->SetColor({ 0.18f, 0.22f, 0.35f, 1.0f });
+	if (Model *model = ModelManager::GetInstance()->FindModel("BossCannon")) model->SetColor({ 1.0f, 0.35f, 0.05f, 1.0f });
+	if (Model *model = ModelManager::GetInstance()->FindModel("BossBeam")) model->SetColor({ 0.15f, 0.8f, 1.0f, 1.0f });
 	ModelManager::GetInstance()->CreateBoxModel("ObstacleBox");
 
 	player_ = std::make_unique<Player>();
@@ -249,6 +437,7 @@ void GamePlayScene::SetDebugCameraActive(bool isActive) {
 }
 
 void GamePlayScene::ReloadSceneJson() {
+	bossSpawned_ = false;
 	lockedEnemy_ = nullptr;
 	aimAssistEnemy_ = nullptr;
 	if (lockOnManager_) {
@@ -508,11 +697,23 @@ MissileTuning GamePlayScene::MakeMissileTuning(MissileType type) const {
 void GamePlayScene::Finalize() {
 	if (pVoice1) {
 		pVoice1->Stop();
+		pVoice1->DestroyVoice();
+		pVoice1 = nullptr;
+	}
+	if (pVoice2) {
+		pVoice2->Stop();
 		pVoice2->DestroyVoice();
+		pVoice2 = nullptr;
+	}
+	if (pSongVoice) {
+		pSongVoice->Stop();
+		pSongVoice->DestroyVoice();
+		pSongVoice = nullptr;
 	}
 
 	AudioManager::GetInstance()->UnloadWave(soundData1);
 	AudioManager::GetInstance()->UnloadWave(soundData2);
+	AudioManager::GetInstance()->UnloadWave(songSoundData);
 
 	// シーン刁E��替え時にポストエフェクトを通常に戻ぁE
 	if (PostEffect::GetInstance()) {
@@ -616,14 +817,29 @@ void GamePlayScene::Update() {
 		// 5フレームに1回だけ更新することで、スローモーション�E�世界停止�E�を実現�E�E
 		shouldUpdateGame = (gameOverTimer_ % 5 == 0);
 
-		// 紁E秒！E20フレーム�E�経過したら、正式にゲームオーバ�Eシーンへ遷移する�E�E
+		// 紁E秒！E20フレームE経過したら、正式にゲームオーバEシーンへ遷移するEE
 		if (gameOverTimer_ >= 120) {
 			SceneManager::GetInstance()->ChangeScene("GAMEOVER");
 		}
 	} else {
-		// 通常時�Eノ�EマルエフェクチE
+		// 通常時：ノーマルエフェクト、またはブースト時のスピード演出
 		if (PostEffect::GetInstance()) {
-			PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
+			bool isBoosting = false;
+			if (player_ && player_->GetCurrentMode() == PlayerMode::Fighter) {
+				float maxSpeed = player_->GetModeParams(PlayerMode::Fighter).maxMoveSpeed;
+				float speed = MyMath::Length(player_->GetVelocity());
+				if (speed > maxSpeed * 1.5f) {
+					isBoosting = true;
+					float effectProgress = std::clamp((speed - maxSpeed * 1.5f) / (maxSpeed * 3.0f - maxSpeed * 1.5f), 0.0f, 1.0f);
+					float vignetteRadius = 0.5f - 0.1f * effectProgress; // 視界の狭まりを控えめに
+					float blurIntensity = effectProgress * 0.5f; // ブラーをかなり弱くして前が見えるようにする
+					PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.4f, blurIntensity);
+				}
+			}
+			
+			if (!isBoosting) {
+				PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
+			}
 		}
 	}
 	shouldUpdateGame = shouldUpdateGame && isEditorPreviewPlaying_;
@@ -639,6 +855,83 @@ void GamePlayScene::Update() {
 	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
 	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
 
+	const bool isAnimationEditor = isSimulation && uiManager_->currentSimulationTarget_ == 5;
+	static bool wasAnimationEditor = false;
+	if (isAnimationEditor && !wasAnimationEditor) {
+		SetDebugCameraActive(true);
+		if (player_ && debugFlyCamera_) {
+			Vector3 pPos = player_->GetPosition();
+			// プレイヤーの少し後ろ、やや上から見下ろすように配置 (中心に捉える)
+			debugFlyCamera_->SetTranslate({ pPos.x, pPos.y + 2.0f, pPos.z - 12.0f });
+			debugFlyCamera_->SetQuaternion({ 0.0f, 0.0f, 0.0f, 1.0f });
+		}
+	} else if (!isAnimationEditor && wasAnimationEditor) {
+		SetDebugCameraActive(false);
+	}
+	wasAnimationEditor = isAnimationEditor;
+
+	if (shouldUpdateGame && canUseKeyboardInput && !isSpecialAttackActive_) {
+		UpdateReload();
+	}
+
+	// CキーでSPを50%消費し、3秒間の連射必殺技を発動する。
+	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
+		!isSpecialAttackActive_ && spGauge_ >= kSpecialAttackCost &&
+		Input::GetInstance()->TriggerKey(DIK_C)) {
+		spGauge_ -= kSpecialAttackCost;
+		isSpecialAttackActive_ = true;
+		specialAttackFrame_ = 0;
+		if (player_) {
+			player_->SetSpecialAttackActive(true);
+		}
+	}
+
+	// Vキーで歌システム（ルンピカゲージ100%消費）を発動する。
+	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
+		!isSongActive_ && songGauge_ >= 100.0f &&
+		Input::GetInstance()->TriggerKey(DIK_V)) {
+		songGauge_ = 0.0f;
+		isSongActive_ = true;
+		songFrame_ = 0;
+		if (player_) {
+			player_->SetSongActive(true);
+		}
+		if (pVoice2) pVoice2->SetVolume(0.0f);
+		if (pSongVoice) pSongVoice->SetVolume(1.0f);
+	}
+
+	if (isSongActive_) {
+		++songFrame_;
+		if (songFrame_ >= 900) { // 15 seconds
+			isSongActive_ = false;
+			songFrame_ = 0;
+			if (player_) {
+				player_->SetSongActive(false);
+			}
+			if (pVoice2) pVoice2->SetVolume(1.0f);
+			if (pSongVoice) pSongVoice->SetVolume(0.0f);
+		}
+	}
+
+	if (isSpecialAttackActive_) {
+		if (specialAttackFrame_ % kSpecialAttackFireIntervalFrames == 0 && missilePresetManager_) {
+			// 通常弾と誘導弾を操作中の照準方向へ同時発射する。
+			missilePresetManager_->FirePlayerMissile(MissileType::Normal, nullptr, -0.3f);
+			// 初速は照準方向にして前方へ射出し、直進区間の後に更新側で敵を捕捉する。
+			missilePresetManager_->FirePlayerMissile(MissileType::MissileWithTrail, nullptr, 0.3f);
+		}
+		++specialAttackFrame_;
+		if (specialAttackFrame_ >= kSpecialAttackDurationFrames) {
+			isSpecialAttackActive_ = false;
+			specialAttackFrame_ = 0;
+			if (player_) {
+				player_->SetSpecialAttackActive(false);
+			}
+		}
+	} else {
+		spGauge_ = std::clamp(spGauge_ + kSpGaugeRecoveryPerFrame, 0.0f, 100.0f);
+	}
+
 	if (myBox && animationData.duration > 0.0f) {
 		if (playAnimation && updateAnimationPreview) {
 			animationTime += 1.0f / 60.0f;
@@ -652,22 +945,22 @@ void GamePlayScene::Update() {
 			myModelObject->GetModel()->UpdateSkinCluster(myModelObject->skinCluster, skeleton);
 		}
 
-		// 今�EめE��に合わせた状態で使ぁE��め、Skeletonから計算結果を取り�EしてBox/Modelに適用する
+		// 今EめEに合わせた状態で使ぁEめ、Skeletonから計算結果を取りEしてBox/Modelに適用する
 		if (!skeleton.joints.empty()) {
 			myBox->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 			myBox->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
 
-			// スキニングが実裁E��れたため、スキンなしModel��の場合�EみTransformを適用する
-			// スキニングが実裁E��れたため、スキンなしModel��の場合�EみTransformを適用する
+			// スキニングが実裁Eれたため、スキンなしModelの場合EみTransformを適用する
+			// スキニングが実裁Eれたため、スキンなしModelの場合EみTransformを適用する
 			if (myModelObject->GetModel()) {
 				if (!myModelObject->skinCluster.isValid) {
 					myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 					myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 					myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
 				} else {
-					// スキニングModel��はアニメーションが行�Eに含まれるため、�EースのトランスフォームはリセチE��する
-					// (これを行わなぁE��二重に移動して画面外に消えめE
+					// スキニングModelはアニメーションが行Eに含まれるため、EースのトランスフォームはリセチEする
+					// (これを行わなぁE二重に移動して画面外に消えめE
 					myModelObject->SetTranslate({ 0.0f, 0.0f, 0.0f });
 					myModelObject->SetQuaternionRotate({ 0.0f, 0.0f, 0.0f, 1.0f });
 					myModelObject->SetScale({ modelScale, modelScale, modelScale });
@@ -676,42 +969,44 @@ void GamePlayScene::Update() {
 		}
 
 		// 骨描画の更新
-		if (showBones && updateAnimationPreview) {
+		bool isAnimationEditor = IsSimulationMode() && uiManager_ && uiManager_->currentSimulationTarget_ == 5;
+		if ((showBones || isAnimationEditor) && player_) {
 			std::vector<VertexData> lineVertices;
 
-			for (size_t i = 0; i < skeleton.joints.size(); ++i) {
+			const Skeleton& playerSkeleton = player_->GetSkeleton();
+			for (size_t i = 0; i < playerSkeleton.joints.size(); ++i) {
 				Vector3 pos = {
-					skeleton.joints[i].skeletonSpaceMatrix.m[3][0],
-					skeleton.joints[i].skeletonSpaceMatrix.m[3][1],
-					skeleton.joints[i].skeletonSpaceMatrix.m[3][2]
+					playerSkeleton.joints[i].skeletonSpaceMatrix.m[3][0],
+					playerSkeleton.joints[i].skeletonSpaceMatrix.m[3][1],
+					playerSkeleton.joints[i].skeletonSpaceMatrix.m[3][2]
 				};
-				// Model��全体�Eスケールに合わせてボ�Eンの座標もスケーリングする
-				pos.x *= modelScale;
-				pos.y *= modelScale;
-				pos.z *= modelScale;
 
-				// ライン用の頂点を作�E�E�親がいる場合！E
-				if (skeleton.joints[i].parent) {
-					int32_t parentIndex = *skeleton.joints[i].parent;
+				// ライン用の頂点を作EE親がいる場合！E
+				if (playerSkeleton.joints[i].parent) {
+					int32_t parentIndex = *playerSkeleton.joints[i].parent;
 					Vector3 parentPos = {
-						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][0],
-						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][1],
-						skeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][2]
+						playerSkeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][0],
+						playerSkeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][1],
+						playerSkeleton.joints[parentIndex].skeletonSpaceMatrix.m[3][2]
 					};
-					parentPos.x *= modelScale;
-					parentPos.y *= modelScale;
-					parentPos.z *= modelScale;
 
 					VertexData v1, v2;
 					v1.position = { parentPos.x, parentPos.y, parentPos.z, 1.0f };
 					v1.normal = { 0.0f, 1.0f, 0.0f };
 					v1.texcoord = { 0.0f, 0.0f };
-					v1.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
 
 					v2.position = { pos.x, pos.y, pos.z, 1.0f };
 					v2.normal = { 0.0f, 1.0f, 0.0f };
 					v2.texcoord = { 1.0f, 1.0f };
-					v2.color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+
+					Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+					if (simulationManager_ && simulationManager_->IsBoneSelected(playerSkeleton.joints[i].name)) {
+						v1.color = { 1.0f, 1.0f, 0.0f, 1.0f };
+						v2.color = { 1.0f, 1.0f, 0.0f, 1.0f };
+					} else {
+						v1.color = color;
+						v2.color = color;
+					}
 
 					lineVertices.push_back(v1);
 					lineVertices.push_back(v2);
@@ -719,6 +1014,12 @@ void GamePlayScene::Update() {
 			}
 
 			// ラインModel��の頂点を更新
+			// ラインModelの頂点を更新
+			if (player_ && player_->GetObject3d()) {
+				skeletonLinesObject->SetTranslate(player_->GetPosition());
+				skeletonLinesObject->SetQuaternionRotate(player_->GetQuaternion());
+				skeletonLinesObject->SetScale(player_->GetObject3d()->GetScale());
+			}
 			if (!lineVertices.empty() && skeletonLinesObject->GetModel()) {
 				skeletonLinesObject->GetModel()->UpdateLineVertices(lineVertices);
 			}
@@ -736,13 +1037,21 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
+	// プレイヤーの移動とカメラ更新より先にロックオン状態を確定する。
+	// これにより、ロックオンしたフレームから機体の追従方向とカメラ方向が一致する。
+	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
+	lockOnManager_->UpdateLockOn(activeCamera, allowLockOnBehavior);
+
 	// プレイヤーの更新と、カメラの追征E
 	if (player_) {
 		if (updateSelectedPlayer) {
+			Vector3 lockOnTargetPosition;
+			const Vector3 *lockOnTarget = nullptr;
 			if (lockedEnemy_) {
-				player_->UpdateLockOnRotation(lockedEnemy_->GetPosition());
+				lockOnTargetPosition = lockedEnemy_->GetPosition();
+				lockOnTarget = &lockOnTargetPosition;
 			}
-			player_->Update(obstacles_);
+			player_->Update(obstacles_, lockOnTarget);
 		} else {
 			player_->UpdateModel();
 		}
@@ -769,7 +1078,25 @@ void GamePlayScene::Update() {
 
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
 			(*it)->Update(playerPos, enemyBulletManager_.get(), obstacles_);
+			if (Boss *boss = dynamic_cast<Boss *>(it->get())) {
+				const int summonCount = boss->ConsumeSummonRequests();
+				for (int i = 0; i < summonCount; ++i) {
+					auto escort = std::make_unique<Enemy>();
+					const float side = static_cast<float>(i - summonCount / 2) * 8.0f;
+					escort->Initialize({ boss->GetPosition().x + side, boss->GetPosition().y - 3.0f, boss->GetPosition().z - 12.0f });
+					escort->StartChasingPlayer();
+					enemies_.push_back(std::move(escort));
+				}
+			}
 			if ((*it)->IsDead()) {
+				const bool defeatedBoss = (*it)->IsBoss();
+				const Vector3 defeatedPosition = (*it)->GetPosition();
+				if (!defeatedBoss) {
+					++defeatedSmallEnemyCount_;
+					if (defeatedSmallEnemyCount_ % kKillsPerAmmoPickup == 0) {
+						SpawnAmmoPickup(defeatedPosition);
+					}
+				}
 				if (lockedEnemy_ == it->get()) {
 					lockedEnemy_ = nullptr;
 					isCinematicLockOnCameraInitialized_ = false;
@@ -790,16 +1117,31 @@ void GamePlayScene::Update() {
 				if (spawnPointIndex < enemySpawns_.size() && enemySpawns_[spawnPointIndex].isInitialSpawn) {
 // 					ScheduleEnemySpawn(spawnPointIndex, kEnemyRespawnDelayFrames);
 				}
-				it = enemies_.erase(it); // 当たった敵はリストから消滁E
+				songGauge_ = (std::min)(songGauge_ + 20.0f, 100.0f);
+				it = enemies_.erase(it); // 当たった敵はリストから消去滁E
+
+				// ボスが召喚した雑魚敵が残っていても、ボス本体を倒した時点でクリアにする。
+				if (defeatedBoss && !IsSimulationMode() && !isGameOver_) {
+					SceneManager::GetInstance()->ChangeScene("CLEAR");
+					return;
+				}
 			} else {
 				++it;
 			}
 		}
+		UpdateAmmoPickups();
 		UpdateEnemyRespawns();
 
 		if (!IsSimulationMode() && !isGameOver_ && enemies_.empty() && !HasPendingEnemySpawns()) {
-			SceneManager::GetInstance()->ChangeScene("CLEAR");
-			return;
+			if (!bossSpawned_) {
+				auto boss = std::make_unique<Boss>();
+				boss->Initialize({ playerPos.x, playerPos.y + 18.0f, playerPos.z + 90.0f });
+				enemies_.push_back(std::move(boss));
+				bossSpawned_ = true;
+			} else {
+				SceneManager::GetInstance()->ChangeScene("CLEAR");
+				return;
+			}
 		}
 
 		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します！）
@@ -814,10 +1156,180 @@ void GamePlayScene::Update() {
 
 	// カメラの更新
 	if (isDebugCameraActive_) {
-		if (canUseKeyboardInput && canUseMouseInput) {
-			debugFlyCamera_->Update(); // FlyCameraが入力の消化して自動更新する
-		} else {
-			debugFlyCamera_->Camera::Update();
+		debugFlyCamera_->SetCanUseKeyboard(canUseKeyboardInput);
+		debugFlyCamera_->Update(); // FlyCameraが内部でマウスホバー判定を行って更新する
+		
+		if (isAnimationEditor && simulationManager_) {
+			simulationManager_->UpdateShortcuts();
+			ImGuiIO& io = ImGui::GetIO();
+			Vector2 localMousePos;
+			
+			static bool s_clickedOnBone = false;
+			static bool s_isDraggingBone = false;
+			static ImVec2 s_mouseDownPos = {0, 0};
+			
+			if (FlyCamera::GetGameViewMousePos(io.MousePos.x, io.MousePos.y, localMousePos)) {
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+					float gw, gh;
+					FlyCamera::GetGameViewSize(gw, gh);
+					Ray ray = MyMath::ScreenToRay(localMousePos, gw, gh, MyMath::Inverse(debugFlyCamera_->GetViewProjectionMatrix()));
+					
+					float closestDist = 999999.0f;
+					std::string closestBone = "";
+					
+					if (this->player_) {
+						const Skeleton& playerSkeleton = this->player_->GetSkeleton();
+						for (const auto& joint : playerSkeleton.joints) {
+							Vector3 pos = {
+								joint.skeletonSpaceMatrix.m[3][0],
+								joint.skeletonSpaceMatrix.m[3][1],
+								joint.skeletonSpaceMatrix.m[3][2]
+							};
+						
+							Vector3 currentScale = {1.0f, 1.0f, 1.0f};
+							if (this->player_ && this->player_->GetObject3d()) {
+								currentScale = this->player_->GetObject3d()->GetScale();
+								Matrix4x4 worldMat = MyMath::MakeAffineMatrix(currentScale, this->player_->GetQuaternion(), this->player_->GetPosition());
+								pos = MyMath::Transform(pos, worldMat);
+							}
+
+							Sphere s;
+							s.center = pos;
+							s.radius = 0.5f * currentScale.x; // 判定半径を少し小さめに調整
+						
+						float dist;
+						if (MyMath::IntersectRaySphere(ray, s, &dist)) {
+							if (dist < closestDist) {
+								closestDist = dist;
+								closestBone = joint.name;
+							}
+						}
+					}
+					}
+					
+					s_clickedOnBone = !closestBone.empty();
+					s_mouseDownPos = io.MousePos;
+
+					if (s_clickedOnBone) {
+						if (io.KeyShift) {
+							if (simulationManager_->IsBoneSelected(closestBone)) {
+								simulationManager_->RemoveSelectedBoneName(closestBone);
+							} else {
+								simulationManager_->AddSelectedBoneName(closestBone);
+							}
+						} else {
+							// すでに選択済みのボーンをクリックした場合は、複数選択を維持してドラッグできるようにする
+							if (!simulationManager_->IsBoneSelected(closestBone)) {
+								simulationManager_->ClearSelectedBones();
+								simulationManager_->AddSelectedBoneName(closestBone);
+							}
+						}
+						isBoxSelecting_ = false;
+						s_isDraggingBone = true;
+					} else {
+						// 何もない空間をクリックした時
+						if (io.KeyShift || simulationManager_->GetSelectedBoneNames().empty()) {
+							// Shiftキーを押しているか、何も選択されていない場合はボックス選択を開始
+							isBoxSelecting_ = true;
+							s_isDraggingBone = false;
+							boxSelectStartPos_ = localMousePos;
+							boxSelectEndPos_ = localMousePos;
+						} else {
+							// すでにボーンが選択されている場合、ドラッグで回転できるように待機
+							isBoxSelecting_ = false;
+							s_isDraggingBone = true;
+						}
+					}
+				}
+				
+				if (ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+					const auto& selBones = simulationManager_->GetSelectedBoneNames();
+					float dx = io.MouseDelta.x;
+					float dy = io.MouseDelta.y;
+					
+					if (isBoxSelecting_) {
+						Vector2 localMousePos;
+						if (FlyCamera::GetGameViewMousePos(io.MousePos.x, io.MousePos.y, localMousePos)) {
+							boxSelectEndPos_ = localMousePos;
+						}
+					} else if (s_isDraggingBone && !selBones.empty()) {
+						if (dx != 0.0f || dy != 0.0f) {
+							bool doTranslate = io.KeyCtrl;
+							for (const auto& boneName : selBones) {
+								if (doTranslate) {
+									simulationManager_->AddBoneTranslationFromDrag(boneName, dx, dy);
+								} else {
+									simulationManager_->AddBoneRotationFromDrag(boneName, dx, dy);
+								}
+							}
+						}
+					}
+				}
+
+				if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+					if (isBoxSelecting_) {
+						isBoxSelecting_ = false;
+						
+						float minX = (std::min)(boxSelectStartPos_.x, boxSelectEndPos_.x);
+						float maxX = (std::max)(boxSelectStartPos_.x, boxSelectEndPos_.x);
+						float minY = (std::min)(boxSelectStartPos_.y, boxSelectEndPos_.y);
+						float maxY = (std::max)(boxSelectStartPos_.y, boxSelectEndPos_.y);
+						
+						if (maxX - minX > 2.0f && maxY - minY > 2.0f) {
+							if (this->player_) {
+								float gw, gh;
+								FlyCamera::GetGameViewSize(gw, gh);
+								Matrix4x4 vpMat = debugFlyCamera_->GetViewProjectionMatrix();
+								const Skeleton& playerSkeleton = this->player_->GetSkeleton();
+								
+								for (const auto& joint : playerSkeleton.joints) {
+									Vector3 pos = {
+										joint.skeletonSpaceMatrix.m[3][0],
+										joint.skeletonSpaceMatrix.m[3][1],
+										joint.skeletonSpaceMatrix.m[3][2]
+									};
+									
+									if (this->player_->GetObject3d()) {
+										Vector3 currentScale = this->player_->GetObject3d()->GetScale();
+										Matrix4x4 worldMat = MyMath::MakeAffineMatrix(currentScale, this->player_->GetQuaternion(), this->player_->GetPosition());
+										pos = MyMath::Transform(pos, worldMat);
+									}
+									
+									Vector3 screenPos = MyMath::WorldToScreen(pos, vpMat, gw, gh);
+									
+									if (screenPos.z > 0.0f && screenPos.z < 1.0f) {
+										if (screenPos.x >= minX && screenPos.x <= maxX &&
+											screenPos.y >= minY && screenPos.y <= maxY) {
+											simulationManager_->AddSelectedBoneName(joint.name);
+										}
+									}
+								}
+							}
+						}
+					} else {
+						// ドラッグせずにクリックだけで離した場合の選択解除処理
+						if (!s_clickedOnBone && !io.KeyShift) {
+							ImVec2 dragDelta(io.MousePos.x - s_mouseDownPos.x, io.MousePos.y - s_mouseDownPos.y);
+							if (std::abs(dragDelta.x) < 2.0f && std::abs(dragDelta.y) < 2.0f) {
+								simulationManager_->ClearSelectedBones();
+							}
+						}
+					}
+					s_isDraggingBone = false;
+				}
+
+				if (isBoxSelecting_) {
+					float minViewX, minViewY, maxViewX, maxViewY;
+					if (FlyCamera::GetGameViewBounds(minViewX, minViewY, maxViewX, maxViewY)) {
+						ImVec2 start(minViewX + boxSelectStartPos_.x, minViewY + boxSelectStartPos_.y);
+						ImVec2 end(minViewX + boxSelectEndPos_.x, minViewY + boxSelectEndPos_.y);
+						ImU32 colFill = IM_COL32(100, 150, 250, 80);
+						ImU32 colBorder = IM_COL32(150, 200, 255, 200);
+						ImGui::GetForegroundDrawList()->AddRectFilled(start, end, colFill);
+						ImGui::GetForegroundDrawList()->AddRect(start, end, colBorder, 0.0f, 0, 1.5f);
+					}
+				}
+			}
 		}
 	} else {
 		if (player_) {
@@ -832,7 +1344,6 @@ void GamePlayScene::Update() {
 		camera->Update();
 	}
 
-	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (isSelectedOnlyPreview) {
 		for (auto &enemy : enemies_) {
 			enemy->UpdateModel();
@@ -854,8 +1365,6 @@ void GamePlayScene::Update() {
 	size.y = 300.0f;
 	sprite->SetSize(size);
 
-	lockOnManager_->UpdateLockOn(activeCamera, allowLockOnBehavior);
-
 	if (environmentRenderer_->GetShowParticles() && updateSelectedParticles) {
 	}
 
@@ -863,7 +1372,7 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// ミサイルの発封E�E琁E
 	// ==========================================
-	if (allowMouseMissileFire && player_ && !isGameOver_) {
+	if (allowMouseMissileFire && player_ && !isGameOver_ && !isSpecialAttackActive_) {
 		Input *input = Input::GetInstance();
 		// 左クリチE���E�速くて煙が出なぁE��常弾
 		if (input->TriggerMouseButton(0)) {
@@ -1096,8 +1605,7 @@ void GamePlayScene::Update() {
 				}
 			}
 		}
-
-		// 空の場合�Eダミ�Eの透�Eな線を追加�E�リソース stuck 防止�E�E
+		// 空の場合EダミEの透Eな線を追加Eリソース stuck 防止EE
 		if (colliderVertices.empty()) {
 			VertexData v1, v2;
 			v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1122,12 +1630,22 @@ void GamePlayScene::Update() {
 }
 
 void GamePlayScene::Draw() {
-	//3Dオブジェト�E描画準備
+	//3Dオブジェト描画準備
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
 	// プレイヤーの描画
 	if (player_) {
 		player_->Draw();
+	}
+
+	bool isAnimationEditor = IsSimulationMode() && uiManager_ && uiManager_->currentSimulationTarget_ == 5;
+	if (isAnimationEditor) {
+		// アニメーション編集時は常にボーンを描画
+		Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
+			skeletonLinesObject->Draw();
+		}
+		return; // アニメーション編集時はプレイヤーとボーンのみ描画
 	}
 
 	// すべてのミサイルを描画
@@ -1152,6 +1670,12 @@ void GamePlayScene::Draw() {
 		// 画面外の場合に描画しない（カリング）
 		if (MyMath::IsInFrustum(enemySphere, frustumPlanes)) {
 			enemy->Draw();
+			Object3dCommon::GetInstance()->SetCommonDrawSettings();
+		}
+	}
+	for (const AmmoPickup &pickup : ammoPickups_) {
+		if (pickup.object) {
+			pickup.object->Draw();
 			Object3dCommon::GetInstance()->SetCommonDrawSettings();
 		}
 	}
@@ -1273,13 +1797,228 @@ void GamePlayScene::DrawOverlay() {
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (!activeCamera) return;
 
+	// 左下はHP/SP、右下は弾薬と役割ごとにHUDを分ける。
+	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
+	const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
+	const float statusPanelX = 20.0f;
+	const float statusPanelY = screenHeight - 145.0f;
+	const float ammoPanelX = screenWidth - 420.0f;
+	const float ammoPanelY = screenHeight - 170.0f;
+	if (hudPanelSprite_) {
+		hudPanelSprite_->SetPosition({ statusPanelX, statusPanelY });
+		hudPanelSprite_->SetSize({ 390.0f, 125.0f });
+		hudPanelSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.92f });
+		hudPanelSprite_->Update();
+		hudPanelSprite_->Draw();
+	}
+	if (hudAmmoPanelSprite_) {
+		hudAmmoPanelSprite_->SetPosition({ ammoPanelX, ammoPanelY });
+		hudAmmoPanelSprite_->SetSize({ 400.0f, 150.0f });
+		hudAmmoPanelSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.92f });
+		hudAmmoPanelSprite_->Update();
+		hudAmmoPanelSprite_->Draw();
+	}
+
+	auto drawLabel = [](Sprite *label, const Vector2 &position, const Vector2 &size) {
+		if (!label) return;
+		label->SetPosition(position);
+		label->SetSize(size);
+		label->Update();
+		label->Draw();
+	};
+	drawLabel(hudHpLabelSprite_.get(), { statusPanelX + 30.0f, statusPanelY + 29.0f }, { 42.0f, 25.0f });
+	drawLabel(hudSpLabelSprite_.get(), { statusPanelX + 30.0f, statusPanelY + 77.0f }, { 39.0f, 25.0f });
+	drawLabel(hudAmmoLabelSprite_.get(), { ammoPanelX + 32.0f, ammoPanelY + 22.0f }, { 82.0f, 25.0f });
+
+	auto drawText = [](const std::string &text, auto &sprites, float rightX, float y, const Vector4 &color) {
+		constexpr float digitWidth = 22.0f;
+		constexpr float digitHeight = 28.0f;
+		const float startX = rightX - digitWidth * static_cast<float>(text.size());
+		for (size_t index = 0; index < text.size() && index < sprites.size(); ++index) {
+			Sprite *digitSprite = sprites[index].get();
+			const int glyphIndex = (text[index] == '/') ? 10 : text[index] - '0';
+			digitSprite->SetTextureLeftTop({ static_cast<float>(glyphIndex * 64), 0.0f });
+			digitSprite->SetTextureSize({ 64.0f, 80.0f });
+			digitSprite->SetPosition({ startX + digitWidth * static_cast<float>(index), y });
+			digitSprite->SetSize({ digitWidth, digitHeight });
+			digitSprite->SetColor(color);
+			digitSprite->Update();
+			digitSprite->Draw();
+		}
+	};
+	const float statusGaugeX = statusPanelX + 88.0f;
+	const float statusGaugeWidth = 265.0f;
+	const float statusGaugeHeight = 18.0f;
+	if (hpGaugeBackgroundSprite_ && hpGaugeFillSprite_) {
+		hpGaugeBackgroundSprite_->SetPosition({ statusGaugeX - 2.0f, statusPanelY + 32.0f });
+		hpGaugeBackgroundSprite_->SetSize({ statusGaugeWidth + 4.0f, statusGaugeHeight + 4.0f });
+		hpGaugeBackgroundSprite_->SetColor({ 0.04f, 0.03f, 0.08f, 0.92f });
+		hpGaugeBackgroundSprite_->Update();
+		hpGaugeBackgroundSprite_->Draw();
+		const float hpRatio = std::clamp(
+			static_cast<float>(player_ ? player_->GetHP() : 0) / static_cast<float>(Player::kMaxHP),
+			0.0f,
+			1.0f);
+		hpGaugeFillSprite_->SetPosition({ statusGaugeX, statusPanelY + 34.0f });
+		hpGaugeFillSprite_->SetSize({ statusGaugeWidth * hpRatio, statusGaugeHeight });
+		hpGaugeFillSprite_->SetColor({ 1.0f, 0.12f, 0.18f, 1.0f });
+		hpGaugeFillSprite_->Update();
+		hpGaugeFillSprite_->Draw();
+	}
+	if (hudNormalAmmoIconSprite_ && hudHomingAmmoIconSprite_) {
+		hudNormalAmmoIconSprite_->SetTextureLeftTop({ 0.0f, 0.0f });
+		hudNormalAmmoIconSprite_->SetTextureSize({ 887.0f, 887.0f });
+		hudNormalAmmoIconSprite_->SetPosition({ ammoPanelX + 34.0f, ammoPanelY + 53.0f });
+		hudNormalAmmoIconSprite_->SetSize({ 48.0f, 48.0f });
+		hudNormalAmmoIconSprite_->Update();
+		hudNormalAmmoIconSprite_->Draw();
+		hudHomingAmmoIconSprite_->SetTextureLeftTop({ 887.0f, 0.0f });
+		hudHomingAmmoIconSprite_->SetTextureSize({ 887.0f, 887.0f });
+		hudHomingAmmoIconSprite_->SetPosition({ ammoPanelX + 34.0f, ammoPanelY + 91.0f });
+		hudHomingAmmoIconSprite_->SetSize({ 48.0f, 48.0f });
+		hudHomingAmmoIconSprite_->Update();
+		hudHomingAmmoIconSprite_->Draw();
+	}
+	const Vector4 normalAmmoColor = isNormalReloading_
+		? Vector4{ 1.0f, 1.0f, 0.65f, 1.0f }
+		: Vector4{ 1.0f, 0.78f, 0.08f, 1.0f };
+	const Vector4 homingAmmoColor = isHomingReloading_
+		? Vector4{ 1.0f, 0.65f, 0.65f, 1.0f }
+		: Vector4{ 1.0f, 0.18f, 0.12f, 1.0f };
+	drawText(std::to_string(normalAmmoInMagazine_) + "/" + std::to_string(normalAmmoReserve_), hudNormalAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 60.0f, normalAmmoColor);
+	drawText(std::to_string(homingAmmoInMagazine_) + "/" + std::to_string(homingAmmoReserve_), hudHomingAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 98.0f, homingAmmoColor);
+	if (isNormalReloading_ && hudNormalReloadGaugeSprite_) {
+		hudNormalReloadGaugeSprite_->SetPosition({ ammoPanelX + 90.0f, ammoPanelY + 89.0f });
+		hudNormalReloadGaugeSprite_->SetSize({ 275.0f * static_cast<float>(normalReloadFrame_) / static_cast<float>(kReloadDurationFrames), 4.0f });
+		hudNormalReloadGaugeSprite_->SetColor({ 1.0f, 0.78f, 0.08f, 1.0f });
+		hudNormalReloadGaugeSprite_->Update();
+		hudNormalReloadGaugeSprite_->Draw();
+	}
+	if (isHomingReloading_ && hudHomingReloadGaugeSprite_) {
+		hudHomingReloadGaugeSprite_->SetPosition({ ammoPanelX + 90.0f, ammoPanelY + 127.0f });
+		hudHomingReloadGaugeSprite_->SetSize({ 275.0f * static_cast<float>(homingReloadFrame_) / static_cast<float>(kReloadDurationFrames), 4.0f });
+		hudHomingReloadGaugeSprite_->SetColor({ 1.0f, 0.18f, 0.12f, 1.0f });
+		hudHomingReloadGaugeSprite_->Update();
+		hudHomingReloadGaugeSprite_->Draw();
+	}
+
+	// 中央の白線が必殺技1回分（50%）。
+	const float gaugeX = statusGaugeX;
+	const float gaugeY = statusPanelY + 82.0f;
+	const float gaugeWidth = statusGaugeWidth;
+	const float gaugeHeight = 18.0f;
+	if (spGaugeBackgroundSprite_ && spGaugeFillSprite_ && spGaugeCostMarkerSprite_) {
+		spGaugeBackgroundSprite_->SetPosition({ gaugeX - 2.0f, gaugeY - 2.0f });
+		spGaugeBackgroundSprite_->SetSize({ gaugeWidth + 4.0f, gaugeHeight + 4.0f });
+		spGaugeBackgroundSprite_->SetColor({ 0.03f, 0.05f, 0.12f, 0.90f });
+		spGaugeBackgroundSprite_->Update();
+		spGaugeBackgroundSprite_->Draw();
+
+		spGaugeFillSprite_->SetPosition({ gaugeX, gaugeY });
+		spGaugeFillSprite_->SetSize({ gaugeWidth * std::clamp(spGauge_ / 100.0f, 0.0f, 1.0f), gaugeHeight });
+		spGaugeFillSprite_->SetColor(isSpecialAttackActive_
+			? Vector4{ 1.0f, 0.35f, 0.05f, 1.0f }
+			: Vector4{ 0.05f, 0.75f, 1.0f, 1.0f });
+		spGaugeFillSprite_->Update();
+		spGaugeFillSprite_->Draw();
+
+		spGaugeCostMarkerSprite_->SetPosition({ gaugeX + gaugeWidth * 0.5f - 1.0f, gaugeY });
+		spGaugeCostMarkerSprite_->SetSize({ 2.0f, gaugeHeight });
+		spGaugeCostMarkerSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.9f });
+		spGaugeCostMarkerSprite_->Update();
+		spGaugeCostMarkerSprite_->Draw();
+	}
+
+	DrawRadar();
+
+	bool isJammed = lockOnManager_->IsPlayerJammed(activeCamera);
+
 	if (isMultiLockCharging_ && !multiLockTargets_.empty()) {
 		for (Enemy *target : multiLockTargets_) {
-			DrawLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get());
+			DrawLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
 		}
 	} else if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
-		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get());
+		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
 	} else {
-		DrawAimCursorOverlaySprite(aimCursorSprite_.get());
+		DrawAimCursorOverlaySprite(aimCursorSprite_.get(), isJammed);
+	}
+}
+
+void GamePlayScene::DrawRadar() {
+	if (!player_ || !radarFrameSprite_) {
+		return;
+	}
+
+	constexpr float kRadarRange = 250.0f;
+	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
+	const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
+	const float radarSize = (std::min)(230.0f, screenHeight * 0.30f);
+	const float radarRadius = radarSize * 0.39f;
+	const Vector2 radarCenter = {
+		screenWidth - radarSize * 0.5f - 20.0f,
+		radarSize * 0.5f + 20.0f
+	};
+
+	radarFrameSprite_->SetPosition(radarCenter);
+	radarFrameSprite_->SetSize({ radarSize, radarSize });
+	radarFrameSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.96f });
+	radarFrameSprite_->Update();
+	radarFrameSprite_->Draw();
+
+	// 中心から伸びる細い走査線を回転させる。
+	radarSweepAngle_ += 0.025f;
+	if (radarSweepAngle_ >= 6.2831853f) {
+		radarSweepAngle_ -= 6.2831853f;
+	}
+	if (radarSweepSprite_) {
+		radarSweepSprite_->SetPosition(radarCenter);
+		radarSweepSprite_->SetSize({ radarRadius, 2.0f });
+		radarSweepSprite_->SetRotation(radarSweepAngle_ - 1.5707963f);
+		radarSweepSprite_->SetColor({ 0.0f, 0.9f, 1.0f, 0.48f });
+		radarSweepSprite_->Update();
+		radarSweepSprite_->Draw();
+	}
+
+	const Vector3 playerPosition = player_->GetPosition();
+	const Vector3 playerForward = player_->GetForwardVector();
+	const float forwardLength = std::sqrt(
+		playerForward.x * playerForward.x + playerForward.z * playerForward.z);
+	const float forwardX = forwardLength > 0.0001f ? playerForward.x / forwardLength : 0.0f;
+	const float forwardZ = forwardLength > 0.0001f ? playerForward.z / forwardLength : 1.0f;
+	const float rightX = forwardZ;
+	const float rightZ = -forwardX;
+
+	size_t blipIndex = 0;
+	for (const auto &enemy : enemies_) {
+		if (!enemy || enemy->IsDead() || blipIndex >= radarBlipSprites_.size()) {
+			continue;
+		}
+
+		const Vector3 enemyPosition = enemy->GetPosition();
+		const float deltaX = enemyPosition.x - playerPosition.x;
+		const float deltaZ = enemyPosition.z - playerPosition.z;
+		const float localRight = deltaX * rightX + deltaZ * rightZ;
+		const float localForward = deltaX * forwardX + deltaZ * forwardZ;
+		const float distance = std::sqrt(localRight * localRight + localForward * localForward);
+		const float positionScale = distance > kRadarRange && distance > 0.0001f
+			? kRadarRange / distance
+			: 1.0f;
+
+		Sprite *blip = radarBlipSprites_[blipIndex++].get();
+		blip->SetPosition({
+			radarCenter.x + (localRight * positionScale / kRadarRange) * radarRadius,
+			radarCenter.y - (localForward * positionScale / kRadarRange) * radarRadius
+		});
+		const float blipSize = enemy->IsBoss() ? 12.0f : (enemy.get() == lockedEnemy_ ? 9.0f : 6.0f);
+		blip->SetSize({ blipSize, blipSize });
+		if (enemy.get() == lockedEnemy_) {
+			blip->SetColor({ 1.0f, 0.95f, 0.05f, 1.0f });
+		} else if (enemy->IsBoss()) {
+			blip->SetColor({ 1.0f, 0.12f, 0.05f, 1.0f });
+		} else {
+			blip->SetColor({ 1.0f, 0.38f, 0.05f, 1.0f });
+		}
+		blip->Update();
+		blip->Draw();
 	}
 }

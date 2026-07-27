@@ -80,7 +80,17 @@ class MYADDON_OT_ai_generate_enemy_plan_async(bpy.types.Operator):
         seed = max(0, int(getattr(scene, "myaddon_ai_enemy_seed", 1)))
         
         if provider != 'OLLAMA':
-            return bpy.ops.myaddon.myaddon_ot_ai_generate_enemy_plan()
+            fallback_enabled = getattr(scene, "myaddon_ai_enemy_ollama_fallback", True)
+            if fallback_enabled:
+                from .operators import _parse_ai_enemy_prompt
+                full_text = " ".join([m.content for m in history]) + " " + prompt
+                _, motion = _parse_ai_enemy_prompt(full_text)
+                if not motion.get("matched_keywords", False) and len(full_text.strip()) > 0:
+                    provider = 'OLLAMA'
+                else:
+                    return bpy.ops.myaddon.myaddon_ot_ai_generate_enemy_plan()
+            else:
+                return bpy.ops.myaddon.myaddon_ot_ai_generate_enemy_plan()
             
         ollama_model = getattr(scene, "myaddon_ai_ollama_model", "llama3")
         

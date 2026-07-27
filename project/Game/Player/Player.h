@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "3D/Object3d.h"
 #include "engine/Input/Input.h"
 #include "engine/Camera/Camera.h"
@@ -8,6 +8,7 @@
 #include "BoosterEffect.h"
 #include <string>
 #include <list>
+#include <map>
 
 class Obstacle;
 
@@ -28,33 +29,37 @@ struct PlayerModeParams {
 
 class Player {
 public:
+    static constexpr int kMaxHP = 5;
+
     // 初期化（読み込むモデルの名前を渡す）
     void Initialize(const std::string &modelName);
 
     // 毎フレームの更新（キーボード入力による移動と回転）
-    void Update(const std::list<std::unique_ptr<Obstacle>> &obstacles);
+    void Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const Vector3 *lockOnTarget = nullptr);
 
     // 描画
-    void Draw();
+    void Draw(Camera* camera = nullptr);
 
     // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
     void UpdateModel();
 
     // カメラへの追従（Debug用のカメラではなく、本番用カメラをプレイヤーの後ろに置く処理）
-    void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr);
 
-    // ロックオン解除時などにカメラの向きに合わせて機体の向きを同期する
+    
+    void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr);
     void SyncRotationToLastCameraDirection();
 
-    // ゲッター
     Vector3 GetPosition() const { return position_; }
+    Vector3 GetVelocity() const { return velocity_; }
     Quaternion GetQuaternion() const { return quaternion_; }
+    Object3d* GetObject3d() const { return object_.get(); }
     Vector3 GetWorldHalfExtents() const;
     float GetCollisionRadius() const;
     OBB GetOBB() const;
     const std::string& GetModelName() const { return modelName_; }
-    Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
 
+    Vector3 GetForwardVector() const; // 今向いている方向（ミサイル発射などに使う）
+    Vector3 GetAttackDirection() const; // 必殺技中は操作中の照準方向を返す
     // 境界接近警告用ゲッター
     bool IsNearBoundary() const { return isNearBoundary_; }
     float GetBoundaryWarningIntensity() const { return boundaryWarningIntensity_; }
@@ -87,8 +92,14 @@ public:
     void TakeDamage(int damage);
     bool IsDead() const { return isDead_; }
     int GetHP() const { return hp_; }
+    void SetSpecialAttackActive(bool active);
+    bool IsSpecialAttackActive() const { return isSpecialAttackActive_; }
+    void SetSongActive(bool active);
+    bool IsSongActive() const { return isSongActive_; }
+    bool IsDodging() const { return dodgeTimer_ > 0; }
+    bool IsGuarding() const { return isGuarding_; }
 
-    void Move(); // 移動と回転の処理
+    void Move(bool rotationLocked = false); // 移動と回転の処理
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
     void UpdateLockOnRotation(const Vector3& targetPos); // ロックオン時の強制回転
 
@@ -106,10 +117,20 @@ public:
     bool IsAnimDebugActive() const { return isAnimDebugActive_; }
     void SetAnimDebugActive(bool active) { isAnimDebugActive_ = active; }
 
+    const Skeleton& GetSkeleton() const { return skeleton_; }
+    Skeleton& GetSkeleton() { return skeleton_; }
+
+    void SetOverrideAnimation(const Animation* animation) { overrideAnimation_ = animation; }
+    const Animation* GetOverrideAnimation() const { return overrideAnimation_; }
+
+    void PlayActionAnimation(const std::string& actionName);
+    void StopActionAnimation();
+
 private:
     void ApplyBattroidProceduralWalk();
 
 	std::unique_ptr<Object3d> object_;
+	std::unique_ptr<Object3d> guardBarrier_;
 	std::string modelName_;
 	Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
     Vector3 currentDrawScale_ = { 1.0f, 1.0f, 1.0f };
@@ -125,7 +146,18 @@ private:
     Vector3 lastCameraDirection_ = { 0.0f, 0.0f, 1.0f };
 
     bool isDead_ = false;
-    int hp_ = 3;
+    int hp_ = kMaxHP;
+    bool isSpecialAttackActive_ = false;
+    float specialAttackCameraYaw_ = 0.0f;
+    float specialAttackCameraPitch_ = 0.0f;
+    bool isSongActive_ = false;
+    static constexpr int kDodgeDurationFrames = 24;
+    static constexpr int kDodgeCooldownFrames = 45;
+    int dodgeTimer_ = 0;
+    int dodgeCooldownTimer_ = 0;
+    float dodgeDirection_ = 0.0f;
+    bool isGuarding_ = false;
+    float guardBarrierPulse_ = 0.0f;
 
     Animation animationData_;
     Skeleton skeleton_;
@@ -135,6 +167,12 @@ private:
     bool enableSkinning_ = false;
     bool isAnimDebugActive_ = false;
     bool isBattroidWalking_ = false;
+    const Animation* overrideAnimation_ = nullptr;
+
+    std::map<std::string, Animation> actionAnimations_;
+    Animation* currentActionAnim_ = nullptr;
+    float actionAnimTime_ = 0.0f;
+    bool isPlayingAction_ = false;
 
     // 境界接近警告用
     bool isNearBoundary_ = false;
@@ -152,3 +190,5 @@ private:
 
     std::unique_ptr<BoosterEffect> boosterEffect_;
 };
+
+

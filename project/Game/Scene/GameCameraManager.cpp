@@ -1,4 +1,4 @@
-#include "GameCameraManager.h"
+﻿#include "GameCameraManager.h"
 #include "Game/Player/Player.h"
 #include "engine/Input/Input.h"
 #include "engine/Debug/ImGuiManager.h"
@@ -113,7 +113,7 @@ void GameCameraManager::UpdateGameplayCamera(const Vector3& playerPosition) {
 	}
 
 	isCinematicLockOnCameraInitialized_ = false;
-	camera_->SetFovY(kNormalCameraFovY);
+	// camera_->SetFovY(kNormalCameraFovY); // Let Player handle it
 	camera_->SetFarClip(kNormalCameraFarClip);
 
 	// 注意：元々はPlayerクラス内でCameraとTargetを同期していたため、
@@ -210,3 +210,4 @@ void GameCameraManager::UpdateCinematicLockOnCamera(Enemy* lockedEnemy, const Ve
 	camera_->SetTranslate(cinematicLockOnCameraPosition_);
 	camera_->SetQuaternion(cinematicLockOnCameraRotation_);
 }
+

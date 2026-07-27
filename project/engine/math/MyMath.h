@@ -67,6 +67,12 @@ struct Sphere {
 	float radius;   // 半径
 };
 
+// レイ（半直線）
+struct Ray {
+	Vector3 origin;    // 始点
+	Vector3 direction; // 方向（正規化されていること）
+};
+
 // 当たり判定用の三角形
 struct Triangle {
 	Vector3 p[3];
@@ -165,6 +171,11 @@ public:
 	// 3. 球と三角形の判定（地形との当たり判定用。outPushOutに押し出しベクトルが入る）
 	static bool IsCollision(const Sphere &sphere, const Triangle &triangle, Vector3 &outPushOut);
 	
+	// Ray と Sphere の交差判定 (outDist には Rayの原点からの距離が入る)
+	static bool IntersectRaySphere(const Ray& ray, const Sphere& sphere, float* outDist = nullptr);
+
+	// スクリーン座標からワールド空間へのレイを生成
+	static Ray ScreenToRay(const Vector2& mousePos, float screenW, float screenH, const Matrix4x4& viewProjInverse);
 	// ベクトルの長さなどユーティリティ
 	static float Length(const Vector3& v);
 	static Vector3 Subtract(const Vector3& v1, const Vector3& v2);

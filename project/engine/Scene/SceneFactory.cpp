@@ -3,6 +3,7 @@
 #include "Game/Scene/GamePlayScene.h"
 #include "Game/Scene/GameOverScene.h"
 #include "Game/Scene/ClearScene.h"
+#include "Game/Scene/LoadingScene.h"
 #include <cassert>
 
 std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneName) {
@@ -11,6 +12,8 @@ std::unique_ptr<BaseScene> SceneFactory::CreateScene(const std::string &sceneNam
 	// 文字列に応じて、生成するシーンを変える
 	if (sceneName == "TITLE") {
 		newScene = std::make_unique<TitleScene>();
+	} else if (sceneName == "LOADING") {
+		newScene = std::make_unique<LoadingScene>();
 	} else if (sceneName == "GAMEPLAY") {
 		newScene = std::make_unique<GamePlayScene>();
 	} else if (sceneName == "SIMULATION") {

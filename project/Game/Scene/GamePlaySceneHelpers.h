@@ -20,8 +20,8 @@ namespace {
 	constexpr float kCinematicCameraRotationBlend = 0.12f;
 	constexpr float kAimAssistScreenRadius = 96.0f;
 	constexpr float kAimAssistMaxDistance = 180.0f;
-	constexpr size_t kMultiLockMaxTargets = 6;
-	constexpr int kMultiLockAcquireIntervalFrames = 8;
+	constexpr size_t kMultiLockMaxTargets = 12;
+	constexpr int kMultiLockAcquireIntervalFrames = 2;
 	constexpr float kMultiLockScreenRadius = 320.0f;
 	constexpr float kMultiLockMaxDistance = 240.0f;
 	constexpr float kRadiansToDegrees = 180.0f / 3.141592654f;
@@ -322,7 +322,7 @@ namespace {
 		return maxX > minX && maxY > minY;
 	}
 
-	void DrawLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* lockOnReticleSprite_) {
+	void DrawLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* lockOnReticleSprite_, bool isJammed = false) {
 		if (!target) {
 			return;
 		}
@@ -366,6 +366,10 @@ namespace {
 
 		float spriteX = screenPosition.x * winAppWidth / width;
 		float spriteY = screenPosition.y * winAppHeight / height;
+		if (isJammed) {
+			spriteX += (rand() % 11 - 5) * 1.5f;
+			spriteY += (rand() % 11 - 5) * 1.5f;
+		}
 		const Vector2 center = { spriteX, spriteY };
 
 		const float reticleSize = std::clamp(76.0f + collisionRadius * 12.0f, 76.0f, 116.0f);
@@ -380,7 +384,7 @@ namespace {
 		}
 	}
 
-	void DrawAimCursorOverlaySprite(Sprite* aimCursorSprite_) {
+	void DrawAimCursorOverlaySprite(Sprite* aimCursorSprite_, bool isJammed = false) {
 		float minX = 0.0f;
 		float minY = 0.0f;
 		float maxX = 0.0f;
@@ -397,6 +401,10 @@ namespace {
 
 		float spriteX = winAppWidth * 0.5f;
 		float spriteY = winAppHeight * 0.5f;
+		if (isJammed) {
+			spriteX += (rand() % 11 - 5) * 1.5f;
+			spriteY += (rand() % 11 - 5) * 1.5f;
+		}
 		const Vector2 center = { spriteX, spriteY };
 
 		const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);

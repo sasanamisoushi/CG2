@@ -146,3 +146,135 @@ void ApplyAnimation(Skeleton& skeleton, const Animation& animation, float animat
         }
     }
 }
+
+#include <fstream>
+#include <iostream>
+
+template<typename T>
+void WriteBinary(std::ofstream& stream, const T& value) {
+    stream.write(reinterpret_cast<const char*>(&value), sizeof(T));
+}
+
+template<typename T>
+void ReadBinary(std::ifstream& stream, T& value) {
+    stream.read(reinterpret_cast<char*>(&value), sizeof(T));
+}
+
+void WriteString(std::ofstream& stream, const std::string& str) {
+    uint32_t length = static_cast<uint32_t>(str.size());
+    WriteBinary(stream, length);
+    if (length > 0) {
+        stream.write(str.c_str(), length);
+    }
+}
+
+void ReadString(std::ifstream& stream, std::string& str) {
+    uint32_t length = 0;
+    ReadBinary(stream, length);
+    if (length > 0) {
+        str.resize(length);
+        stream.read(&str[0], length);
+    } else {
+        str.clear();
+    }
+}
+
+const uint32_t kAnimMagic = 0x414E4142; // "BANA"
+const uint32_t kAnimVersion = 1;
+
+bool SaveAnimationToBinary(const Animation& animation, const std::string& filePath) {
+    std::ofstream file(filePath, std::ios::binary);
+    if (!file.is_open()) return false;
+
+    WriteBinary(file, kAnimMagic);
+    WriteBinary(file, kAnimVersion);
+    WriteBinary(file, animation.duration);
+
+    uint32_t numNodes = static_cast<uint32_t>(animation.nodeAnimations.size());
+    WriteBinary(file, numNodes);
+
+    for (const auto& pair : animation.nodeAnimations) {
+        WriteString(file, pair.first);
+        const NodeAnimation& nodeAnim = pair.second;
+
+        // Translate
+        uint32_t numTranslate = static_cast<uint32_t>(nodeAnim.translate.keyframes.size());
+        WriteBinary(file, numTranslate);
+        for (const auto& kf : nodeAnim.translate.keyframes) {
+            WriteBinary(file, kf.time);
+            WriteBinary(file, kf.value);
+        }
+
+        // Rotate
+        uint32_t numRotate = static_cast<uint32_t>(nodeAnim.rotate.keyframes.size());
+        WriteBinary(file, numRotate);
+        for (const auto& kf : nodeAnim.rotate.keyframes) {
+            WriteBinary(file, kf.time);
+            WriteBinary(file, kf.value);
+        }
+
+        // Scale
+        uint32_t numScale = static_cast<uint32_t>(nodeAnim.scale.keyframes.size());
+        WriteBinary(file, numScale);
+        for (const auto& kf : nodeAnim.scale.keyframes) {
+            WriteBinary(file, kf.time);
+            WriteBinary(file, kf.value);
+        }
+    }
+
+    return true;
+}
+
+bool LoadAnimationFromBinary(Animation& outAnimation, const std::string& filePath) {
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file.is_open()) return false;
+
+    uint32_t magic = 0, version = 0;
+    ReadBinary(file, magic);
+    if (magic != kAnimMagic) return false;
+
+    ReadBinary(file, version);
+    if (version != kAnimVersion) return false;
+
+    outAnimation.nodeAnimations.clear();
+    ReadBinary(file, outAnimation.duration);
+
+    uint32_t numNodes = 0;
+    ReadBinary(file, numNodes);
+
+    for (uint32_t i = 0; i < numNodes; ++i) {
+        std::string nodeName;
+        ReadString(file, nodeName);
+        NodeAnimation& nodeAnim = outAnimation.nodeAnimations[nodeName];
+
+        // Translate
+        uint32_t numTranslate = 0;
+        ReadBinary(file, numTranslate);
+        nodeAnim.translate.keyframes.resize(numTranslate);
+        for (uint32_t k = 0; k < numTranslate; ++k) {
+            ReadBinary(file, nodeAnim.translate.keyframes[k].time);
+            ReadBinary(file, nodeAnim.translate.keyframes[k].value);
+        }
+
+        // Rotate
+        uint32_t numRotate = 0;
+        ReadBinary(file, numRotate);
+        nodeAnim.rotate.keyframes.resize(numRotate);
+        for (uint32_t k = 0; k < numRotate; ++k) {
+            ReadBinary(file, nodeAnim.rotate.keyframes[k].time);
+            ReadBinary(file, nodeAnim.rotate.keyframes[k].value);
+        }
+
+        // Scale
+        uint32_t numScale = 0;
+        ReadBinary(file, numScale);
+        nodeAnim.scale.keyframes.resize(numScale);
+        for (uint32_t k = 0; k < numScale; ++k) {
+            ReadBinary(file, nodeAnim.scale.keyframes[k].time);
+            ReadBinary(file, nodeAnim.scale.keyframes[k].value);
+        }
+    }
+
+    return true;
+}
+

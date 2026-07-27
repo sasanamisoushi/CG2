@@ -33,6 +33,10 @@ struct Animation {
 // アニメーションを読み込む
 Animation LoadAnimationFile(const std::string& directoryPath, const std::string& filename);
 
+// バイナリ形式で保存・読み込み
+bool SaveAnimationToBinary(const Animation& animation, const std::string& filePath);
+bool LoadAnimationFromBinary(Animation& outAnimation, const std::string& filePath);
+
 // 任意の時刻の値を取得する
 Vector3 CalculateValue(const std::vector<KeyframeVector3>& keyframes, float time);
 Quaternion CalculateValue(const std::vector<KeyframeQuaternion>& keyframes, float time);

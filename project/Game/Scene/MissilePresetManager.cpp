@@ -263,14 +263,18 @@ void MissilePresetManager::DrawMissileSettingsUI() {
 #endif
 }
 
-void MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, float horizontalOffset) {
+bool MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, float horizontalOffset) {
 	if (!scene_->player_ || !scene_->missileManager_) {
-		return;
+		return false;
+	}
+	if (!scene_->TryConsumeAmmo(type)) {
+		return false;
 	}
 
 	const MissileTuning tuning = scene_->MakeMissileTuning(type);
 	const Vector3 playerPos = scene_->player_->GetPosition();
-	const Vector3 forward = NormalizeOrVector3(scene_->player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+	// 必殺技中は、固定された機体の向きではなく操作中のカメラ照準方向へ発射する。
+	const Vector3 forward = NormalizeOrVector3(scene_->player_->GetAttackDirection(), { 0.0f, 0.0f, 1.0f });
 	Vector3 right = NormalizeOrVector3(MyMath::Cross({ 0.0f, 1.0f, 0.0f }, forward), { 1.0f, 0.0f, 0.0f });
 	const float muzzleOffset = (std::max)(0.0f, scene_->missileMuzzleOffset);
 	const Vector3 muzzlePos = {
@@ -309,5 +313,6 @@ void MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, fl
 	};
 
 	scene_->missileManager_->Shoot(muzzlePos, velocity, type, tuning);
+	return true;
 }
 

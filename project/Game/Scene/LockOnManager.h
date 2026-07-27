@@ -17,6 +17,7 @@ public:
 	Enemy *FindLockOnTarget(Camera *activeCamera) const;
 	bool IsLockedEnemyAlive() const;
 	Enemy *FindAimAssistTarget(Camera *activeCamera) const;
+	bool IsPlayerJammed(Camera *activeCamera) const;
 	Enemy *FindMultiLockTarget(Camera *activeCamera) const;
 	void BeginMultiLock();
 	void PruneMultiLockTargets();

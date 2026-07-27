@@ -572,3 +572,36 @@ bool MyMath::IsInFrustum(const Sphere& sphere, const Vector4 planes[6]) {
 	}
 	return true;
 }
+
+Ray MyMath::ScreenToRay(const Vector2& mousePos, float screenW, float screenH, const Matrix4x4& viewProjInverse) {
+	float x = (2.0f * mousePos.x) / screenW - 1.0f;
+	float y = 1.0f - (2.0f * mousePos.y) / screenH;
+
+	Vector3 nearPoint = { x, y, 0.0f };
+	Vector3 farPoint = { x, y, 1.0f };
+
+	Vector3 worldNear = Transform(nearPoint, viewProjInverse);
+	Vector3 worldFar = Transform(farPoint, viewProjInverse);
+
+	Ray ray;
+	ray.origin = worldNear;
+	ray.direction = Normalize(Subtract(worldFar, worldNear));
+	return ray;
+}
+
+bool MyMath::IntersectRaySphere(const Ray& ray, const Sphere& sphere, float* outDist) {
+	Vector3 m = Subtract(ray.origin, sphere.center);
+	float b = Dot(m, ray.direction);
+	float c = Dot(m, m) - sphere.radius * sphere.radius;
+
+	if (c > 0.0f && b > 0.0f) return false;
+
+	float discr = b * b - c;
+	if (discr < 0.0f) return false;
+
+	float t = -b - std::sqrt(discr);
+	if (t < 0.0f) t = 0.0f;
+
+	if (outDist) *outDist = t;
+	return true;
+}

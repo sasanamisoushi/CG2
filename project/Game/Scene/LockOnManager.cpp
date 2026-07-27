@@ -2,6 +2,7 @@
 #include "MissilePresetManager.h"
 #include "GamePlayScene.h"
 #include "GamePlaySceneHelpers.h"
+#include "Game/enemy/JammerEnemy.h"
 #include <externals/imgui/imgui.h>
 #include <fstream>
 #include "engine/Input/Input.h"
@@ -15,7 +16,12 @@ void LockOnManager::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
 
 	if (canUseKeyboardInput && input->TriggerKey(DIK_TAB)) {
-		scene_->lockedEnemy_ = FindLockOnTarget(activeCamera);
+		// TABをトグル操作にする。ロック中なら解除し、未ロックなら対象を探す。
+		if (scene_->lockedEnemy_ && IsLockedEnemyAlive()) {
+			scene_->lockedEnemy_ = nullptr;
+		} else {
+			scene_->lockedEnemy_ = FindLockOnTarget(activeCamera);
+		}
 		scene_->aimAssistEnemy_ = nullptr;
 		scene_->isCinematicLockOnCameraInitialized_ = false;
 	}
@@ -60,6 +66,9 @@ Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) const {
 	Enemy *bestScreenEnemy = nullptr;
 	float bestScreenScore = (std::numeric_limits<float>::max)();
 
+	const bool isJammed = IsPlayerJammed(activeCamera);
+	const float maxJammedDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance * 0.04f;
+
 	float minX = 0.0f;
 	float minY = 0.0f;
 	float maxX = 0.0f;
@@ -76,6 +85,11 @@ Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) const {
 
 		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
 		const float distSq = LengthSqVector3(toEnemy);
+
+		if (isJammed && distSq > maxJammedDistanceSq) {
+			continue;
+		}
+
 		if (distSq < nearestAliveDistSq) {
 			nearestAliveDistSq = distSq;
 			nearestAliveEnemy = enemy.get();
@@ -148,6 +162,23 @@ bool LockOnManager::IsLockedEnemyAlive() const {
 	return false;
 }
 
+bool LockOnManager::IsPlayerJammed(Camera* activeCamera) const {
+	if (!scene_->player_ || scene_->player_->IsDead()) return false;
+	const Vector3 playerPos = scene_->player_->GetPosition();
+	for (const auto& enemy : scene_->enemies_) {
+		if (enemy && !enemy->IsDead()) {
+			if (auto jammer = dynamic_cast<JammerEnemy*>(enemy.get())) {
+				float distSq = LengthSqVector3(SubtractVector3(playerPos, jammer->GetPosition()));
+				float jammerRadius = jammer->GetJammingRadius();
+				if (distSq <= jammerRadius * jammerRadius) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
 Enemy *LockOnManager::FindAimAssistTarget(Camera *activeCamera) const {
 	if (!scene_->player_ || !activeCamera || scene_->player_->IsDead()) {
 		return nullptr;
@@ -169,7 +200,10 @@ Enemy *LockOnManager::FindAimAssistTarget(Camera *activeCamera) const {
 
 	const Vector3 playerPosition = scene_->player_->GetPosition();
 	const Vector3 playerForward = MyMath::Normalize(scene_->player_->GetForwardVector());
-	const float maxDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance;
+	float maxDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance;
+	if (IsPlayerJammed(activeCamera)) {
+		maxDistanceSq *= 0.04f; // 距離を20%に制限 (0.2 * 0.2 = 0.04)
+	}
 	const float centerX = screenWidth * 0.5f;
 	const float centerY = screenHeight * 0.5f;
 	Enemy *bestTarget = nullptr;
@@ -251,7 +285,10 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 
 	const Vector3 playerPosition = scene_->player_->GetPosition();
 	const Vector3 playerForward = NormalizeOrVector3(scene_->player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
-	const float maxDistanceSq = kMultiLockMaxDistance * kMultiLockMaxDistance;
+	float maxDistanceSq = kMultiLockMaxDistance * kMultiLockMaxDistance;
+	if (IsPlayerJammed(activeCamera)) {
+		maxDistanceSq *= 0.04f; // 距離を20%に制限
+	}
 	const float centerX = screenWidth * 0.5f;
 	const float centerY = screenHeight * 0.5f;
 	Enemy *bestTarget = nullptr;
@@ -360,8 +397,9 @@ void LockOnManager::UpdateMultiLock(Camera *activeCamera) {
 	}
 
 	PruneMultiLockTargets();
+	int acquireInterval = scene_->isSongActive_ ? 1 : kMultiLockAcquireIntervalFrames;
 	if (scene_->multiLockTargets_.size() < kMultiLockMaxTargets &&
-		(scene_->multiLockChargeFrames_ == 0 || scene_->multiLockChargeFrames_ % kMultiLockAcquireIntervalFrames == 0)) {
+		(scene_->multiLockChargeFrames_ == 0 || scene_->multiLockChargeFrames_ % acquireInterval == 0)) {
 		if (Enemy *target = FindMultiLockTarget(activeCamera)) {
 			scene_->multiLockTargets_.push_back(target);
 		}

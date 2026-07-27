@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MyMath.h"
 #include <WinApp.h>
 #include <memory>
@@ -32,6 +32,7 @@ public:
 	void SetRotate(const Vector3 &rotate) { this->transform.rotate=rotate; }
 	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }
 	void SetFovY(const float &horizontal) { this->horizontal_ = horizontal; }
+	float GetFovY() const { return horizontal_; }
 	void SetAspectRatio(const float &aspectRatio) { this->aspectRatio_ = aspectRatio; }
 	void SetNearClip(const float &nearClip) { this->nearClipRange_ = nearClip; }
 	void SetFarClip(const float &farClip) { this->furClipRange_ = farClip; }
@@ -69,3 +70,4 @@ private:
 	//合成行列
 	Matrix4x4 viewProjectionMatrix;
 };
+

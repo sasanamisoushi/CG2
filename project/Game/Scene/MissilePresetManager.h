@@ -17,7 +17,7 @@ public:
 	bool SaveMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
 	bool ApplyMissilePreset(const std::string &filePath, int missileTypeIndex, const std::string &presetName);
 	void DrawMissileSettingsUI();
-	void FirePlayerMissile(MissileType type, Enemy *target = nullptr, float horizontalOffset = 0.0f);
+	bool FirePlayerMissile(MissileType type, Enemy *target = nullptr, float horizontalOffset = 0.0f);
 
 private:
 	GamePlayScene* scene_;

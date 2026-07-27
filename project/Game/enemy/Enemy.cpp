@@ -1,5 +1,6 @@
-﻿#include "Enemy.h"
+#include "Enemy.h"
 #include "3D/Object3dCommon.h"
+#include "3D/Primitive.h"
 #include "engine/Math/MyMath.h"
 #include "Game/enemy/EnemyBulletManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -173,8 +174,11 @@ namespace {
 }
 
 void Enemy::Initialize(const Vector3 &position) {
-    object_ = std::make_unique<Object3d>();
-    object_->Initialize(Object3dCommon::GetInstance());
+    // 再初期化時は既存のGPUバッファを再利用する。
+    if (!object_) {
+        object_ = std::make_unique<Object3d>();
+        object_->Initialize(Object3dCommon::GetInstance());
+    }
 
     // 自機と同じBoxモデルを使い回し
     object_->SetModel("EnemyBox");
@@ -234,9 +238,31 @@ void Enemy::UpdateModel() {
         object_->SetScale(scale_);
         object_->Update();
     }
+
+    // Object3d::Update() calculates the WVP matrix using the current camera.
+    // Path markers do not move, but their WVP must still be refreshed whenever
+    // the camera moves or switches (for example, to the debug fly camera).
+    if (pathVisualizationEnabled_) {
+        if (pathVisualizers_.empty() && hasFlightPath_) {
+            BuildPathVisualizers();
+        }
+        for (const auto &visualizer : pathVisualizers_) {
+            if (visualizer) {
+                visualizer->Update();
+            }
+        }
+    }
 }
 
 void Enemy::Draw() {
+    if (pathVisualizationEnabled_) {
+        for (const auto &visualizer : pathVisualizers_) {
+            if (visualizer) {
+                visualizer->Draw();
+            }
+        }
+    }
+
     if (object_) {
         object_->Draw();
     }
@@ -332,6 +358,8 @@ void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float s
     flightPathSegmentIndex_ = 0;
     flightPathSegmentT_ = 0.0f;
     isChasingPlayer_ = false;
+    
+    pathVisualizers_.clear();
 
     if (!hasFlightPath_) {
         return;
@@ -348,6 +376,42 @@ void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float s
         object_->SetTranslate(position_);
         object_->SetRotate(rotation_);
         object_->Update();
+    }
+    
+    if (pathVisualizationEnabled_) {
+        BuildPathVisualizers();
+    }
+}
+
+void Enemy::BuildPathVisualizers() {
+    pathVisualizers_.clear();
+    if (!hasFlightPath_ || flightPathPoints_.size() < 2) {
+        return;
+    }
+
+    // デバッグ表示が要求された時だけ経路球のGPUリソースを生成する。
+    const size_t segmentCount = flightPathLoop_
+        ? flightPathPoints_.size()
+        : flightPathPoints_.size() - 1;
+    if (segmentCount > 0) {
+        constexpr int dotsPerSegment = 10;
+        pathVisualizers_.reserve(segmentCount * dotsPerSegment);
+        for (size_t i = 0; i < segmentCount; ++i) {
+            for (int j = 0; j < dotsPerSegment; ++j) {
+                float t = static_cast<float>(j) / static_cast<float>(dotsPerSegment);
+                Vector3 pt = EvaluateFlightPath(flightPathPoints_, i, t, flightPathLoop_);
+                
+                auto sphere = std::make_unique<Primitive>();
+                sphere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
+                sphere->SetScale({ 0.15f, 0.15f, 0.15f });
+                if (sphere->GetModel()) {
+                    sphere->GetModel()->SetColor({ 1.0f, 0.5f, 0.0f, 0.6f }); // オレンジ系の半透明
+                }
+                sphere->SetTranslate(pt);
+                sphere->Update();
+                pathVisualizers_.push_back(std::move(sphere));
+            }
+        }
     }
 }
 

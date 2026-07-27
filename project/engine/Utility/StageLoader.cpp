@@ -2,7 +2,8 @@
 #include "StageValidation.h"
 #include "externals/json.hpp"
 #include "3D/ModelManager.h"
-#include "Game/enemy/Enemy.h" 
+#include "Game/enemy/Enemy.h"
+#include "Game/enemy/JammerEnemy.h"
 #include "Game/obstacle/Obstacle.h"
 #include "Game/Player/Player.h"
 #include <Windows.h>
@@ -102,6 +103,8 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	if (spawnData.name.find("Boss") == 0) {
 		spawnData.isBoss = true;
 		spawnData.isInitialSpawn = false;
+	} else if (spawnData.name.find("VF2") == 0) {
+		spawnData.isJammer = true;
 	}
 
 	if (objData.contains("path_id") && objData["path_id"].is_string()) {
@@ -274,7 +277,9 @@ bool StageLoader::LoadSceneJson(
 					if (enemySpawns) {
 						enemySpawns->push_back(spawnData);
 					} else {
-						auto newEnemy = std::make_unique<Enemy>();
+						std::unique_ptr<Enemy> newEnemy;
+						if (spawnData.isJammer) newEnemy = std::make_unique<JammerEnemy>();
+						else newEnemy = std::make_unique<Enemy>();
 						newEnemy->Initialize(spawnData.position);
 						newEnemy->SetRotation(spawnData.rotation);
 						ApplyFlightPath(*newEnemy, spawnData);
@@ -326,7 +331,9 @@ bool StageLoader::LoadSceneJson(
 				if (enemySpawns) {
 					enemySpawns->push_back(spawnData);
 				} else {
-					auto newEnemy = std::make_unique<Enemy>();
+					std::unique_ptr<Enemy> newEnemy;
+					if (spawnData.isJammer) newEnemy = std::make_unique<JammerEnemy>();
+					else newEnemy = std::make_unique<Enemy>();
 					newEnemy->Initialize(spawnData.position);
 					newEnemy->SetRotation(spawnData.rotation);
 					ApplyFlightPath(*newEnemy, spawnData);

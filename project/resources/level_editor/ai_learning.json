@@ -3,6 +3,7 @@
   "enemy_style_weights": {
     "BALANCED": {
       "speed": 1.0337961218067542
-    }
+    },
+    "SWARM": {}
   }
 }

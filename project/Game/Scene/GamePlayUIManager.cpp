@@ -647,6 +647,10 @@ void GamePlayUIManager::UpdateUI() {
 		ImGui::Checkbox("ボーンを表示", &showBones);
 		ImGui::Checkbox("スプライトを表示", &showSprite);
 		ImGui::Checkbox("Show Debug Colliders", &showDebugColliders);
+		bool showEnemyPaths = Enemy::IsPathVisualizationEnabled();
+		if (ImGui::Checkbox("敵の飛行ルートを表示", &showEnemyPaths)) {
+			Enemy::SetPathVisualizationEnabled(showEnemyPaths);
+		}
 
 		ImGui::Separator();
 		ImGui::Text("デバック　カメラ");

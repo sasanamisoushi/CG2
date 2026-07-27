@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -164,6 +164,7 @@
     <ClCompile Include="engine\Particle\ExplosionManager.cpp" />
     <ClCompile Include="Game\enemy\Enemy.cpp" />
     <ClCompile Include="Game\enemy\Boss.cpp" />
+    <ClCompile Include="Game\enemy\JammerEnemy.cpp" />
     <ClCompile Include="engine\Collision\Collider.cpp" />
     <ClCompile Include="engine\Collision\CollisionConfig.cpp" />
     <ClCompile Include="engine\Collision\CollisionManager.cpp" />
@@ -178,6 +179,7 @@
     <ClCompile Include="engine\Camera\FlyCamera.cpp" />
     <ClCompile Include="Game\base\Game.cpp" />
     <ClCompile Include="Game\Scene\GamePlayScene.cpp" />
+	<ClCompile Include="Game\Scene\LoadingScene.cpp" />
     <ClCompile Include="Game\Scene\LockOnManager.cpp" />
     <ClCompile Include="Game\Scene\MissilePresetManager.cpp" />
     <ClCompile Include="Game\Scene\SimulationManager.cpp" />
@@ -300,6 +302,7 @@
     <ClInclude Include="engine\Particle\ExplosionManager.h" />
     <ClInclude Include="Game\enemy\Enemy.h" />
     <ClInclude Include="Game\enemy\Boss.h" />
+    <ClInclude Include="Game\enemy\JammerEnemy.h" />
     <ClInclude Include="engine\Collision\Collider.h" />
     <ClInclude Include="engine\Collision\CollisionConfig.h" />
     <ClInclude Include="engine\Collision\CollisionManager.h" />
@@ -315,6 +318,7 @@
     <ClInclude Include="engine\base\Framework.h" />
     <ClInclude Include="Game\base\Game.h" />
     <ClInclude Include="Game\Scene\GamePlayScene.h" />
+	<ClInclude Include="Game\Scene\LoadingScene.h" />
     <ClInclude Include="Game\Scene\GamePlaySceneHelpers.h" />
     <ClInclude Include="Game\Scene\LockOnManager.h" />
     <ClInclude Include="Game\Scene\MissilePresetManager.h" />

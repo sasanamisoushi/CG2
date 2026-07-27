@@ -29,6 +29,7 @@
 #include <list>
 #include <string>
 #include <filesystem>
+#include <array>
 
 
 
@@ -65,6 +66,7 @@ private:
 
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
+	void DrawRadar();
 	void SetDebugCameraActive(bool isActive);
 	void ReloadSceneJson();
 	void ResetEditorPreview();
@@ -75,6 +77,10 @@ private:
 	void TriggerEnemyReinforcements(const std::string &deadEnemyName);
 	void UpdateEnemyRespawns();
 	bool HasPendingEnemySpawns() const;
+	bool TryConsumeAmmo(MissileType type);
+	void UpdateReload();
+	void SpawnAmmoPickup(const Vector3 &position);
+	void UpdateAmmoPickups();
 	void UpdateCinematicLockOnCamera();
 	Mode mode_ = Mode::Gameplay;
 
@@ -86,6 +92,28 @@ private:
 
 	std::unique_ptr<Sprite> aimCursorSprite_;
 	std::unique_ptr<Sprite> lockOnReticleSprite_;
+	std::unique_ptr<Sprite> spGaugeBackgroundSprite_;
+	std::unique_ptr<Sprite> spGaugeFillSprite_;
+	std::unique_ptr<Sprite> spGaugeCostMarkerSprite_;
+	std::unique_ptr<Sprite> hudPanelSprite_;
+	std::unique_ptr<Sprite> hudAmmoPanelSprite_;
+	std::unique_ptr<Sprite> hpGaugeBackgroundSprite_;
+	std::unique_ptr<Sprite> hpGaugeFillSprite_;
+	std::unique_ptr<Sprite> hudHpLabelSprite_;
+	std::unique_ptr<Sprite> hudAmmoLabelSprite_;
+	std::unique_ptr<Sprite> hudSpLabelSprite_;
+	std::unique_ptr<Sprite> hudNormalAmmoIconSprite_;
+	std::unique_ptr<Sprite> hudHomingAmmoIconSprite_;
+	std::unique_ptr<Sprite> hudNormalReloadGaugeSprite_;
+	std::unique_ptr<Sprite> hudHomingReloadGaugeSprite_;
+	std::unique_ptr<Sprite> radarFrameSprite_;
+	std::unique_ptr<Sprite> radarSweepSprite_;
+	static constexpr size_t kMaxRadarBlips = 32;
+	std::array<std::unique_ptr<Sprite>, kMaxRadarBlips> radarBlipSprites_;
+	float radarSweepAngle_ = 0.0f;
+	std::array<std::unique_ptr<Sprite>, 3> hudHpDigitSprites_;
+	std::array<std::unique_ptr<Sprite>, 7> hudNormalAmmoDigitSprites_;
+	std::array<std::unique_ptr<Sprite>, 7> hudHomingAmmoDigitSprites_;
 	std::unique_ptr<Object3d> boundaryAlertObject_;
 	std::unique_ptr<Object3d> ceilingBoundaryAlertObject_;
 
@@ -98,10 +126,12 @@ private:
 	// 音声データ
 	SoundData soundData1;
 	SoundData soundData2;
+	SoundData songSoundData;
 
 	// 再生中のボイスを管理するポインタ
 	IXAudio2SourceVoice *pVoice1 = nullptr;
 	IXAudio2SourceVoice *pVoice2 = nullptr;
+	IXAudio2SourceVoice *pSongVoice = nullptr;
 
 	// プリミティブ
 	std::unique_ptr<Primitive> myBox;
@@ -140,6 +170,12 @@ private:
 	// =====================================================
 	std::unique_ptr<FlyCamera> debugFlyCamera_;
 	bool isDebugCameraActive_ = false;
+	
+	// ボックス選択用
+	bool isBoxSelecting_ = false;
+	Vector2 boxSelectStartPos_ = {0.0f, 0.0f};
+	Vector2 boxSelectEndPos_ = {0.0f, 0.0f};
+
 	bool isEditorPreviewPlaying_ = true;
 	bool isCinematicLockOnCameraEnabled_ = false;
 	bool isCinematicLockOnCameraInitialized_ = false;
@@ -190,6 +226,7 @@ private:
 	std::vector<int> enemyRespawnTimers_;
 	EnemyEventManager enemyEventManager_;
 	Enemy *lockedEnemy_ = nullptr;
+	bool bossSpawned_ = false;
 
 
 	// 障害物
@@ -211,10 +248,10 @@ private:
 	// =====================================================
 	// マネージャークラス
 	// =====================================================
-		std::unique_ptr<SimulationManager> simulationManager_;
+	std::unique_ptr<SimulationManager> simulationManager_;
 	std::unique_ptr<MissilePresetManager> missilePresetManager_;
 	std::unique_ptr<LockOnManager> lockOnManager_;
-std::unique_ptr<GameCameraManager> cameraManager_;
+	std::unique_ptr<GameCameraManager> cameraManager_;
 	std::unique_ptr<LevelManager> levelManager_;
 	std::unique_ptr<EnvironmentRenderer> environmentRenderer_;
 	std::unique_ptr<GamePlayUIManager> uiManager_;
@@ -225,10 +262,30 @@ std::unique_ptr<GameCameraManager> cameraManager_;
 	std::vector<Enemy*> multiLockTargets_;
 	bool isMultiLockCharging_ = false;
 	int multiLockChargeFrames_ = 0;
+
+	// 必殺技（SPを50%消費して一定時間、通常攻撃を連射）
+	float spGauge_ = 100.0f;
+	bool isSpecialAttackActive_ = false;
+	int specialAttackFrame_ = 0;
+
+	// 歌システム（ルンピカゲージ）
+	float songGauge_ = 100.0f;
+	bool isSongActive_ = false;
+	int songFrame_ = 0;
+
+	struct AmmoPickup {
+		Vector3 basePosition = { 0.0f, 0.0f, 0.0f };
+		std::unique_ptr<Object3d> object;
+		float phase = 0.0f;
+	};
+	std::vector<AmmoPickup> ammoPickups_;
+	int defeatedSmallEnemyCount_ = 0;
+	int normalAmmoInMagazine_ = 30;
+	int normalAmmoReserve_ = 90;
+	int homingAmmoInMagazine_ = 8;
+	int homingAmmoReserve_ = 16;
+	bool isNormalReloading_ = false;
+	bool isHomingReloading_ = false;
+	int normalReloadFrame_ = 0;
+	int homingReloadFrame_ = 0;
 };
-
-
-
-
-
-
