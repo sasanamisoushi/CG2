@@ -241,6 +241,8 @@ private:
 	// ゲームオーバー演出用
 	bool isGameOver_ = false;
 	int gameOverTimer_ = 0;
+	int previousPlayerHP_ = -1;
+	int damageEffectTimer_ = 0;
 
 	// シミュレーションツールUI用
 

@@ -1,4 +1,4 @@
-#include "GamePlayScene.h"
+﻿#include "GamePlayScene.h"
 #include "SimulationManager.h"
 #include "MissilePresetManager.h"
 #include "LockOnManager.h"
@@ -782,7 +782,7 @@ void GamePlayScene::Update() {
 	}
 
 	// ==========================================
-	// ゲームオーバ�E判定と演�E進衁E
+	// ゲームオーバE判定と演E進衁E
 	// ==========================================
 	if (!IsSimulationMode() && !isGameOver_ && player_ && player_->IsDead()) {
 		isGameOver_ = true;
@@ -803,7 +803,7 @@ void GamePlayScene::Update() {
 	if (isGameOver_) {
 		gameOverTimer_++;
 
-		// 絶望�E白黒化�E�グレースケール�E�エフェクトを適用�E�E
+		// 絶望E白黒化EグレースケールEエフェクトを適用EE
 		if (PostEffect::GetInstance()) {
 			float effectProgress = static_cast<float>(gameOverTimer_) / 120.0f;
 			if (effectProgress > 1.0f) {
@@ -814,7 +814,7 @@ void GamePlayScene::Update() {
 			PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.38f, blurIntensity);
 		}
 
-		// 5フレームに1回だけ更新することで、スローモーション�E�世界停止�E�を実現�E�E
+		// 5フレームに1回だけ更新することで、スローモーションE世界停止Eを実現EE
 		shouldUpdateGame = (gameOverTimer_ % 5 == 0);
 
 		// 紁E秒！E20フレームE経過したら、正式にゲームオーバEシーンへ遷移するEE
@@ -837,7 +837,21 @@ void GamePlayScene::Update() {
 				}
 			}
 			
-			if (!isBoosting) {
+			if (player_) {
+				if (previousPlayerHP_ == -1) {
+					previousPlayerHP_ = player_->GetHP();
+				} else if (player_->GetHP() < previousPlayerHP_) {
+					damageEffectTimer_ = 30;
+					previousPlayerHP_ = player_->GetHP();
+				} else if (player_->GetHP() > previousPlayerHP_) {
+					previousPlayerHP_ = player_->GetHP();
+				}
+			}
+
+			if (damageEffectTimer_ > 0) {
+				damageEffectTimer_--;
+				PostEffect::GetInstance()->SetEffectType(13); // Fold Wave
+			} else if (!isBoosting) {
 				PostEffect::GetInstance()->SetEffectType(0); // 0: Normal
 			}
 		}
@@ -2022,3 +2036,5 @@ void GamePlayScene::DrawRadar() {
 		blip->Draw();
 	}
 }
+
+

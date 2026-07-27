@@ -158,7 +158,7 @@ void PostEffect::DrawImGui() {
 
     // エフェクト選択
     const char *items[] = { "Normal", "Grayscale", "Invert", "Sepia",
-        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve","Random Noise", "Vignette Smoothing" };
+        "Vignette", "3x3 Box Filter", "5x5 Box Filter", "Gaussian Blur", "Edge Detection", "Radial Blur", "Dissolve","Random Noise", "Vignette Smoothing", "Fold Wave (Glitch/Chroma)" };
     ImGui::Combo("Type", &param_.effectType, items, IM_ARRAYSIZE(items));
 
     ImGui::Separator();

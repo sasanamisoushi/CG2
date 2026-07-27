@@ -324,6 +324,45 @@ PixelShaderOutput main(VertexShaderOutput input)
 
         output.color = float4(smoothColor.rgb * vignette, texColor.a);
     }
+    else if (effectType == 13)
+    {
+        // 13: フォールド波干渉 / ヴァールシンドローム (Chromatic Aberration + Glitch + Scanline)
+        
+        // 1. グリッチ (Glitch Offset)
+        // 特定の時間帯だけUVを横にずらす
+        float glitchOffset = 0.0f;
+        float glitchTime = time * 5.0f;
+        if (frac(glitchTime) > 0.85f)
+        {
+            // ノイズテクスチャからランダムなズレを取得
+            float noiseVal = gNoiseTexture.Sample(gSampler, float2(input.texcoord.y * 10.0f, time)).r;
+            glitchOffset = (noiseVal - 0.5f) * 0.1f * sin(time * 20.0f);
+        }
+        
+        float2 uv = input.texcoord + float2(glitchOffset, 0.0f);
+
+        // 2. 色収差 (Chromatic Aberration)
+        // 時間経過でRGBのズレ幅が変動する
+        float abAmount = 0.015f + 0.01f * sin(time * 8.0f);
+        float2 center = float2(0.5f, 0.5f);
+        float2 dir = uv - center;
+        
+        float r = gTexture.Sample(gSampler, uv + dir * abAmount).r;
+        float g = gTexture.Sample(gSampler, uv).g;
+        float b = gTexture.Sample(gSampler, uv - dir * abAmount).b;
+        
+        float4 finalColor = float4(r, g, b, 1.0f);
+        
+        // 3. 走査線 (Scanlines)
+        // 画面に横線を入れる
+        float scanline = sin(uv.y * 800.0f + time * 10.0f) * 0.04f;
+        finalColor.rgb -= scanline;
+        
+        // 全体的に少しサイバーな青みを足す (フォールド波っぽさ)
+        finalColor.rgb += float3(0.0f, 0.05f, 0.1f) * (1.0f + sin(time * 5.0f)) * 0.5f;
+        
+        output.color = finalColor;
+    }
     else
     {
         // 0: ノーマル（そのまま）
