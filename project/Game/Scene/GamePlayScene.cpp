@@ -1,4 +1,4 @@
-﻿#include "GamePlayScene.h"
+#include "GamePlayScene.h"
 #include "SimulationManager.h"
 #include "MissilePresetManager.h"
 #include "LockOnManager.h"
@@ -1634,9 +1634,12 @@ void GamePlayScene::Update() {
 		debugColliderLinesObject->Update();
 	}
 
+	if (environmentRenderer_) {
+		environmentRenderer_->Update(camera.get());
+	}
+
 #ifdef ENABLE_IMGUI
 	if (uiManager_) {
-		if (environmentRenderer_) environmentRenderer_->Update(camera.get());
 		uiManager_->UpdateUI();
 	}
 #endif

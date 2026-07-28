@@ -152,10 +152,12 @@ void Game::HandleResize() {
 void Game::Draw() {
 
 	// ==========================================
-	// 1. オフスクリーン描画（3Dシーンを 1枚目「renderTexture_」に録画）
+	// 1. オフスクリーン描画：3Dシーンを1枚目「renderTexture_」に録画！
 	// ==========================================
+	renderTexture_->Transition(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 	DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), renderTexture_->GetRtvHandle());
 	SceneManager::GetInstance()->Draw();
+	renderTexture_->Transition(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 	// ==========================================
 	// 2. ポストエフェクト描画
@@ -163,9 +165,10 @@ void Game::Draw() {
 #ifdef ENABLE_IMGUI
 	if (showImGui_) {
 		// ImGuiあり：ポストエフェクトを 2枚目「postEffectTexture_」に描画する
+		postEffectTexture_->Transition(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_RENDER_TARGET);
 		DirectXCommon::GetInstance()->PreDraw(SrvManager::GetInstance(), postEffectTexture_->GetRtvHandle());
 
-		// 深度バッファをSRV（読み込み）に切り替え
+		// 深度バッファをSRV（読み込み）に切り替え（読み込み）に切り替え
 		DirectXCommon::GetInstance()->SetDepthStateToSRV();
 
 		auto noise0Handle = TextureManager::GetInstance()->GetSrvHandleGPU("resources/noise0.png");
@@ -178,6 +181,7 @@ void Game::Draw() {
 			noise0Handle,
 			noise1Handle
 		);
+		postEffectTexture_->Transition(D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 		// 深度バッファをDSV（書き込み）に戻す
 		DirectXCommon::GetInstance()->SetDepthStateToDSV();

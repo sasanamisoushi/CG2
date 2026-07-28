@@ -10,6 +10,7 @@ public:
     // 初期化：テクスチャの幅と高さを指定
     void Initialize(uint32_t width, uint32_t height);
     void Resize(uint32_t width, uint32_t height);
+    void Transition(D3D12_RESOURCE_STATES stateBefore, D3D12_RESOURCE_STATES stateAfter);
 
     // ゲッター
     ID3D12Resource *GetResource() const { return resource_.Get(); }
