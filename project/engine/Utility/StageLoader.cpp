@@ -297,9 +297,7 @@ bool StageLoader::LoadSceneJson(
 
 #ifdef CG2_ENABLE_STAGE_VALIDATION
 	const StageValidation::Report &validationReport = StageValidation::ValidateSceneJson(root, filePath);
-	if (validationReport.HasErrors()) {
-		return false;
-	}
+	// バリデーションエラーがあってもゲーム用ロードは中断せず、全オブジェクト（地形・敵）を必ず生成・ロードする
 #endif
 
 	std::unordered_map<std::string, EnemyFlightPath> flightPaths = LoadFlightPaths(root);
