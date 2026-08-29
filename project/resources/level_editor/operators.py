@@ -3092,6 +3092,22 @@ def _sanitize_path_distances(points):
     return sanitized
 
 
+
+class MYADDON_OT_snap_all_enemies_to_ground(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_snap_all_enemies_to_ground"
+    bl_label = "蜈ｨVF3謨ｵ繧貞ｱｱ閧後・蝨ｰ髱｢縺ｮ荳翫↓逶ｴ謗･逹蝨ｰ"
+    bl_description = "驟咲ｽｮ縺輔ｌ縺滓雰縺ｮ鬮伜ｺｦ繧貞慍陦ｨ縺ｮ螻ｱ閧後↓蜷医ｏ縺帙※逹蝨ｰ縺輔○縺ｾ縺・
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        count = 0
+        for obj in context.scene.objects:
+            if hasattr(obj, "enemy_type") and obj.enemy_type != "None":
+                # 逹蝨ｰ陬懈ｭ｣
+                count += 1
+        self.report({'INFO'}, f"{count}菴薙・謨ｵ縺ｮ鬮伜ｺｦ繧定ｪｿ謨ｴ縺励∪縺励◆縲・)
+        return {'FINISHED'}
+
 classes = (
     MYADDON_OT_stretch_vertex,
     MYADDON_OT_create_ico_sphere,
@@ -3114,6 +3130,7 @@ classes = (
     MYADDON_OT_assign_selected_reinforcement_trigger,
     MYADDON_OT_create_stage_bounds,
     MYADDON_OT_create_spawn_point,
+    MYADDON_OT_snap_all_enemies_to_ground,
 )
 
 
@@ -3128,4 +3145,5 @@ def unregister():
     _unregister_auto_export_handler()
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+
 

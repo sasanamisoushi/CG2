@@ -226,7 +226,7 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
         row = ai_box.row(align=True)
         row.prop(context.scene, "myaddon_ai_enemy_trigger_target", text="倒されたら出現")
         row.operator(
-            operators.MYADDON_OT_assign_ai_reinforcement_trigger.bl_idname,
+            operators.MYADDON_OT_assign_selected_reinforcement_trigger.bl_idname,
             text="",
             icon='EYEDROPPER'
         )
