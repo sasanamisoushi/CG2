@@ -23,7 +23,9 @@ _AI_GENERATED_COLLECTION = "AI Enemy Plan"
 def _default_scene_json_path():
     blend_dir = os.path.dirname(bpy.data.filepath)
     if not blend_dir:
-        return "scene.json"
+        return "resources/scene.json"
+    if os.path.basename(blend_dir) == "level_editor":
+        return os.path.abspath(os.path.join(blend_dir, "..", "scene.json"))
     return os.path.join(blend_dir, "scene.json")
 
 
@@ -1447,8 +1449,21 @@ def _make_validation_status(errors, warnings):
 
 
 def _export_scene_to_path(scene, filepath, model_filenames=None):
+    data = _build_scene_data(scene, model_filenames)
     with open(filepath, "wt", encoding="utf-8") as file:
-        json.dump(_build_scene_data(scene, model_filenames), file, ensure_ascii=False, indent=4)
+        json.dump(data, file, ensure_ascii=False, indent=4)
+
+    try:
+        blend_dir = os.path.dirname(bpy.data.filepath) if bpy.data.filepath else ""
+        if blend_dir:
+            alt_path1 = os.path.abspath(os.path.join(blend_dir, "scene.json"))
+            alt_path2 = os.path.abspath(os.path.join(blend_dir, "..", "scene.json"))
+            for alt_p in [alt_path1, alt_path2]:
+                if alt_p != os.path.abspath(filepath):
+                    with open(alt_p, "wt", encoding="utf-8") as file:
+                        json.dump(data, file, ensure_ascii=False, indent=4)
+    except Exception as e:
+        print(f"Dual export sync notice: {e}")
 
 
 def _export_obj_with_current_selection(filepath):
