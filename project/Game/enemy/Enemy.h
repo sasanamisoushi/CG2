@@ -36,8 +36,9 @@ public:
     // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
     virtual void UpdateModel();
 
-    // ミサイルに狙われるためのゲッター
+    // ミサイルに狙われるためのゲッター・セッター
     Vector3 GetPosition() const { return position_; }
+    virtual void SetPosition(const Vector3 &position) { position_ = position; }
     Vector3 GetRotation() const { return rotation_; }
     Vector3 GetScale() const { return scale_; }
 

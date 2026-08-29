@@ -1122,6 +1122,41 @@ void GamePlayScene::Update() {
 			explosionManager_->CreateHitEffects(enemyBulletHits);
 		}
 
+		// 敵同士が同じ場所に固まって1点に重なるのを防ぐ押し出し（群集離隔・分離）処理
+		for (auto it1 = enemies_.begin(); it1 != enemies_.end(); ++it1) {
+			if (!(*it1) || (*it1)->IsDead()) continue;
+			Vector3 pos1 = (*it1)->GetPosition();
+			float radius1 = (*it1)->GetCollisionRadius();
+			if (radius1 <= 0.1f) radius1 = 1.2f;
+
+			for (auto it2 = std::next(it1); it2 != enemies_.end(); ++it2) {
+				if (!(*it2) || (*it2)->IsDead()) continue;
+				Vector3 pos2 = (*it2)->GetPosition();
+				float radius2 = (*it2)->GetCollisionRadius();
+				if (radius2 <= 0.1f) radius2 = 1.2f;
+
+				Vector3 diff = SubtractVector3(pos1, pos2);
+				diff.y = 0.0f; // 水平方向のみで押し広げる
+				float distSq = LengthSqVector3(diff);
+				float minDist = radius1 + radius2 + 3.0f; // 重なり防止距離
+
+				if (distSq < minDist * minDist) {
+					float dist = std::sqrt(distSq);
+					Vector3 dir = { 1.0f, 0.0f, 0.0f };
+					if (dist > 0.001f) {
+						dir = { diff.x / dist, 0.0f, diff.z / dist };
+					}
+					float overlap = (minDist - dist) * 0.5f;
+
+					Vector3 newPos1 = { pos1.x + dir.x * overlap, pos1.y, pos1.z + dir.z * overlap };
+					Vector3 newPos2 = { pos2.x - dir.x * overlap, pos2.y, pos2.z - dir.z * overlap };
+
+					(*it1)->SetPosition(newPos1);
+					(*it2)->SetPosition(newPos2);
+				}
+			}
+		}
+
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
 			// 近接攻撃の当たり判定
 			if (player_ && player_->IsMeleeAttacking()) {
