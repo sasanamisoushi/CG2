@@ -113,7 +113,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
 
 	// 1. UIで明示的に指定された敵のタイプ (VF3, VF1, VF2, Boss等) を最優先で判定
-	if (upperType == "VF3" || upperType == "GROUND" || upperType == "GROUNDENEMY" || upperType == "LAND") {
+	if (upperType == "VF3" || upperType == "GROUND" || upperType == "GROUNDENEMY" || upperType == "LAND" || upperName.find("AIENEMY") != std::string::npos) {
 		spawnData.isGround = true;
 		spawnData.isJammer = false;
 		spawnData.isBoss = false;

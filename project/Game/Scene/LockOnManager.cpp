@@ -299,8 +299,11 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 	}
 	const float centerX = screenWidth * 0.5f;
 	const float centerY = screenHeight * 0.5f;
-	Enemy *bestTarget = nullptr;
-	float bestScore = (std::numeric_limits<float>::max)();
+	Enemy *unlockedBestTarget = nullptr;
+	float unlockedBestScore = (std::numeric_limits<float>::max)();
+
+	Enemy *duplicateBestTarget = nullptr;
+	float duplicateBestScore = (std::numeric_limits<float>::max)();
 
 	for (const auto &enemy : scene_->enemies_) {
 		if (!enemy.get()) continue;
@@ -314,8 +317,6 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 				lockCount++;
 			}
 		}
-		// 1体の敵に集中ロック可能にするため、alreadyLocked による continue は廃止する。
-		// 代わりに、同じ敵に偏りすぎないよう、ロック済み回数に応じてスコアペナルティを与える。
 
 		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
 		const float distSq = LengthSqVector3(toEnemy);
@@ -351,20 +352,31 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 		const float dx = screenPosition.x - centerX;
 		const float dy = screenPosition.y - centerY;
 		const float screenDistanceSq = dx * dx + dy * dy;
-		const float lockRadius = kMultiLockScreenRadius + collisionRadius * 16.0f;
+		const float lockRadius = kMultiLockScreenRadius + collisionRadius * 24.0f;
 		if (screenDistanceSq > lockRadius * lockRadius) {
 			continue;
 		}
 
-		// lockCount に応じてペナルティを加算（まだロックされていない敵がいればそちらを優先）
-		const float score = screenDistanceSq + distSq * 0.006f - forwardDot * 80.0f + (lockCount * 20000.0f);
-		if (score < bestScore) {
-			bestScore = score;
-			bestTarget = enemy.get();
+		const float score = screenDistanceSq + distSq * 0.005f - forwardDot * 100.0f;
+
+		if (lockCount == 0) {
+			if (score < unlockedBestScore) {
+				unlockedBestScore = score;
+				unlockedBestTarget = enemy.get();
+			}
+		} else {
+			const float dupScore = score + (lockCount * 50000.0f);
+			if (dupScore < duplicateBestScore) {
+				duplicateBestScore = dupScore;
+				duplicateBestTarget = enemy.get();
+			}
 		}
 	}
 
-	return bestTarget;
+	if (unlockedBestTarget) {
+		return unlockedBestTarget;
+	}
+	return duplicateBestTarget;
 }
 
 void LockOnManager::BeginMultiLock() {
