@@ -23,6 +23,7 @@ struct EnemySpawnData {
 	bool isJammer = false; // ジャミング敵かどうか
 	bool isGround = false; // 地上雑魚敵かどうか
 	bool isInitialSpawn = true; // 最初から出現するかどうか
+	bool hasSpawned = false; // すでに出現（スポーン）したかどうか
 	Vector3 position = { 0.0f, 0.0f, 0.0f };
 	Vector3 rotation = { 0.0f, 0.0f, 0.0f };
 	EnemyFlightPath flightPath;

@@ -533,7 +533,8 @@ void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 		return;
 	}
 
-	const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
+	EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
+	spawnData.hasSpawned = true;
 	std::unique_ptr<Enemy> enemy;
 	if (spawnData.isBoss) {
 		enemy = std::make_unique<Boss>();
@@ -578,6 +579,10 @@ bool GamePlayScene::IsEnemySpawnPointActive(size_t spawnPointIndex) const {
 
 void GamePlayScene::ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames) {
 	if (spawnPointIndex >= enemySpawns_.size()) {
+		return;
+	}
+	// すでに出現済みの敵は増援等で二重スポーンさせない
+	if (enemySpawns_[spawnPointIndex].hasSpawned) {
 		return;
 	}
 	if (enemyRespawnTimers_.size() < enemySpawns_.size()) {

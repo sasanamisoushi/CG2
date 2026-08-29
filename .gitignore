@@ -377,3 +377,7 @@ secrets/
 /project/resources/stage.blend1
 
 
+
+*.zip
+LE3B_12_*
+
