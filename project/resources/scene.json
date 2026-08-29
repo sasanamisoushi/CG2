@@ -84,9 +84,9 @@
                         "name":  "OhirayamaTerrain",
                         "transform":  {
                                           "translation":  [
-                                                              -0.90614336729049683,
                                                               0,
-                                                              -20.387063980102539
+                                                              0,
+                                                              0
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -94,8 +94,8 @@
                                                            0.0
                                                        ],
                                           "scale":  [
-                                                        2.5000946521759033,
-                                                        4.2752556800842285,
+                                                        1,
+                                                        1,
                                                         1
                                                     ]
                                       },
@@ -332,9 +332,9 @@
                         "name":  "AIEnemy_01",
                         "transform":  {
                                           "translation":  [
-                                                              -24,
+                                                              -75,
                                                               2,
-                                                              25
+                                                              80
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -360,9 +360,9 @@
                         "name":  "AIEnemy_02",
                         "transform":  {
                                           "translation":  [
-                                                              -16,
+                                                              -50,
                                                               2,
-                                                              20
+                                                              60
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -388,9 +388,9 @@
                         "name":  "AIEnemy_03",
                         "transform":  {
                                           "translation":  [
-                                                              -8,
+                                                              -25,
                                                               2,
-                                                              25
+                                                              80
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -418,7 +418,7 @@
                                           "translation":  [
                                                               0,
                                                               2,
-                                                              20
+                                                              60
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -444,9 +444,9 @@
                         "name":  "AIEnemy_05",
                         "transform":  {
                                           "translation":  [
-                                                              8,
+                                                              25,
                                                               2,
-                                                              25
+                                                              80
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -472,9 +472,9 @@
                         "name":  "AIEnemy_06",
                         "transform":  {
                                           "translation":  [
-                                                              16,
+                                                              50,
                                                               2,
-                                                              20
+                                                              60
                                                           ],
                                           "rotation":  [
                                                            0.0,
@@ -500,9 +500,9 @@
                         "name":  "AIEnemy_07",
                         "transform":  {
                                           "translation":  [
-                                                              24,
+                                                              75,
                                                               2,
-                                                              25
+                                                              80
                                                           ],
                                           "rotation":  [
                                                            0.0,
