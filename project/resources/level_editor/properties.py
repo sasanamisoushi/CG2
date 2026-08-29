@@ -45,8 +45,8 @@ def register():
     )
     bpy.types.Scene.myaddon_ai_enemy_base_type = bpy.props.StringProperty(
         name="敵のタイプ",
-        description="生成される敵に割り当てるデフォルトの種類 (例: VF1)",
-        default="VF1"
+        description="生成される敵に割り当てるデフォルトの種類 (例: VF3)",
+        default="VF3"
     )
     bpy.types.Scene.myaddon_ai_enemy_base_path_id = bpy.props.StringProperty(
         name="飛行パスID",

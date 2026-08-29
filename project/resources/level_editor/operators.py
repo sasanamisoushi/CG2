@@ -1,4 +1,4 @@
-import json
+﻿import json
 import math
 import os
 import random
@@ -820,7 +820,7 @@ def _ai_enemy_plan_schema():
                         "speed": {"type": "number"},
                         "enemy_type": {
                             "type": "string",
-                            "enum": ["VF1", "VF1-1"],
+                            "enum": ["VF3", "VF1", "VF1-1"],
                         },
                         "trigger_index": {"type": "integer"},
                         "delay_frames": {"type": "integer"},
@@ -926,7 +926,7 @@ def _sanitize_enemy_plan_data(plan_data, count, center, extents, player):
             
         enemy_type = str(enemy.get("enemy_type", "")).strip()
         if not enemy_type:
-            enemy_type = getattr(scene, "myaddon_ai_enemy_base_type", "VF1")
+            enemy_type = getattr(scene, "myaddon_ai_enemy_base_type", "VF3")
             
         trigger_index = enemy.get("trigger_index", -1)
         if trigger_index is not None:
@@ -2081,7 +2081,7 @@ class MYADDON_OT_playtest_game(bpy.types.Operator):
 
         validation.validate_and_store(context.scene)
         self.report({'INFO'}, f"{copied_count}個のオブジェクトへ設定を一括適用しました。")
-        return {'FINISHED'}��ました: {exc}")
+        return {'FINISHED'}��ました: {exc}")
             return {'CANCELLED'}
 
         if warnings:
@@ -3623,4 +3623,5 @@ def unregister():
     _unregister_auto_export_handler()
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
+
 
