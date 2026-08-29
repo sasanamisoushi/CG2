@@ -85,6 +85,15 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	spawnData.name = objData.value("name", "UnknownEnemy");
 	spawnData.position = position;
 	spawnData.rotation = rotation;
+	spawnData.isGround = true;
+
+	if (spawnData.name.find("Boss") == 0) {
+		spawnData.isBoss = true;
+		spawnData.isGround = false;
+	} else if (spawnData.name.find("VF2") != std::string::npos) {
+		spawnData.isJammer = true;
+		spawnData.isGround = false;
+	}
 
 	bool hasExplicitInitialSpawnSetting = false;
 	bool explicitInitialSpawnValue = true;

@@ -100,14 +100,16 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	spawnData.position = position;
 	spawnData.rotation = rotation;
 
+	// デフォルトで地上の敵(GroundEnemy: 重力+山肌着地)として読み込む
+	spawnData.isGround = true;
+
 	if (spawnData.name.find("Boss") == 0) {
 		spawnData.isBoss = true;
+		spawnData.isGround = false;
 		spawnData.isInitialSpawn = false;
 	} else if (spawnData.name.find("VF2") != std::string::npos) {
 		spawnData.isJammer = true;
-	} else {
-		// scene.json内の敵(VF1, VF1-1, AIEnemy_01〜07等)を地上敵 (GroundEnemy: 重力+山肌着地) として読み込む
-		spawnData.isGround = true;
+		spawnData.isGround = false;
 	}
 
 	bool hasExplicitInitialSpawnSetting = false;
@@ -130,13 +132,16 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		parseInitialSpawnFlag(enemyObj);
 		if (enemyObj.contains("type") && enemyObj["type"].is_string()) {
 			std::string enemyType = enemyObj["type"].get<std::string>();
-			if (enemyType == "Ground" || enemyType == "GroundEnemy" || enemyType == "VF3") {
-				spawnData.isGround = true;
-			} else if (enemyType == "Boss") {
+			if (enemyType == "Boss") {
 				spawnData.isBoss = true;
+				spawnData.isGround = false;
 				spawnData.isInitialSpawn = false;
-			} else if (enemyType == "VF2") {
+			} else if (enemyType == "VF2" || enemyType == "Jammer") {
 				spawnData.isJammer = true;
+				spawnData.isGround = false;
+			} else {
+				// VF1, VF1-1, AIEnemy等の配置敵は地上敵(GroundEnemy)として扱う
+				spawnData.isGround = true;
 			}
 		}
 	}
