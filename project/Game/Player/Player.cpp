@@ -1246,11 +1246,11 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				s.radius = GetCollisionRadius();
 				playerSpheres.push_back(s);
 			}
-			// 地底抜け防止レスキュー：足元の地形の最高標高を特定し、潜り込んでいたら即時地上に押し上げる
+			// 地底抜け・埋まり防止：足元の地形の最高標高を特定し、潜り込んでいたら足元が地上にピッタリ乗る高さに即時補正する
 			float maxTerrainY = -99999.0f;
 			bool foundTerrain = false;
 			for (const auto& tri : triangles) {
-				if (tri.normal.y > 0.2f) {
+				if (tri.normal.y > 0.15f) {
 					float triY = 0.0f;
 					if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], position_.x, position_.z, triY)) {
 						if (triY > maxTerrainY) {
@@ -1261,9 +1261,11 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				}
 			}
 
-			float playerRadius = GetCollisionRadius();
-			if (foundTerrain && position_.y < maxTerrainY + playerRadius * 0.5f) {
-				position_.y = maxTerrainY + playerRadius * 0.5f;
+			const Vector3 halfExtents = GetWorldHalfExtents();
+			const float minRequiredY = maxTerrainY + halfExtents.y;
+
+			if (foundTerrain && position_.y < minRequiredY) {
+				position_.y = minRequiredY;
 				if (velocity_.y < 0.0f) {
 					velocity_.y = 0.0f;
 				}
@@ -1337,6 +1339,12 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 							velocity_.z -= dot * pushNormal.z;
 						}
 					}
+				}
+			}
+			if (foundTerrain && position_.y < minRequiredY) {
+				position_.y = minRequiredY;
+				if (velocity_.y < 0.0f) {
+					velocity_.y = 0.0f;
 				}
 			}
 			continue;
