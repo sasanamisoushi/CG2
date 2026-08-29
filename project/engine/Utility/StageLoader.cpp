@@ -352,7 +352,12 @@ bool StageLoader::LoadSceneJson(
 
 			if (category == "PLAYER") {
 				if (player) {
-					player->SetPosition(position);
+					// プレイヤーの位置が大平山地形と正対する標準スタート位置に調整
+					Vector3 safePlayerPos = position;
+					if (safePlayerPos.y < 0.5f) {
+						safePlayerPos.y = 1.5f;
+					}
+					player->SetPosition(safePlayerPos);
 					player->SetRotation(rotation);
 				}
 				continue;
