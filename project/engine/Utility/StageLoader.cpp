@@ -100,16 +100,35 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	spawnData.position = position;
 	spawnData.rotation = rotation;
 
-	// デフォルトで地上の敵(GroundEnemy: 重力+山肌着地)として読み込む
-	spawnData.isGround = true;
+	std::string typeStr = "";
+	if (objData.contains("enemy") && objData["enemy"].is_object() && objData["enemy"].contains("type") && objData["enemy"]["type"].is_string()) {
+		typeStr = objData["enemy"]["type"].get<std::string>();
+	} else if (objData.contains("enemy_type") && objData["enemy_type"].is_string()) {
+		typeStr = objData["enemy_type"].get<std::string>();
+	}
 
-	if (spawnData.name.find("Boss") == 0) {
+	std::string checkStr = spawnData.name + "_" + typeStr;
+	for (char &c : checkStr) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+
+	if (checkStr.find("BOSS") != std::string::npos) {
 		spawnData.isBoss = true;
 		spawnData.isGround = false;
+		spawnData.isJammer = false;
 		spawnData.isInitialSpawn = false;
-	} else if (spawnData.name.find("VF2") != std::string::npos) {
+	} else if (checkStr.find("VF2") != std::string::npos || checkStr.find("JAMMER") != std::string::npos) {
 		spawnData.isJammer = true;
 		spawnData.isGround = false;
+		spawnData.isBoss = false;
+	} else if (checkStr.find("VF1") != std::string::npos || checkStr.find("FLY") != std::string::npos || checkStr.find("AIR") != std::string::npos) {
+		// ユーザーが VF1 や 飛行タイプ と名前・指定した場合は 空中敵 (Enemy)
+		spawnData.isGround = false;
+		spawnData.isJammer = false;
+		spawnData.isBoss = false;
+	} else {
+		// ユーザーが VF3 や 地上タイプ と名前・指定した場合(または汎用地上敵)は 地上敵 (GroundEnemy)
+		spawnData.isGround = true;
+		spawnData.isJammer = false;
+		spawnData.isBoss = false;
 	}
 
 	bool hasExplicitInitialSpawnSetting = false;
@@ -130,20 +149,6 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	if (objData.contains("enemy") && objData["enemy"].is_object()) {
 		const auto &enemyObj = objData["enemy"];
 		parseInitialSpawnFlag(enemyObj);
-		if (enemyObj.contains("type") && enemyObj["type"].is_string()) {
-			std::string enemyType = enemyObj["type"].get<std::string>();
-			if (enemyType == "Boss") {
-				spawnData.isBoss = true;
-				spawnData.isGround = false;
-				spawnData.isInitialSpawn = false;
-			} else if (enemyType == "VF2" || enemyType == "Jammer") {
-				spawnData.isJammer = true;
-				spawnData.isGround = false;
-			} else {
-				// VF1, VF1-1, AIEnemy等の配置敵は地上敵(GroundEnemy)として扱う
-				spawnData.isGround = true;
-			}
-		}
 	}
 
 	if (objData.contains("path_id") && objData["path_id"].is_string()) {
