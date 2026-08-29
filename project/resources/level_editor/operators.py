@@ -2081,8 +2081,7 @@ class MYADDON_OT_playtest_game(bpy.types.Operator):
 
         validation.validate_and_store(context.scene)
         self.report({'INFO'}, f"{copied_count}個のオブジェクトへ設定を一括適用しました。")
-        return {'FINISHED'}��ました: {exc}")
-            return {'CANCELLED'}
+        return {'FINISHED'}
 
         if warnings:
             self.report({'WARNING'}, f"警告 {len(warnings)}件あり。ゲームを起動しました。")
