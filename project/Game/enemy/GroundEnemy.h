@@ -44,10 +44,19 @@ private:
     int gatlingShotCount_ = 0;
     int gatlingIntervalTimer_ = 0;
 
+    // 近接攻撃（飛び蹴り）フェーズ
+    enum class MeleePhase {
+        Rising,   // ジャンプ上昇中（HIT判定なし）
+        Falling,  // 急降下・飛び蹴り（HIT判定あり！）
+        Landing   // 着地硬直
+    };
+    MeleePhase meleePhase_ = MeleePhase::Rising;
+    int meleeLandingTimer_ = 0;
+
     // 近接攻撃用当たり判定ブロック
     std::unique_ptr<Object3d> meleeBox_;
     Vector3 meleeBoxPos_ = { 0.0f, 0.0f, 0.0f };
-    Vector3 meleeBoxScale_ = { 0.22f, 0.22f, 0.32f };
+    Vector3 meleeBoxScale_ = { 0.35f, 0.35f, 0.50f };
     bool isMeleeActive_ = false;
     int meleeTimer_ = 0;
 

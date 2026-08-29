@@ -97,7 +97,7 @@ void GroundEnemy::Initialize(const Vector3 &position) {
         object_->GetModel()->SetColor({ 0.2f, 0.65f, 0.35f, 1.0f });
     }
 
-    scale_ = { 0.08f, 0.08f, 0.08f };
+    scale_ = { 0.12f, 0.12f, 0.12f };
     object_->SetScale(scale_);
 
     position_ = position;
@@ -289,71 +289,7 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
     position_.x += velocity_.x;
     position_.z += velocity_.z;
 
-    // 動的アクションとジャンプ処理
-    jumpTimer_++;
-    Vector3 diff = { playerPos.x - position_.x, playerPos.y - position_.y, playerPos.z - position_.z };
-    float dist = std::sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z);
-
-    bool playerIsHighAbove = (playerPos.y - position_.y > 8.0f);
-
-    if (isGrounded_) {
-        if (playerIsHighAbove && jumpTimer_ >= 60) {
-            // 1. プレイヤーが頭上高所にいる場合のハイジャンプ
-            velocityY_ = kHighJumpPower;
-            isGrounded_ = false;
-            jumpTimer_ = 0;
-            // プレイヤー方向へ慣性を乗せる
-            Vector3 toPlayerH = NormalizeOrFallback({playerPos.x - position_.x, 0.0f, playerPos.z - position_.z}, forward_);
-            velocity_.x = toPlayerH.x * (kGroundSpeed * 1.2f);
-            velocity_.z = toPlayerH.z * (kGroundSpeed * 1.2f);
-        }
-        else if (dist <= 8.0f && attackSubState_ == GroundAttackState::Idle && jumpTimer_ >= 100) {
-            // 2. 近距離：バックステップ回避
-            velocityY_ = 0.18f;
-            isGrounded_ = false;
-            jumpTimer_ = 0;
-            // 後ろ方向へ跳ぶ
-            velocity_.x = -forward_.x * 0.09f;
-            velocity_.z = -forward_.z * 0.09f;
-        }
-        else if (dist > 8.0f && dist <= 25.0f && attackSubState_ == GroundAttackState::Idle && jumpTimer_ >= 140) {
-            // 3. 中距離：左右サイドステップ回避
-            velocityY_ = 0.20f;
-            isGrounded_ = false;
-            jumpTimer_ = 0;
-            // 左右どちらかにランダムで跳ぶ
-            float sideSign = (rand() % 2 == 0) ? 1.0f : -1.0f;
-            Vector3 sideDir = { -forward_.z * sideSign, 0.0f, forward_.x * sideSign };
-            velocity_.x = sideDir.x * 0.10f;
-            velocity_.z = sideDir.z * 0.10f;
-        }
-        else if (dist > 25.0f) {
-            // 4. 遠距離：基本はジャンプせず、前方に障害物がある場合に飛び越える
-            bool needJumpObstacle = false;
-            for (const auto &obs : obstacles) {
-                if (!obs || obs->IsStageBounds() || !obs->IsCollisionEnabled()) continue;
-                OBB obsOBB = obs->GetOBB();
-                Vector3 toObs = { obsOBB.center.x - position_.x, 0.0f, obsOBB.center.z - position_.z };
-                float toObsLen = std::sqrt(toObs.x * toObs.x + toObs.z * toObs.z);
-                if (toObsLen < 4.0f) {
-                    float dot = toObs.x * forward_.x + toObs.z * forward_.z;
-                    float obsTop = obsOBB.center.y + obsOBB.size.y;
-                    if (dot > 0.0f && obsTop > position_.y - scale_.y) {
-                        needJumpObstacle = true;
-                        break;
-                    }
-                }
-            }
-
-            if (needJumpObstacle && jumpTimer_ >= 80) {
-                velocityY_ = kHighJumpPower * 0.85f;
-                isGrounded_ = false;
-                jumpTimer_ = 0;
-                velocity_.x = forward_.x * kGroundSpeed * 1.2f;
-                velocity_.z = forward_.z * kGroundSpeed * 1.2f;
-            }
-        }
-    }
+    // 通常移動時はジャンプせず、地上での走行・旋回のみ行う（近接攻撃時にのみジャンプ飛び蹴りを実行する）
 }
 
 void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager) {
@@ -361,24 +297,46 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
     float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
     float dist = std::sqrt(distSq);
 
-    // 近接攻撃中の処理
+    // 近接攻撃（飛び蹴りジャンプ降下攻撃）中の処理
     if (attackSubState_ == GroundAttackState::Melee) {
-        meleeTimer_--;
-        isMeleeActive_ = true;
-        
-        // 近接攻撃中は前方に突出・前進
-        position_.x += forward_.x * (kGroundSpeed * 1.5f);
-        position_.z += forward_.z * (kGroundSpeed * 1.5f);
-
-        if (meleeTimer_ <= 0) {
+        if (meleePhase_ == MeleePhase::Rising) {
+            // 跳躍上昇フェーズ（前方に跳び上がりつつ上昇。HIT判定はまだ無し）
             isMeleeActive_ = false;
-            meleeBoxPos_ = { -9999.0f, -9999.0f, -9999.0f };
-            if (meleeBox_) {
-                meleeBox_->SetTranslate(meleeBoxPos_);
-                meleeBox_->Update();
+            position_.x += forward_.x * (kGroundSpeed * 1.5f);
+            position_.z += forward_.z * (kGroundSpeed * 1.5f);
+
+            // 頂点付近（下降開始）に達したら急降下飛び蹴りフェーズへ
+            if (velocityY_ <= 0.05f || !isGrounded_) {
+                meleePhase_ = MeleePhase::Falling;
             }
-            attackSubState_ = GroundAttackState::Idle;
-            attackTimer_ = 60; // 攻撃終了後のクールタイム
+        }
+        else if (meleePhase_ == MeleePhase::Falling) {
+            // 急降下・飛び蹴り中（降りてきたとき〜着地前までHIT判定ON！）
+            isMeleeActive_ = true;
+            position_.x += forward_.x * (kGroundSpeed * 2.0f);
+            position_.z += forward_.z * (kGroundSpeed * 2.0f);
+            velocityY_ -= gravity_ * 0.6f;
+
+            // 地面に足が届いて着地したら攻撃判定OFF＆着地硬直フェーズへ
+            if (isGrounded_) {
+                isMeleeActive_ = false;
+                meleePhase_ = MeleePhase::Landing;
+                meleeLandingTimer_ = 18; // 18フレームの着地隙
+            }
+        }
+        else if (meleePhase_ == MeleePhase::Landing) {
+            // 着地硬直
+            isMeleeActive_ = false;
+            meleeLandingTimer_--;
+            if (meleeLandingTimer_ <= 0) {
+                meleeBoxPos_ = { -9999.0f, -9999.0f, -9999.0f };
+                if (meleeBox_) {
+                    meleeBox_->SetTranslate(meleeBoxPos_);
+                    meleeBox_->Update();
+                }
+                attackSubState_ = GroundAttackState::Idle;
+                attackTimer_ = 75; // 攻撃終了後のクールタイム
+            }
         }
         return;
     }
@@ -387,7 +345,7 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
     if (attackSubState_ == GroundAttackState::Gatling) {
         gatlingIntervalTimer_--;
         if (gatlingIntervalTimer_ <= 0 && bulletManager) {
-            Vector3 muzzlePos = { position_.x + forward_.x * 0.3f, position_.y + 0.1f, position_.z + forward_.z * 0.3f };
+            Vector3 muzzlePos = { position_.x + forward_.x * 0.45f, position_.y + 0.15f, position_.z + forward_.z * 0.45f };
             Vector3 shootDir = NormalizeOrFallback(diff, forward_);
             Vector3 bulletVelocity = { shootDir.x * 0.4f, shootDir.y * 0.4f, shootDir.z * 0.4f };
             
@@ -410,11 +368,13 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
     }
 
     // 距離に応じた攻撃の選択
-    if (dist <= 8.0f) {
-        // 1. 近距離: 近接攻撃（当たり判定用ブロックを突出す）
+    if (dist <= 10.0f) {
+        // 1. 近距離: 近接跳び蹴り攻撃を発動（跳び上がって急降下蹴り）
         attackSubState_ = GroundAttackState::Melee;
-        meleeTimer_ = 35; // 35フレーム間突撃＆ブロック発生
-        isMeleeActive_ = true;
+        meleePhase_ = MeleePhase::Rising;
+        isMeleeActive_ = false;
+        velocityY_ = 0.38f; // 高く前方上にジャンピング
+        isGrounded_ = false;
     } else if (dist <= 25.0f) {
         // 2. 中距離: ガトリング連射攻撃
         attackSubState_ = GroundAttackState::Gatling;
@@ -423,7 +383,7 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
     } else {
         // 3. 遠距離: 誘導ミサイル攻撃
         if (bulletManager) {
-            Vector3 muzzlePos = { position_.x, position_.y + 0.3f, position_.z };
+            Vector3 muzzlePos = { position_.x, position_.y + 0.45f, position_.z };
             // 上空に向けてミサイルを放出し、プレイヤーを追尾させる
             Vector3 missileVel1 = { forward_.x * 0.15f + 0.1f, 0.3f, forward_.z * 0.15f };
             Vector3 missileVel2 = { forward_.x * 0.15f - 0.1f, 0.3f, forward_.z * 0.15f };
@@ -455,13 +415,13 @@ void GroundEnemy::UpdateModel() {
         object_->Update();
     }
 
-    // 近接攻撃用判定ブロックのトランスフォーム更新
+    // 近接飛び蹴り攻撃用判定ブロックのトランスフォーム更新（降りてきた急降下中〜着地前）
     if (isMeleeActive_ && meleeBox_) {
-        // 敵の目の前 (forward方向) に突き出す
+        // 前方斜め下（飛び蹴り脚の先）に突き出す
         meleeBoxPos_ = {
-            position_.x + forward_.x * 0.35f,
-            position_.y + 0.05f,
-            position_.z + forward_.z * 0.35f
+            position_.x + forward_.x * 0.55f,
+            position_.y - 0.08f,
+            position_.z + forward_.z * 0.55f
         };
         meleeBox_->SetTranslate(meleeBoxPos_);
         meleeBox_->SetRotate(rotation_);
