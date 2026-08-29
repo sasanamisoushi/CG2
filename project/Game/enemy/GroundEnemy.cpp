@@ -187,7 +187,7 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
                 }
             }
 
-            const float footOffset = (std::max)(scale_.y * 2.0f, 0.85f);
+            const float footOffset = scale_.y;
             if (foundTerrain && position_.y < maxTerrainY + footOffset) {
                 position_.y = maxTerrainY + footOffset;
                 if (velocityY_ < 0.0f) {
@@ -510,7 +510,7 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
         }
     }
 
-    const float footOffset = (std::max)(scale_.y * 2.0f, 0.85f);
+    const float footOffset = scale_.y;
     if (foundGround) {
         position_.y = maxGroundY + footOffset;
     } else {
