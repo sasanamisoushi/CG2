@@ -1199,7 +1199,15 @@ void GamePlayScene::Update() {
 		UpdateAmmoPickups();
 		UpdateEnemyRespawns();
 
-		if (!IsSimulationMode() && !isGameOver_ && enemies_.empty() && !HasPendingEnemySpawns()) {
+		bool hasAnyEnemySpawned = false;
+		for (const auto& spawn : enemySpawns_) {
+			if (!spawn.isBoss && spawn.hasSpawned) {
+				hasAnyEnemySpawned = true;
+				break;
+			}
+		}
+
+		if (!IsSimulationMode() && !isGameOver_ && hasAnyEnemySpawned && enemies_.empty() && !HasPendingEnemySpawns()) {
 			if (!bossSpawned_) {
 				OutputDebugStringA("[GamePlayScene] All enemies defeated! Spawning Boss...\n");
 				auto boss = std::make_unique<Boss>();

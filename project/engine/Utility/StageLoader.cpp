@@ -195,10 +195,8 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 
 	if (spawnData.isBoss) {
 		spawnData.isInitialSpawn = false;
-	} else if (hasExplicitInitialSpawnSetting) {
-		spawnData.isInitialSpawn = explicitInitialSpawnValue;
 	} else {
-		// ボス以外のすべての配置敵は、デフォルトで最初から全員（7体）出現させる
+		// ボス以外のすべての配置敵は、100%最初から全員（7体）出現させる
 		spawnData.isInitialSpawn = true;
 	}
 
