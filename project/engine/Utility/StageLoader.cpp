@@ -88,9 +88,6 @@ std::vector<std::string> SplitStringByComma(const std::string& str) {
 	std::string token = str.substr(start);
 	token.erase(0, token.find_first_not_of(" \t"));
 	token.erase(token.find_last_not_of(" \t") + 1);
-	if (!token.empty()) {
-		result.push_back(token);
-	}
 	return result;
 }
 
@@ -107,51 +104,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		typeStr = objData["enemy_type"].get<std::string>();
 	}
 
-	std::string upperType = typeStr;
-	for (char &c : upperType) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
-	std::string upperName = spawnData.name;
-	for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
-
-	// 1. UIで明示的に指定された敵のタイプ (VF3, VF1, VF2, Boss等) を最優先で判定
-	if (upperType == "VF3" || upperType == "GROUND" || upperType == "GROUNDENEMY" || upperType == "LAND" || upperName.find("AIENEMY") != std::string::npos) {
-		spawnData.isGround = true;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "VF1" || upperType == "FLY" || upperType == "AIR") {
-		spawnData.isGround = false;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "VF2" || upperType == "JAMMER") {
-		spawnData.isJammer = true;
-		spawnData.isGround = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "BOSS") {
-		spawnData.isBoss = true;
-		spawnData.isGround = false;
-		spawnData.isJammer = false;
-		spawnData.isInitialSpawn = false;
-	} else {
-		// 2. 敵のタイプが未指定の場合のみ、オブジェクト名から判定
-		if (upperName.find("BOSS") != std::string::npos) {
-			spawnData.isBoss = true;
-			spawnData.isGround = false;
-			spawnData.isJammer = false;
-			spawnData.isInitialSpawn = false;
-		} else if (upperName.find("VF2") != std::string::npos || upperName.find("JAMMER") != std::string::npos) {
-			spawnData.isJammer = true;
-			spawnData.isGround = false;
-			spawnData.isBoss = false;
-		} else if (upperName.find("VF1") != std::string::npos) {
-			spawnData.isGround = false;
-			spawnData.isJammer = false;
-			spawnData.isBoss = false;
-		} else {
-			// デフォルトは地上敵(GroundEnemy)
-			spawnData.isGround = true;
-			spawnData.isJammer = false;
-			spawnData.isBoss = false;
-		}
-	}
+	StageLoader::DetermineEnemyTypeFlags(typeStr, spawnData.name, spawnData.isGround, spawnData.isJammer, spawnData.isBoss);
 
 	bool hasExplicitInitialSpawnSetting = false;
 	bool explicitInitialSpawnValue = true;
@@ -263,6 +216,36 @@ void ApplyFlightPath(Enemy &enemy, const EnemySpawnData &spawnData) {
 	}
 }
 
+}
+
+void StageLoader::DetermineEnemyTypeFlags(const std::string& typeStr, const std::string& nameStr, bool& outIsGround, bool& outIsJammer, bool& outIsBoss) {
+	std::string upperType = typeStr;
+	for (char &c : upperType) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+	std::string upperName = nameStr;
+	for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+
+	outIsBoss = false;
+	outIsJammer = false;
+	outIsGround = true; // 最強力なデフォルト設計：明示的に飛行型指定がない限りすべて地上敵(GroundEnemy)にする
+
+	if (upperType == "BOSS" || upperName.find("BOSS") != std::string::npos) {
+		outIsBoss = true;
+		outIsGround = false;
+		outIsJammer = false;
+	} else if (upperType == "VF2" || upperType == "JAMMER" || upperName.find("VF2") != std::string::npos || upperName.find("JAMMER") != std::string::npos) {
+		outIsJammer = true;
+		outIsGround = false;
+		outIsBoss = false;
+	} else if (upperType == "VF1" || upperType == "FLY" || upperType == "AIR" || upperName.find("VF1") != std::string::npos) {
+		outIsGround = false;
+		outIsJammer = false;
+		outIsBoss = false;
+	} else {
+		// VF3, GROUND, LAND, AIENEMY, その他のすべての雑魚敵は100%地上敵(GroundEnemy)とする
+		outIsGround = true;
+		outIsJammer = false;
+		outIsBoss = false;
+	}
 }
 
 bool StageLoader::LoadSceneJson(

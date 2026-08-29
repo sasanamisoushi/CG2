@@ -37,6 +37,9 @@ struct EnemySpawnData {
 
 class StageLoader {
 public:
+	// 単一共通の敵種別判定関数 (全プログラムで統一使用して先祖返りを100%遮断)
+	static void DetermineEnemyTypeFlags(const std::string& typeStr, const std::string& nameStr, bool& outIsGround, bool& outIsJammer, bool& outIsBoss);
+
 	// Blenderから出力したJSONを読み込み、敵・障害物リストに追加する
 	static bool LoadSceneJson(
 		const std::string &filePath, 

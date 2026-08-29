@@ -97,46 +97,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	std::string upperName = spawnData.name;
 	for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
 
-	// 1. UIで明示的に指定された敵のタイプ (VF3, VF1, VF2, Boss等) を最優先で判定
-	if (upperType == "VF3" || upperType == "GROUND" || upperType == "GROUNDENEMY" || upperType == "LAND") {
-		spawnData.isGround = true;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "VF1" || upperType == "FLY" || upperType == "AIR") {
-		spawnData.isGround = false;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "VF2" || upperType == "JAMMER") {
-		spawnData.isJammer = true;
-		spawnData.isGround = false;
-		spawnData.isBoss = false;
-	} else if (upperType == "BOSS") {
-		spawnData.isBoss = true;
-		spawnData.isGround = false;
-		spawnData.isJammer = false;
-		spawnData.isInitialSpawn = false;
-	} else {
-		// 2. 敵のタイプが未指定の場合のみ、オブジェクト名から判定
-		if (upperName.find("BOSS") != std::string::npos) {
-			spawnData.isBoss = true;
-			spawnData.isGround = false;
-			spawnData.isJammer = false;
-			spawnData.isInitialSpawn = false;
-		} else if (upperName.find("VF2") != std::string::npos || upperName.find("JAMMER") != std::string::npos) {
-			spawnData.isJammer = true;
-			spawnData.isGround = false;
-			spawnData.isBoss = false;
-		} else if (upperName.find("VF1") != std::string::npos) {
-			spawnData.isGround = false;
-			spawnData.isJammer = false;
-			spawnData.isBoss = false;
-		} else {
-			// デフォルトは地上敵(GroundEnemy)
-			spawnData.isGround = true;
-			spawnData.isJammer = false;
-			spawnData.isBoss = false;
-		}
-	}
+	StageLoader::DetermineEnemyTypeFlags(typeStr, spawnData.name, spawnData.isGround, spawnData.isJammer, spawnData.isBoss);
 
 	bool hasExplicitInitialSpawnSetting = false;
 	bool explicitInitialSpawnValue = true;
