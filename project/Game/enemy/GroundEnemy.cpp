@@ -147,8 +147,9 @@ void GroundEnemy::Update(const Vector3 &playerPos, EnemyBulletManager *bulletMan
         UpdateAttackAI(playerPos, bulletManager);
     }
 
-    // 3. 当たり判定（障害物押し出し）
+    // 3. 当たり判定（障害物押し出し＆地面接地強制吸着）
     CheckCollision(obstacles);
+    SnapToGround(obstacles);
 
     // 4. モデルの更新
     UpdateModel();
@@ -510,12 +511,12 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
         }
     }
 
-    const float footOffset = scale_.y;
+    const float footOffset = scale_.y * 0.5f;
     if (foundGround) {
         position_.y = maxGroundY + footOffset;
     } else {
-        // 山の平均標高に安全着地
-        position_.y = -100.0f + footOffset;
+        // 大平山フィールドの表面標高に安全着地
+        position_.y = -108.0f + footOffset;
     }
 
     velocityY_ = 0.0f;
