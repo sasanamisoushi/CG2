@@ -2017,12 +2017,11 @@ void GamePlayScene::DrawOverlay() {
 	bool isJammed = lockOnManager_->IsPlayerJammed(activeCamera);
 
 	if (isMultiLockCharging_ && !multiLockTargets_.empty()) {
-		std::map<Enemy*, int> targetCounts;
-		for (Enemy *target : multiLockTargets_) {
-			targetCounts[target]++;
-		}
-		for (auto const& [target, count] : targetCounts) {
-			DrawMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprite_.get(), isJammed, count);
+		// 発射する誘導弾の数分（multiLockTargets_ の全要素）、ロックオンマーカーを個別に全表示！
+		const int totalCount = static_cast<int>(multiLockTargets_.size());
+		for (int i = 0; i < totalCount; ++i) {
+			Enemy *target = multiLockTargets_[i];
+			DrawIndividualMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprite_.get(), isJammed, i + 1, totalCount);
 		}
 	} else if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
 		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
