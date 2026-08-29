@@ -92,28 +92,50 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		typeStr = objData["enemy_type"].get<std::string>();
 	}
 
-	std::string checkStr = spawnData.name + "_" + typeStr;
-	for (char &c : checkStr) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+	std::string upperType = typeStr;
+	for (char &c : upperType) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
+	std::string upperName = spawnData.name;
+	for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
 
-	if (checkStr.find("BOSS") != std::string::npos) {
+	// 1. UIで明示的に指定された敵のタイプ (VF3, VF1, VF2, Boss等) を最優先で判定
+	if (upperType == "VF3" || upperType == "GROUND" || upperType == "GROUNDENEMY" || upperType == "LAND") {
+		spawnData.isGround = true;
+		spawnData.isJammer = false;
+		spawnData.isBoss = false;
+	} else if (upperType == "VF1" || upperType == "FLY" || upperType == "AIR") {
+		spawnData.isGround = false;
+		spawnData.isJammer = false;
+		spawnData.isBoss = false;
+	} else if (upperType == "VF2" || upperType == "JAMMER") {
+		spawnData.isJammer = true;
+		spawnData.isGround = false;
+		spawnData.isBoss = false;
+	} else if (upperType == "BOSS") {
 		spawnData.isBoss = true;
 		spawnData.isGround = false;
 		spawnData.isJammer = false;
 		spawnData.isInitialSpawn = false;
-	} else if (checkStr.find("VF2") != std::string::npos || checkStr.find("JAMMER") != std::string::npos) {
-		spawnData.isJammer = true;
-		spawnData.isGround = false;
-		spawnData.isBoss = false;
-	} else if (checkStr.find("VF1") != std::string::npos || checkStr.find("FLY") != std::string::npos || checkStr.find("AIR") != std::string::npos) {
-		// ユーザーが VF1 や 飛行タイプ と名前・指定した場合は 空中敵 (Enemy)
-		spawnData.isGround = false;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
 	} else {
-		// ユーザーが VF3 や 地上タイプ と名前・指定した場合(または汎用地上敵)は 地上敵 (GroundEnemy)
-		spawnData.isGround = true;
-		spawnData.isJammer = false;
-		spawnData.isBoss = false;
+		// 2. 敵のタイプが未指定の場合のみ、オブジェクト名から判定
+		if (upperName.find("BOSS") != std::string::npos) {
+			spawnData.isBoss = true;
+			spawnData.isGround = false;
+			spawnData.isJammer = false;
+			spawnData.isInitialSpawn = false;
+		} else if (upperName.find("VF2") != std::string::npos || upperName.find("JAMMER") != std::string::npos) {
+			spawnData.isJammer = true;
+			spawnData.isGround = false;
+			spawnData.isBoss = false;
+		} else if (upperName.find("VF1") != std::string::npos) {
+			spawnData.isGround = false;
+			spawnData.isJammer = false;
+			spawnData.isBoss = false;
+		} else {
+			// デフォルトは地上敵(GroundEnemy)
+			spawnData.isGround = true;
+			spawnData.isJammer = false;
+			spawnData.isBoss = false;
+		}
 	}
 
 	bool hasExplicitInitialSpawnSetting = false;
