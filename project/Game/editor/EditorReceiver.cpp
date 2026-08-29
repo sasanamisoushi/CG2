@@ -366,33 +366,39 @@ bool EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 				// ==========================================
 				// 2. 種類(category)ごとの生成処理
 				// ==========================================
-				if (objData.contains("category")) {
-					std::string category = objData["category"].get<std::string>();
+				std::string name = objData.value("name", "");
+				std::string category = "";
+				if (objData.contains("category") && objData["category"].is_string()) {
+					category = objData["category"].get<std::string>();
+				} else if (objData.contains("game_obj_type") && objData["game_obj_type"].is_string()) {
+					category = objData["game_obj_type"].get<std::string>();
+				}
 
-					if (category == "PLAYER") {
-						// プレイヤーの座標を上書き
-						if (player) {
-							if (objData.contains("model") && objData["model"].is_string()) {
-								std::string modelFile = objData["model"].get<std::string>();
-								if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
-									player->Initialize(modelFile);
-								}
-								player->SetScale(scale);
-							}
-							player->SetPosition(position);
-							player->SetRotation(rotation);
-						}
-					} else if (category == "ENEMY") {
-						enemySpawns.push_back(BuildEnemySpawnData(objData, position, rotation, flightPaths));
-					} else if (category == "OBSTACLE") {
-						// Blenderのオブジェクト名をモデル名として使う
-						std::string modelName = ResolveObstacleModelName(objData);
+				std::string upperName = name;
+				for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
 
-						auto newObstacle = std::make_unique<Obstacle>();
-						// さっき作ってくれた完璧なInitialize関数！
-						newObstacle->Initialize(modelName, position, rotation, scale);
-						obstacles.push_back(std::move(newObstacle));
+				if (category.empty() || category == "NONE") {
+					if (upperName.find("PLAYER") != std::string::npos) {
+						category = "PLAYER";
+					} else if (upperName.find("ENEMY") != std::string::npos || upperName.find("VF3") != std::string::npos || upperName.find("VF1") != std::string::npos || upperName.find("BOSS") != std::string::npos) {
+						category = "ENEMY";
+					} else if (upperName.find("TERRAIN") != std::string::npos || upperName.find("STAGE") != std::string::npos || upperName.find("OBSTACLE") != std::string::npos || upperName.find("BLOCK") != std::string::npos || upperName.find("OBJECT") != std::string::npos) {
+						category = "OBSTACLE";
 					}
+				}
+
+				if (category == "PLAYER") {
+					if (player) {
+						player->SetPosition(position);
+						player->SetRotation(rotation);
+					}
+				} else if (category == "ENEMY") {
+					enemySpawns.push_back(BuildEnemySpawnData(objData, position, rotation, flightPaths));
+				} else if (category == "OBSTACLE") {
+					std::string modelName = ResolveObstacleModelName(objData);
+					auto newObstacle = std::make_unique<Obstacle>();
+					newObstacle->Initialize(modelName, position, rotation, scale);
+					obstacles.push_back(std::move(newObstacle));
 				}
 				// 互換性用（Blenderで種類を設定し忘れた時のための予備）
 				else if (objData.contains("enemy")) {

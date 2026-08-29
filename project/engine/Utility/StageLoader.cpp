@@ -330,85 +330,37 @@ bool StageLoader::LoadSceneJson(
 				};
 			}
 
-			// 2. 「敵」のデータなら、生成してリストに追加！
-			if (objData.contains("category")) {
-				std::string category = objData["category"].get<std::string>();
+			// 2. カテゴリの取得と、未設定時のオブジェクト名による自動救済判別
+			std::string name = objData.value("name", "");
+			std::string category = "";
+			if (objData.contains("category") && objData["category"].is_string()) {
+				category = objData["category"].get<std::string>();
+			} else if (objData.contains("game_obj_type") && objData["game_obj_type"].is_string()) {
+				category = objData["game_obj_type"].get<std::string>();
+			}
 
-				if (category == "PLAYER") {
-					if (player) {
-						if (objData.contains("model") && objData["model"].is_string()) {
-							// std::string modelFile = objData["model"].get<std::string>();
-							// if (TryLoadModelFile(modelFile) && player->GetModelName() != modelFile) {
-							// 	player->Initialize(modelFile);
-							// }
-						}
-						// player->SetScale(scale); // Playerは自身でスケールを管理するため、scene.json のスケールで上書きしない
-						player->SetPosition(position);
-						player->SetRotation(rotation);
-					}
-					continue;
-				}
+			std::string upperName = name;
+			for (char &c : upperName) { c = static_cast<char>(toupper(static_cast<unsigned char>(c))); }
 
-				if (category == "ENEMY") {
-					EnemySpawnData spawnData = BuildEnemySpawnData(objData, position, rotation, flightPaths);
-					if (enemySpawns) {
-						enemySpawns->push_back(spawnData);
-					} else {
-						std::unique_ptr<Enemy> newEnemy;
-						if (spawnData.isJammer) newEnemy = std::make_unique<JammerEnemy>();
-						else newEnemy = std::make_unique<Enemy>();
-						newEnemy->Initialize(spawnData.position);
-						newEnemy->SetRotation(spawnData.rotation);
-						ApplyFlightPath(*newEnemy, spawnData);
-						enemies.push_back(std::move(newEnemy));
-					}
-					continue;
-				}
-
-				if (category == "OBSTACLE") {
-					auto newObstacle = std::make_unique<Obstacle>();
-					std::string modelName = ResolveObstacleModelName(objData);
-					
-					Vector3 initPos = position;
-					Vector3 initRot = rotation;
-					Vector3 initScale = scale;
-					std::string objectName = GetObjectBaseName(objData);
-					newObstacle->Initialize(modelName, initPos, initRot, initScale);
-
-					if (objData.contains("useMeshCollider") && objData["useMeshCollider"].is_boolean()) {
-						newObstacle->SetUseMeshCollider(objData["useMeshCollider"].get<bool>());
-					}
-					if (objData.contains("isCollisionEnabled") && objData["isCollisionEnabled"].is_boolean()) {
-						newObstacle->SetCollisionEnabled(objData["isCollisionEnabled"].get<bool>());
-					}
-					if (objData.contains("collisionOffset") && objData["collisionOffset"].is_array()) {
-						auto &arr = objData["collisionOffset"];
-						if (arr.size() == 3) newObstacle->SetCollisionOffset({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
-					}
-					if (objData.contains("collisionScale") && objData["collisionScale"].is_array()) {
-						auto &arr = objData["collisionScale"];
-						if (arr.size() == 3) newObstacle->SetCollisionScale({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
-					}
-
-					// 地形モデルは強制的にメッシュコライダーを使用する
-					objectName = GetObjectBaseName(objData);
-					if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
-						newObstacle->SetUseMeshCollider(true);
-					}
-
-					if (modelName.find("StageBounds") != std::string::npos) {
-						newObstacle->SetStageBounds(true);
-						OutputDebugStringA((" StageBounds Spawned at: " + std::to_string(position.x) + "\n").c_str());
-					}
-					obstacles.push_back(std::move(newObstacle));
-					continue;
+			if (category.empty() || category == "NONE") {
+				if (upperName.find("PLAYER") != std::string::npos) {
+					category = "PLAYER";
+				} else if (upperName.find("ENEMY") != std::string::npos || upperName.find("VF3") != std::string::npos || upperName.find("VF1") != std::string::npos || upperName.find("BOSS") != std::string::npos) {
+					category = "ENEMY";
+				} else if (upperName.find("TERRAIN") != std::string::npos || upperName.find("STAGE") != std::string::npos || upperName.find("OBSTACLE") != std::string::npos || upperName.find("BLOCK") != std::string::npos || upperName.find("OBJECT") != std::string::npos) {
+					category = "OBSTACLE";
 				}
 			}
 
-			if (objData.contains("enemy")) {
-				std::string enemyType = objData["enemy"]["type"].get<std::string>();
+			if (category == "PLAYER") {
+				if (player) {
+					player->SetPosition(position);
+					player->SetRotation(rotation);
+				}
+				continue;
+			}
 
-				// 敵を実体化！
+			if (category == "ENEMY") {
 				EnemySpawnData spawnData = BuildEnemySpawnData(objData, position, rotation, flightPaths);
 				if (enemySpawns) {
 					enemySpawns->push_back(spawnData);
@@ -421,10 +373,46 @@ bool StageLoader::LoadSceneJson(
 					ApplyFlightPath(*newEnemy, spawnData);
 					enemies.push_back(std::move(newEnemy));
 				}
-
-				OutputDebugStringA((" Enemy Spawned at: " + std::to_string(position.x) + "\n").c_str());
+				continue;
 			}
 
+			if (category == "OBSTACLE") {
+				auto newObstacle = std::make_unique<Obstacle>();
+				std::string modelName = ResolveObstacleModelName(objData);
+				
+				Vector3 initPos = position;
+				Vector3 initRot = rotation;
+				Vector3 initScale = scale;
+				std::string objectName = GetObjectBaseName(objData);
+				newObstacle->Initialize(modelName, initPos, initRot, initScale);
+
+				if (objData.contains("useMeshCollider") && objData["useMeshCollider"].is_boolean()) {
+					newObstacle->SetUseMeshCollider(objData["useMeshCollider"].get<bool>());
+				}
+				if (objData.contains("isCollisionEnabled") && objData["isCollisionEnabled"].is_boolean()) {
+					newObstacle->SetCollisionEnabled(objData["isCollisionEnabled"].get<bool>());
+				}
+				if (objData.contains("collisionOffset") && objData["collisionOffset"].is_array()) {
+					auto &arr = objData["collisionOffset"];
+					if (arr.size() == 3) newObstacle->SetCollisionOffset({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
+				}
+				if (objData.contains("collisionScale") && objData["collisionScale"].is_array()) {
+					auto &arr = objData["collisionScale"];
+					if (arr.size() == 3) newObstacle->SetCollisionScale({arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>()});
+				}
+
+				// 地形モデルは強制的にメッシュコライダーを使用する
+				objectName = GetObjectBaseName(objData);
+				if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
+					newObstacle->SetUseMeshCollider(true);
+				}
+
+				if (modelName.find("StageBounds") != std::string::npos) {
+					newObstacle->SetStageBounds(true);
+				}
+				obstacles.push_back(std::move(newObstacle));
+				continue;
+			}
 		}
 	}
 	return true;
