@@ -1367,8 +1367,14 @@ def _build_object_data(obj, model_filenames=None):
                 "size": [size[0], size[1], size[2]],
             }
 
-    if hasattr(obj, "game_obj_type") and obj.game_obj_type != 'NONE':
-        obj_data["category"] = obj.game_obj_type
+    # 種類の出力（category / game_obj_type の両方を100%保証）
+    got = getattr(obj, "game_obj_type", "NONE")
+    if got and got != 'NONE':
+        obj_data["category"] = got
+        obj_data["game_obj_type"] = got
+    elif obj.name.startswith("AIEnemy") or obj.name.startswith("Enemy"):
+        obj_data["category"] = "ENEMY"
+        obj_data["game_obj_type"] = "ENEMY"
 
     external_model = _external_model_file(obj)
     if external_model:
@@ -1376,14 +1382,18 @@ def _build_object_data(obj, model_filenames=None):
     elif obj.type == 'MESH' and model_filenames and obj.name in model_filenames:
         obj_data["model"] = model_filenames[obj.name]
 
-    if hasattr(obj, "enemy_type") and obj.enemy_type != "None":
-        obj_data["enemy"] = {
-            "type": obj.enemy_type,
-        }
+    # 敵タイプの出力（enemy_type / enemy.type の両方を100%保証）
+    et = getattr(obj, "enemy_type", "VF3")
+    if not et or et == "None" or et == "NONE":
+        et = "VF3"
+    obj_data["enemy_type"] = et
+    obj_data["enemy"] = {
+        "type": et,
+    }
 
-    if obj.get("game_obj_type", "NONE") == 'ENEMY':
-        path_id = obj.get("enemy_path_id", "None")
-        if path_id != "None":
+    if obj_data.get("category") == 'ENEMY' or obj_data.get("game_obj_type") == 'ENEMY':
+        path_id = getattr(obj, "enemy_path_id", "None")
+        if path_id and path_id != "None":
             obj_data["path_id"] = path_id
 
         trigger_name = getattr(obj, "enemy_reinforcement_trigger_name", "")
