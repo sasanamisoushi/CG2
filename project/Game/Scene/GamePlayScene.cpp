@@ -140,7 +140,7 @@ void GamePlayScene::UpdateAmmoPickups() {
 
 void GamePlayScene::Initialize() {
 
-	//カメラ・シーンリソース
+	//鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ
 	camera = std::make_unique<Camera>();
 	uiManager_ = std::make_unique<GamePlayUIManager>(this);
 	environmentRenderer_ = std::make_unique<EnvironmentRenderer>();
@@ -149,10 +149,11 @@ void GamePlayScene::Initialize() {
 	camera->SetTranslate({ 0.0f,0.0f,-10.0f });
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
 
-	//スプライト�E初期匁E
+	//鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ荳ｻ・ｸ・ｷ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴寂握縺狗ｹ晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	sprite = std::make_unique<Sprite>();
 	sprite->Initialize(SpriteCommon::GetInstance() , "resources/uvChecker.png");
 	TextureManager::GetInstance()->LoadTexture(kLockOnReticleTexturePath);
+	TextureManager::GetInstance()->LoadTexture(kMissileLockOnReticleTexturePath);
 	TextureManager::GetInstance()->LoadTexture(kAimCursorTexturePath);
 	TextureManager::GetInstance()->LoadTexture(kBoundaryAlertTexturePath);
 
@@ -163,6 +164,15 @@ void GamePlayScene::Initialize() {
 	lockOnReticleSprite_ = std::make_unique<Sprite>();
 	lockOnReticleSprite_->Initialize(SpriteCommon::GetInstance(), kLockOnReticleTexturePath);
 	lockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+
+	missileLockOnReticleSprite_ = std::make_unique<Sprite>();
+	missileLockOnReticleSprite_->Initialize(SpriteCommon::GetInstance(), kMissileLockOnReticleTexturePath);
+	missileLockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+
+	TextureManager::GetInstance()->LoadTexture("resources/multi_lock_marker.png");
+	multiLockMarkerSprite_ = std::make_unique<Sprite>();
+	multiLockMarkerSprite_->Initialize(SpriteCommon::GetInstance(), "resources/multi_lock_marker.png");
+	multiLockMarkerSprite_->SetAnchorPoint({ 0.5f, 0.5f });
 
 	TextureManager::GetInstance()->LoadTexture("resources/white1x1.png");
 	spGaugeBackgroundSprite_ = std::make_unique<Sprite>();
@@ -256,13 +266,13 @@ void GamePlayScene::Initialize() {
 	ceilingBoundaryAlertObject_->Initialize(Object3dCommon::GetInstance());
 	ceilingBoundaryAlertObject_->SetModel("BoundaryAlertPlane");
 
-	// SkyboxCommon に DirectX の惁Eを渡して初期化する！E
+	// SkyboxCommon 鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ DirectX 鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｲ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ髣鯉ｽｨ繝ｻ・ｽ繝ｻ・ｸ郢晢ｽｻ繝ｻ・｡鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ髫ｰ雋ｻ・ｽ・ｶ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ髯ｷ闌ｨ・ｽ・ｷ郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ
 	// SkyboxCommon is now initialized in Framework.cpp
 
-	// スカイボックスの生Eと初期匁E
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・｣鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｨ・ｾ陟・屮・ｽ・ｪ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 
 
-	//Model��・パ�EチE��クル
+	//Model驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢隴弱・・ｱ螢ｹ繝ｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
@@ -272,41 +282,41 @@ void GamePlayScene::Initialize() {
 	}
 
 	//======================================================
-	// プリミティブE生EEE
+	// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿悶渚繝ｻ・ｹ隴弱・・ｽ・ｺ陋滂ｽ･・主ｬﾎ斐・・ｧ郢晢ｽｻ繝ｻ・｣鬩幢ｽ｢隴寂・繝ｻ鬯ｨ・ｾ陟・屮・ｽ・ｪ繝ｻ・ｸEE
 	//======================================================
 
-	// 地面のモデル
-	groundModel = std::make_unique<Object3d>();
-	groundModel->Initialize(Object3dCommon::GetInstance());
-	groundModel->SetModel("plane.obj");
-	groundModel->SetScale({ 3000.0f, 1.0f, 3000.0f });
-	groundModel->SetTranslate({ 0.0f, 0.0f, 0.0f });
-	objects.push_back(groundModel.get());
+	// 鬮ｯ諛ｶ・ｽ・ｨ郢晢ｽｻ繝ｻ・ｰ鬯ｯ・ｮ繝ｻ・ｱ郢晢ｽｻ繝ｻ・｢鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｢鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ繝ｻ蠑ｱ繝ｻ
+	// groundModel = std::make_unique<Object3d>();
+	// groundModel->Initialize(Object3dCommon::GetInstance());
+	// groundModel->SetModel("plane.obj");
+	// groundModel->SetScale({ 3000.0f, 1.0f, 3000.0f });
+	// groundModel->SetTranslate({ 0.0f, 0.0f, 0.0f });
+	// objects.push_back(groundModel.get());
 
-	// 琁EE
+	// 鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻE
 	myShere = std::make_unique<Primitive>();
 	myShere->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Sphere);
 	myShere->SetTranslate({ 2.0f,0.0f,0.0f });
 	// objects.push_back(myShere.get());
-	// ボ�Eンとしても使われるため、目立つように赤くしておく
+	// 鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ驛｢・ｧ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｿ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｳ陞ゅ・・ｽ・ｽ隶呵ｶ｣・ｽ・ｹ繝ｻ・ｧ髣包ｽｵ隴擾ｽｶ髯橸ｽｺ鬩幢ｽ｢繝ｻ・ｧ驕ｶ荳橸｣ｰ莉ｰﾂ驕ｶ謫ｾ・ｽ・ｫ髯晢ｽｯ繝ｻ・ｼ鬯ｩ蛹・ｽｽ・ｶ髣包ｽｵ隴擾ｽｶ陷ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ髯具ｽｹ繝ｻ・ｻ驕ｶ蛹・ｽｽ・ｧ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｫ菫ｶ隱薙・・ｽ繝ｻ・､鬩搾ｽｵ繝ｻ・ｺ髣包ｽｳ陞ゅ・・ｽ・ｼ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ鬩怜遜・ｽ・ｫ郢晢ｽｻ繝ｻ・･
 	if (myShere->GetModel()) {
 		myShere->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f });
 	}
 
-	// ボックス
+	// 鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・｣鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ
 	myBox = std::make_unique<Primitive>();
 	myBox->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Box);
 	myBox->SetTranslate({ -2.0f,0.0f,0.0f });
-	// objects.push_back(myBox.get()); // Boxの代わりにModel��を使ぁE
+	// objects.push_back(myBox.get()); // Box鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮｣豈費ｽｼ螟ｲ・ｽ・ｽ繝ｻ・｣鬩幢ｽ｢繝ｻ・ｧ髣包ｽｳ陞ゅ・・ｽ・ｽ鬯倩ｲｻ・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫModel驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ髯ｷ莉｣繝ｻ繝ｻ・ｽ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
 
-	// 動的Model��
+	// 鬮ｯ・ｷ髢ｧ・ｴ郢晢ｽｻ髯懆ｶ｣・ｽ・ｪModel驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ
 	myModelObject = std::make_unique<Object3d>();
 	myModelObject->Initialize(Object3dCommon::GetInstance());
 	ModelManager::GetInstance()->LoadModel("AnimatedCube/AnimatedCube.gltf");
 	myModelObject->SetModel("AnimatedCube/AnimatedCube.gltf");
 	//objects.push_back(myModelObject.get());
 
-	// アニメーションとノ�Eド階層の読み込み
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｶ繝ｻ・｣郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴寂・・ｴ貅ｯ謫ｽ繝ｻ・ｴ鬮ｯ讖ｸ・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｮ・ｫ繝ｻ・ｱ郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬯ｮ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ
 	animationData = LoadAnimationFile("resources/AnimatedCube", "AnimatedCube.gltf");
 	Node rootNode = Model::LoadNodeHierarchy("resources/AnimatedCube", "AnimatedCube.gltf");
 	skeleton = CreateSkeleton(rootNode);
@@ -316,34 +326,35 @@ void GamePlayScene::Initialize() {
 
 	myModelObject->skinCluster = myModelObject->GetModel()->CreateSkinCluster(skeleton);
 
-	// ボ�Eンライン用オブジェクト�E初期匁E
+	// 鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴弱・ﾂｧ驍ｵ・ｺ陞溘ｑ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴寂握縺狗ｹ晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	ModelManager::GetInstance()->CreateLineModel("SkeletonLines");
 	skeletonLinesObject = std::make_unique<Object3d>();
 	skeletonLinesObject->Initialize(Object3dCommon::GetInstance());
 	skeletonLinesObject->SetModel("SkeletonLines");
 
-	// チE��チE��用コライダー表示ラインオブジェクト�E初期匁E
+	// 鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隰ｨ魑ｴﾂ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬯ｮ・ｯ繝ｻ・ｦ郢晢ｽｻ繝ｻ・ｨ鬯ｩ遨ゑｽｼ螟ｲ・ｽ・ｽ繝ｻ・ｺ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴弱・ﾂｧ驍ｵ・ｺ陞溘ｑ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴寂握縺狗ｹ晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	ModelManager::GetInstance()->CreateLineModel("DebugColliderLines");
 	debugColliderLinesObject = std::make_unique<Object3d>();
 	debugColliderLinesObject->Initialize(Object3dCommon::GetInstance());
 	debugColliderLinesObject->SetModel("DebugColliderLines");
 
-	// チE��チE��用フリーカメラの初期匁E
+	// 鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ鬩･繝ｻ繽阪・・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	debugFlyCamera_ = std::make_unique<FlyCamera>();
-	debugFlyCamera_->SetTranslate({ 0.0f, 5.0f, -20.0f }); // 初期位置
+	debugFlyCamera_->SetTranslate({ 0.0f, 5.0f, -20.0f }); // 鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ陂ｭ繝ｻ・ｴ髯ｷ・･繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｮ
 	isDebugCameraActive_ = false;
 
 
-	// リング
+	// 鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ
 
-	// 部刁E��ング (三日朁E
+	// 鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・ｨ鬮ｯ蜈ｷ・ｽ・ｻ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ (鬮｣蛹・ｽｽ・ｳ鬨ｾ蛹・ｽｽ・ｻ髯滓・莠九・・ｭ陝ｶ蜷ｶ繝ｻ
 
-	// 冁E��エフェクチE
+	// 鬮ｯ・ｷ・つ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ
 
-	//パ�EチE��クル
+	//鬩幢ｽ｢隴寂・・ｲ・ｬ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ
 	environmentRenderer_->GetParticleManager()->CreateParticleGroup("test", "resources/circle.png");
+	environmentRenderer_->GetParticleManager()->CreateParticleGroup("smoke", "resources/circle.png");
 
-	//音声再生
+	//鬯ｯ・ｮ繝ｻ・ｻ郢晢ｽｻ繝ｻ・ｳ鬮ｯ讖ｸ・ｽ・｢郢晢ｽｻ繝ｻ・ｰ鬮ｯ・ｷ・つ髯ｷ・･繝ｻ・ｲ髯ｷ繝ｻ・ｽ・ｽ
 	soundData1 = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
 	soundData2 = AudioManager::GetInstance()->LoadAudio("resources/maou_bgm_fantasy15.mp3");
 	songSoundData = AudioManager::GetInstance()->LoadAudio("resources/song_bgm.mp3");
@@ -353,14 +364,14 @@ void GamePlayScene::Initialize() {
 	pSongVoice=AudioManager::GetInstance()->PlayWave(songSoundData, true);
 	if (pSongVoice) pSongVoice->SetVolume(0.0f);
 
-	// 1. マネージャー経由でトレイル専用Model��を作る
+	// 1. 鬩幢ｽ｢隴弱・・ｽ・ｧ繝ｻ・ｭ驛｢譎｢・ｽ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｸ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬯ｩ謳ｾ・ｽ・ｨ髫ｶ蜷晢ｽｮ闌ｨ・ｽ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴主・讓溘・蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬮ｯ譏ｴ繝ｻ繝ｻ陋ｾﾂ・｡鬮｢繝薪el驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ髯ｷ莉｣繝ｻ繝ｻ・ｽ繝ｻ・ｽ髫ｲ蟶幢ｽ･繝ｻ・ｽ・ｽ郢晢ｽｻ
 	ModelManager::GetInstance()->CreateTrailModel("SmokeTrail");
 
-	// 2. トレイル計算機�E初期化（今回は60フレーム=紁E秒�Eの長さを残す�E�E
+	// 2. 鬩幢ｽ｢隴主・讓溘・蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬯ｮ・ｫ繝ｻ・ｪ鬮｢・ｧ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｮ鬩阪・・ｽ・ｲ郢晢ｽｻ繝ｻ・ｩ髮狗ｿｫ・代・・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ髯ｷ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｼ髣費｣ｰ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬯ｮ・ｮ遶乗劼・ｽ・ｱ鬪ｰ蜈ｷ・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ60鬩幢ｽ｢隴弱・・ｽ・ｼ鬩･繝ｻ・ｨ謚ｵ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ=鬯ｩ蝣ｺ・ｸ鄙ｫ繝ｻ鬯ｩ遨ゑｽｿ・ｶ隲ｷ・｣郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｮ雋翫ｑ・ｽ・ｽ繝ｻ・ｷ鬩搾ｽｵ繝ｻ・ｺ鬮ｴ驛・ｽｲ・ｻ繝ｻ・ｽ陞ｳ螟ｲ・ｽ・ｰ繝ｻ・ｿ髣包ｽｵ隴擾ｽｶ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 	missileTrail = std::make_unique<Trail>();
 	missileTrail->Initialize(60);
 
-	// 3. 描画用オブジェクト�E初期匁E
+	// 3. 鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴弱・ﾂｧ驍ｵ・ｺ陞溘ｑ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴寂握縺狗ｹ晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	trailObject = std::make_unique<Object3d>();
 	trailObject->Initialize(Object3dCommon::GetInstance());
 	trailObject->SetModel("SmokeTrail");
@@ -379,19 +390,15 @@ void GamePlayScene::Initialize() {
 	player_ = std::make_unique<Player>();
 	player_->Initialize(kPlayerModelName);
 
-	// 弾
+	// 鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ
 	missileManager_ = std::make_unique<MissileManager>();
-	missileManager_->Initialize();
+	missileManager_->Initialize(environmentRenderer_->GetParticleManager());
 
-	// 爁E��エフェクチE
+	// 鬮ｴ雜｣・ｽ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ
 	explosionManager_ = std::make_unique<ExplosionManager>();
 	explosionManager_->Initialize(environmentRenderer_->GetParticleManager());
 
-	//敵
 	enemies_.clear();
-	auto firstEnemy = std::make_unique<Enemy>();
-	firstEnemy->Initialize({ 0.0f, 0.0f, 50.0f });
-	enemies_.push_back(std::move(firstEnemy));
 
 	enemyBulletManager_ = std::make_unique<EnemyBulletManager>();
 	enemyBulletManager_->Initialize();
@@ -400,7 +407,7 @@ void GamePlayScene::Initialize() {
 	missilePresetManager_ = std::make_unique<MissilePresetManager>(this);
 	lockOnManager_ = std::make_unique<LockOnManager>(this);
 
-	// ゲームオーバ�E演�Eの初期匁E
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｲ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｮ蜿･・ｴ雜｣・ｽ・ｲ繝ｻ・ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
 
@@ -415,7 +422,7 @@ void GamePlayScene::Initialize() {
 		SetDebugCameraActive(true);
 	}
 
-	// エチE��ターレシーバ�Eの初期匁E
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｿ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｬ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蠑ｱ繝ｻ繝ｻ繝ｻ蛻ｹ繝ｻ・ｹ驛｢譎｢・ｽ・ｻ
 	EditorReceiver::GetInstance()->Initialize();
 }
 
@@ -451,11 +458,14 @@ void GamePlayScene::ReloadSceneJson() {
 	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawns_);
 	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoEnemyRespawnTimer);
 
-	// イベントデータを�E読み込み
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴主・蜃ｽ繝ｻ雜｣・ｽ・ｦ鬩幢ｽ｢隴主・讓滄Δ譎｢・ｽ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｿ鬩幢ｽ｢繝ｻ・ｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｮ・ｫ繝ｻ・ｱ郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬯ｮ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ
 	enemyEventManager_.LoadEvents("resources/enemy_events.json");
-	for (auto& spawnData : enemySpawns_) {
-		if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
-			spawnData.isInitialSpawn = false;
+	// Blender/StageLoaderで設定された初期スポーン設定(isInitialSpawn)をそのまま尊重する
+
+	// 障害物のメッシュコライダー等を事前に構築・更新（敵の着地スナップ前に必須）
+	for (auto& obstacle : obstacles_) {
+		if (obstacle) {
+			obstacle->Update();
 		}
 	}
 
@@ -465,10 +475,13 @@ void GamePlayScene::ReloadSceneJson() {
 		}
 	}
 
+	// 地上雑魚敵 5 体の直出し配置 (Blender未配置のハードコード敵は出さない)
+	// SpawnDefaultGroundEnemies();
+
 	try {
 		lastJsonWriteTime_ = std::filesystem::last_write_time("resources/scene.json");
 	} catch (...) {
-		// JSONがまだ存在しなぁE��合でも、エチE��タ操作を続けられるよぁE��する"
+		// JSON鬩搾ｽｵ繝ｻ・ｺ髯溷供・ｨ・ｯ驕ｨ螳｣縺励・・ｺ郢晢ｽｻ繝ｻ・ｰ鬮ｯ譏ｴ繝ｻ繝ｻ・ｼ隲帛､ｷ蟶昴＠繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ莨√・繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ驍ｵ・ｲ陜｣・､繝ｻ・ｹ繝ｻ・ｧ驛｢・ｧ郢晢ｽｻ・つ驕ｶ荳橸ｽ｣・ｹ隨卍鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｿ鬮ｫ・ｰ繝ｻ・ｫ髯懶ｽ｣繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｽ髫ｲ蟶幢ｽ･繝ｻ・ｽ・ｽ陝ｶ譏ｴ・髯橸ｽ｢繝ｻ・ｹ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ髯晢ｽｲ繝ｻ・ｨ郢晢ｽｻ隶呵ｶ｣・ｽ・ｹ繝ｻ・ｧ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髢ｧ・ｲ繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 	}
 }
 
@@ -491,7 +504,7 @@ void GamePlayScene::ResetEditorPreview() {
 		player_->Initialize(kPlayerModelName);
 	}
 	if (missileManager_) {
-		missileManager_->Initialize();
+		missileManager_->Initialize(environmentRenderer_->GetParticleManager());
 	}
 	if (enemyBulletManager_) {
 		enemyBulletManager_->Initialize();
@@ -521,18 +534,37 @@ void GamePlayScene::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 	}
 
 	const EnemySpawnData &spawnData = enemySpawns_[spawnPointIndex];
-	auto enemy = std::make_unique<Enemy>();
+	std::unique_ptr<Enemy> enemy;
+	if (spawnData.isBoss) {
+		enemy = std::make_unique<Boss>();
+	} else if (spawnData.isJammer) {
+		enemy = std::make_unique<JammerEnemy>();
+	} else if (spawnData.isGround) {
+		enemy = std::make_unique<GroundEnemy>();
+	} else {
+		enemy = std::make_unique<Enemy>();
+	}
+
 	enemy->Initialize(spawnData.position);
 	enemy->SetRotation(spawnData.rotation);
 	if (spawnData.flightPath.IsValid()) {
 		enemy->SetFlightPath(spawnData.flightPath.points, spawnData.flightPath.loop, spawnData.flightPath.speed);
 	}
 	enemy->SetSpawnPointIndex(spawnPointIndex);
+
+	if (GroundEnemy *ge = dynamic_cast<GroundEnemy *>(enemy.get())) {
+		ge->SnapToGround(obstacles_);
+	}
+
 	enemies_.push_back(std::move(enemy));
 
 	if (spawnPointIndex < enemyRespawnTimers_.size()) {
 		enemyRespawnTimers_[spawnPointIndex] = kNoEnemyRespawnTimer;
 	}
+}
+
+void GamePlayScene::SpawnDefaultGroundEnemies() {
+	// Blender未配置のハードコード敵は生成しない
 }
 
 bool GamePlayScene::IsEnemySpawnPointActive(size_t spawnPointIndex) const {
@@ -715,7 +747,7 @@ void GamePlayScene::Finalize() {
 	AudioManager::GetInstance()->UnloadWave(soundData2);
 	AudioManager::GetInstance()->UnloadWave(songSoundData);
 
-	// シーン刁E��替え時にポストエフェクトを通常に戻ぁE
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬮ｯ蜈ｷ・ｽ・ｻ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ髯懈瑳・ｺ・ｷ郢晢ｽｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴弱・・ｺ・｢驍ｵ・ｺ陝ｶ・ｷ繝ｻ・ｹ隴主・讓滄し・ｺ鬯倩ｲｻ・ｽ・ｹ隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴主・讓溽ｹ晢ｽｻ陝ｶ譎｢・ｽ・ｨ繝ｻ・ｾ髯橸ｽ｢繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｸ郢晢ｽｻ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｫ・ｰ鬲・ｼ夲ｽｽ・ｽ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
 	if (PostEffect::GetInstance()) {
 		PostEffect::GetInstance()->SetEffectType(0);
 	}
@@ -725,34 +757,29 @@ void GamePlayScene::Finalize() {
 
 void GamePlayScene::Update() {
 
-	// BlenderからチE�Eタが来てぁE��ら敵をリアルタイム更新�E�E
+	// Blender鬩搾ｽｵ繝ｻ・ｺ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髢ｾ・･繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ髫ｴ・ｴ繝ｻ・ｧ髫ｰ・ｫ郢ｧ莨夲ｽｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ鬨ｾ蛹・ｽｽ・ｻ鬯ｮ・ｮ繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ髯句ｹ｢・ｽ・ｵ繝ｻ蜿悶渚繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｿ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawns_)) {
-		for (auto &spawnData : enemySpawns_) {
-			if (spawnData.HasReinforcementTrigger() || enemyEventManager_.IsTargetEnemy(spawnData.name)) {
-				spawnData.isInitialSpawn = false;
-			}
-		}
-// 		SpawnEnemiesFromSpawnPoints();
+		// Blenderで設定された初期スポーン設定(isInitialSpawn)をそのまま尊重する
 	}
 
 
 	// =========================================================
-	// ホットリロード�E監視�E琁E��E
+	// 鬩幢ｽ｢隴取得・ｽ・ｸ陷ｷ・ｶ・取坩ﾎ碑ｭ主・讓溘・蜿悶渚繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴乗・・ｽ・ｼ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ繝ｻ・ｶ郢晢ｽｻ繝ｻ・｣鬯ｮ・ｫ陷肴ｺｽ・ｧ竏壹・繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 	// =========================================================
 	try {
-		// 今�E "scene.json" の更新日時をチェチE��する
+		// 鬮｣逧ｮ逕･繝ｻ・･郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE "scene.json" 鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬮ｫ・ｴ鬲・ｼ夲ｽｽ・ｽ繝ｻ・･鬮ｫ・ｴ陟托ｽｱ繝ｻ繝ｻ繝ｻ陜｣・､繝ｻ・ｹ隴擾ｽｶ郢晢ｽｻ驍ｵ・ｺ髢ｾ・･繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 		auto currentTime = std::filesystem::last_write_time("resources/scene.json");
 
-		// もし記�EしてぁE��日時よりも新しけれ�E�E�＝Blenderで上書き保存されたら！E��E
+		// 鬩幢ｽ｢繝ｻ・ｧ驛｢・ｧ郢晢ｽｻ繝ｻ・ｼ繝ｻ・ｰ鬯ｮ・ｫ繝ｻ・ｪ髯句ｸ吶・繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｴ鬲・ｼ夲ｽｽ・ｽ繝ｻ・･鬮ｫ・ｴ陟托ｽｱ繝ｻ繝ｻ繝ｻ髢ｧ・ｲ繝ｻ・ｹ繝ｻ・ｧ鬩怜遜・ｽ・ｫ郢晢ｽｻ郢ｧ螂・ｽｽ・ｭ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ鬯ｲ繝ｻ・ｼ螟ｲ・ｽ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ髫ｰ魃会ｽｽ・ｪlender鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮｣蛹・ｽｽ・ｳ鬯ｯ繝ｻ・､・ｧ繝ｻ・ｶ隶呵ｶ｣・ｽ・ｸ繝ｻ・ｺ髯懶ｽ｣繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ髫ｴ蜿門ｾ励・・ｽ繝ｻ・ｭ髯区ｻゑｽｽ・･郢晢ｽｻ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ髯溷供・ｨ・ｯ髯橸ｽｺ鬩幢ｽ｢繝ｻ・ｧ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 		if (currentTime > lastJsonWriteTime_) {
 			ReloadSceneJson();
 
-			// チE��チE��ウィンドウにお知らせを�EぁE
-			OutputDebugStringA("Hot Reloaded: scene.json を�E読み込みしました�E�\n");
+			// 鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴取得・ｽ・ｳ繝ｻ・ｨ驍ｵ・ｺ髢ｧ・ｲ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ鬯ｯ蛟｡・｢謇假ｽｽ・｡陷･・ｲ繝ｻ・ｹ繝ｻ・ｧ髯晢ｽｲ繝ｻ・ｨ髫ｨ・ｳ霑｢證ｦ・ｽ・ｹ繝ｻ・ｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
+			OutputDebugStringA("Hot Reloaded: scene.json 鬩幢ｽ｢繝ｻ・ｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｮ・ｫ繝ｻ・ｱ郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬯ｮ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ謫ｾ・ｽ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ\n");
 		}
 	} catch (...) {
-		// 💡趁E��要E��Blenderがファイルに書き込んでぁE��最中�E�数ミリ秒）�E
-		// C++からアクセスできずエラーになることがあるため、try-catchで握りつぶぁE
+		// 繝ｻ貊難ｽｧ・ｫ繝ｻ・ｺ郢晢ｽｻ陞ｻ繝ｻ・ｹ譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｮ・ｫ髴域鱒繝ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽBlender鬩搾ｽｵ繝ｻ・ｺ髯溷供・ｾ貉厄ｽｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｡鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ髯晢｣ｰ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ鬮ｦ・ｮ陷ｷ・ｶ・つ陜｣・､繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｴ陝・｢・つ鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢隴弱・・ｽ・ｺ闖ｴ・ｩ隲橸ｽｺ・ゑｽｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｼ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE
+		// C++鬩搾ｽｵ繝ｻ・ｺ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髢ｾ・･繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ鬯ｮ・ｦ繝ｻ・ｪ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴趣ｽ｢繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯溷供・ｨ・ｯ隴鯉ｽｺ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴擾ｽｶ髯橸ｽｺ鬩幢ｽ｢繝ｻ・ｧ驕ｶ荳橸｣ｰ莉ｰﾂ驍ｵ・ｲ髢ｼ蝎・catch鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｫ・ｰ繝ｻ・ｰ郢晢ｽｻ繝ｻ・｡鬩幢ｽ｢繝ｻ・ｧ鬩怜遜・ｽ・ｫ髫ｨ繝ｻ・ｽ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｶ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
 	}
 
 	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
@@ -775,14 +802,14 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
-	// Rキーでシーンを最初からやり直ぁE
+	// R鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ陜捺ｷ楪陷ｻ・ｵ陝謌奇ｽｭ謫ｾ・ｽ・ｴ繝ｻ繧托ｽｽ・ｰ鬩幢ｽ｢繝ｻ・ｧ髯晢ｽｲ繝ｻ・ｨ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ鬯ｯ菫ｶ・ｳ魃会ｽｽ・ｳ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
 	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_R)) {
 		SceneManager::GetInstance()->ChangeScene(IsSimulationMode() ? "SIMULATION" : "GAMEPLAY");
 		return;
 	}
 
 	// ==========================================
-	// ゲームオーバE判定と演E進衁E
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｲ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴寂・繝ｻ鬮ｯ蜈ｷ・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｹ驕ｶ髮・ｽｮ螟ｲ・ｽ・ｲ隶主･・ｽｽ・ｿ陜難ｽｼ繝ｻ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｲ鬯ｮ・ｯ繝ｻ・ｦ驛｢譎｢・ｽ・ｻ
 	// ==========================================
 	if (!IsSimulationMode() && !isGameOver_ && player_ && player_->IsDead()) {
 		isGameOver_ = true;
@@ -803,7 +830,7 @@ void GamePlayScene::Update() {
 	if (isGameOver_) {
 		gameOverTimer_++;
 
-		// 絶望E白黒化EグレースケールEエフェクトを適用EE
+		// 鬯ｩ謳ｾ・ｽ・ｨ郢晢ｽｻ繝ｻ・ｶ鬮ｫ・ｴ陝ｶ蟷｢・ｽ・ｦ繝ｻ・｣鬯ｨ・ｾ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｽ鬯ｲ繝ｻ・ｺ・ｯ繝ｻ・ｲ隶抵ｽｫ陝・・鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｬ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｱ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫE鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴主・讓溽ｹ晢ｽｻ陝ｶ譎｢・ｽ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｩ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨEE
 		if (PostEffect::GetInstance()) {
 			float effectProgress = static_cast<float>(gameOverTimer_) / 120.0f;
 			if (effectProgress > 1.0f) {
@@ -814,15 +841,15 @@ void GamePlayScene::Update() {
 			PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.38f, blurIntensity);
 		}
 
-		// 5フレームに1回だけ更新することで、スローモーションE世界停止Eを実現EE
+		// 5鬩幢ｽ｢隴弱・・ｽ・ｼ鬩･繝ｻ・ｨ謚ｵ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ1鬮ｯ諛・ｻｸ繝ｻ・ｧ繝ｻ・ｭ髫ｨ繝ｻ・ｽ・｡鬩搾ｽｵ繝ｻ・ｺ鬮ｫ・ｨ繝ｻ・ｬ髯晢ｽｲ繝ｻ・ｩ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ霑｢證ｦ・ｽ・ｸ繝ｻ・ｺ鬮ｦ・ｮ陷ｷ・ｮ郢晢ｽｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｲ驕ｶ荳橸ｽ｣・ｹ隨ｳ遏ｩﾎ碑ｭ趣ｽ｢繝ｻ・ｽ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｢鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳE鬮｣蛹・ｽｽ・ｳ髣包ｽｵ雋翫・繝ｻ鬮ｯ蜿･・ｸ・ｶ郢ｩ・ｧ郢晢ｽｻ繝ｻ・ｭ郢晢ｽｻ繝ｻ・｢E鬩幢ｽ｢繝ｻ・ｧ鬮ｮ蛹ｺ・ｩ・ｸ繝ｻ・ｽ繝ｻ・ｮ髮九・・ｽ・ｽ髫ｶ謐ｺ・ｪ・ｸE
 		shouldUpdateGame = (gameOverTimer_ % 5 == 0);
 
-		// 紁E秒！E20フレームE経過したら、正式にゲームオーバEシーンへ遷移するEE
+		// 鬯ｩ蝣ｺ・ｸ鄙ｫ繝ｻ鬯ｩ遨ゑｽｿ・ｶ隲ｷ・｣郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ20鬩幢ｽ｢隴弱・・ｽ・ｼ鬩･繝ｻ・ｨ謚ｵ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰE鬯ｩ謳ｾ・ｽ・ｨ鬩募●豐厄ｾ代・縺励・・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ髯晢ｽｲ繝ｻ・ｨ繝ｻ縺､ﾂ驕ｶ謫ｾ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｭ郢晢ｽｻ繝ｻ・｣鬮ｯ貅ｷ蠎翫・・ｸ陝ｯ・ｩ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｲ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴寂・繝ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｸ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｷ鬯ｩ蜍溪・繝ｻ・ｽ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ騾｡・ｿE
 		if (gameOverTimer_ >= 120) {
 			SceneManager::GetInstance()->ChangeScene("GAMEOVER");
 		}
 	} else {
-		// 通常時：ノーマルエフェクト、またはブースト時のスピード演出
+		// 鬯ｯ・ｨ繝ｻ・ｾ髯橸ｽ｢繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｸ郢晢ｽｻ繝ｻ・ｸ鬮ｫ・ｴ陟托ｽｱ繝ｻ莉｣繝ｻ繝ｻ・ｼ髯橸ｽ｢繝ｻ・ｹ驛｢譎｢・ｽ・ｮ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴弱・・ｽ・ｧ繝ｻ・ｭ繝ｻ蜿門旭繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴主・讓溘・縺､ﾂ驕ｶ荳橸ｽ｣・ｺ驕ｨ螳｣縺励・・ｺ髮九・ﾂ・･郢晢ｽｻ鬩幢ｽ｢隴弱・ﾂｧ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴惹ｹ暦ｽｲ・ｺ髯ｷ繝ｻ・ｽ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴弱・・ｱ蝣､・ｹ譎｢・ｽ・ｻ鬩幢ｽ｢隴守甥諢帷ｹ晢ｽｻ繝ｻ・ｼ髮主供・ｾ蠕後・
 		if (PostEffect::GetInstance()) {
 			bool isBoosting = false;
 			if (player_ && player_->GetCurrentMode() == PlayerMode::Fighter) {
@@ -831,8 +858,8 @@ void GamePlayScene::Update() {
 				if (speed > maxSpeed * 1.5f) {
 					isBoosting = true;
 					float effectProgress = std::clamp((speed - maxSpeed * 1.5f) / (maxSpeed * 3.0f - maxSpeed * 1.5f), 0.0f, 1.0f);
-					float vignetteRadius = 0.5f - 0.1f * effectProgress; // 視界の狭まりを控えめに
-					float blurIntensity = effectProgress * 0.5f; // ブラーをかなり弱くして前が見えるようにする
+					float vignetteRadius = 0.5f - 0.1f * effectProgress; // 鬯ｮ・ｫ驕ｨ繧托ｽｽ・ｹ雋翫・繝ｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｴ謇假ｽｽ・｢郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ鬩怜遜・ｽ・ｫ郢晢ｽｻ陞ｳ螟ｲ・ｽ・ｬ隴会ｽｦ繝ｻ・ｽ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ髯具ｽｹ繝ｻ・ｻ郢晢ｽｻ遶擾ｽｫ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ
+					float blurIntensity = effectProgress * 0.5f; // 鬩幢ｽ｢隴弱・ﾂｧ繝ｻ荳ｻ・ｸ・ｷ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ髯句ｹ｢・ｽ・ｵ繝ｻ繧托ｽｽ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ鬯ｮ・ｮ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｱ鬩搾ｽｵ繝ｻ・ｺ髣包ｽｳ陞ゅ・・ｽ・ｼ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬮ｯ・ｷ魄・ｽｹ闔繧会ｽｪ・ｶ繝ｻ・ｲ鬯ｮ・ｫ驕ｨ繧托ｽｽ・ｹ隴擾ｽｶ隴・ｽ｡鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髢ｧ・ｲ繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驕ｶ莨∬ｱｪ繝ｻ・ｸ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 					PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.4f, blurIntensity);
 				}
 			}
@@ -875,7 +902,7 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(true);
 		if (player_ && debugFlyCamera_) {
 			Vector3 pPos = player_->GetPosition();
-			// プレイヤーの少し後ろ、やや上から見下ろすように配置 (中心に捉える)
+			// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ譏ｴ繝ｻ繝ｻ・ｻ繝ｻ・｣郢晢ｽｻ繝ｻ・ｰ鬮ｯ貅ｷ萓帙・・ｾ鬲・ｼ夲ｽｽ・ｽ陷･・ｲ繝ｻ・ｸ繝ｻ・ｲ驕ｶ荳橸ｽ､・ｲ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｸ鬩怜遜・ｽ・ｫ繝ｻ繧托ｽｽ・ｰ鬩幢ｽ｢繝ｻ・ｧ鬮｣繝ｻ・ｽ・ｽ郢晢ｽｻ繝ｻ・ｦ髯区ｻゑｽｽ・ｶ郢晢ｽｻ繝ｻ・ｸ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ陷･・ｲ繝ｻ・ｸ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ髢ｧ・ｲ繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驕ｶ莨・ｽｦ・ｴ繝ｻ・ｩ雋・ｽｷ髫ｱ・ｿ郢晢ｽｻ繝ｻ・ｽ郢晢ｽｻ繝ｻ・ｮ (鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｭ鬮ｯ貊ゑｽｽ・｢驛｢譎｢・ｽ・ｻ驕ｶ鬆托ｽ･・｢繝ｻ・ｬ闔牙遜・ｽ・ｳ繝ｻ・ｨ驕ｶ謫ｾ・ｽ・ｴ鬩幢ｽ｢繝ｻ・ｧ驛｢譎｢・ｽ・ｻ
 			debugFlyCamera_->SetTranslate({ pPos.x, pPos.y + 2.0f, pPos.z - 12.0f });
 			debugFlyCamera_->SetQuaternion({ 0.0f, 0.0f, 0.0f, 1.0f });
 		}
@@ -888,7 +915,7 @@ void GamePlayScene::Update() {
 		UpdateReload();
 	}
 
-	// CキーでSPを50%消費し、3秒間の連射必殺技を発動する。
+	// C鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧSP鬩幢ｽ｢繝ｻ・ｧ驛｢譎｢・ｽ・ｻ0%鬮ｮ雜｣・ｽ・ｸ鬯ｩ蟶吶・繝ｻ・ｽ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ繝ｻ縺､ﾂ驛｢譎｢・ｽ・ｻ鬯ｩ遨ゑｽｼ諛ｶ・ｽ・ｸ隴乗・・ｽ・ｿ繝ｻ・｣鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・｣鬮ｯ譏ｴ繝ｻ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｺ鬮ｫ・ｰ陜｣莉ｰﾂ鬩幢ｽ｢繝ｻ・ｧ髯懶ｽ｣繝ｻ・､髯具ｽｹ繝ｻ・ｱ鬮ｯ・ｷ陝雜｣・ｽ・ｼ隰夲ｽｫ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
 	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
 		!isSpecialAttackActive_ && spGauge_ >= kSpecialAttackCost &&
 		Input::GetInstance()->TriggerKey(DIK_C)) {
@@ -900,7 +927,7 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// Vキーで歌システム（ルンピカゲージ100%消費）を発動する。
+	// V鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｮ蟇ゅ・繝ｻ・ｾ陟募ｨｯ繝ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ繝ｻ荳ｻ繝ｻ郢晢ｽｻ髯具ｽｹ繝ｻ・ｻ繝ｻ蜿門旭繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴弱・・ｱ蝣､・ｸ・ｺ陷･・ｲ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｲ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｸ100%鬮ｮ雜｣・ｽ・ｸ鬯ｩ蟶吶・繝ｻ・ｽ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ髯晢ｽｲ繝ｻ・ｨ郢晢ｽｻ陝ｶ謨鳴陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｺ鬮ｯ・ｷ陝雜｣・ｽ・ｼ隰夲ｽｫ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
 	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
 		!isSongActive_ && songGauge_ >= 100.0f &&
 		Input::GetInstance()->TriggerKey(DIK_V)) {
@@ -929,9 +956,9 @@ void GamePlayScene::Update() {
 
 	if (isSpecialAttackActive_) {
 		if (specialAttackFrame_ % kSpecialAttackFireIntervalFrames == 0 && missilePresetManager_) {
-			// 通常弾と誘導弾を操作中の照準方向へ同時発射する。
+			// 鬯ｯ・ｨ繝ｻ・ｾ髯橸ｽ｢繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｸ郢晢ｽｻ繝ｻ・ｸ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬯ｮ・ｫ繝ｻ・ｱ髣費ｽｨ隲幢ｽｶ繝ｻ・ｽ繝ｻ・ｰ髣包ｽｳ繝ｻ・ｻ郢晢ｽｻ繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ陜捺ｻゑｽｽ・｡郢晢ｽｻ隰壹・・ｫ蟶托ｽｼ螟ｲ・ｽ・ｽ繝ｻ・ｸ郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｴ雜｣・ｽ・｣郢晢ｽｻ繝ｻ・ｧ鬮ｮ荵昴・隰梧ｺｯ鮗ｾ繝ｻ・ｿ鬮ｯ・ｷ繝ｻ・ｷ髣比ｼ夲ｽｽ・｣驕ｶ蝓弱Γ隲・ｺ髫ｴ・ｴ繝ｻ・ｧ髯ｷ繝ｻ・ｽ・ｾ鬯ｨ・ｾ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｺ鬮ｯ譏ｴ繝ｻ郢晢ｽｻ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
 			missilePresetManager_->FirePlayerMissile(MissileType::Normal, nullptr, -0.3f);
-			// 初速は照準方向にして前方へ射出し、直進区間の後に更新側で敵を捕捉する。
+			// 鬮ｯ蜈ｷ・ｽ・ｻ髫ｴ蜿厄ｽ･・ｪ・つ髮九・ﾂ・･郢晢ｽｻ鬮ｴ雜｣・ｽ・｣郢晢ｽｻ繝ｻ・ｧ鬮ｮ荵昴・隰梧ｺｯ鮗ｾ繝ｻ・ｿ鬮ｯ・ｷ繝ｻ・ｷ髣比ｼ夲ｽｽ・｣驕ｶ莨∬ｱｪ繝ｻ・ｸ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬮ｯ・ｷ鬯伜ｾ鯉ｼ企劑ﾂ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｸ鬮ｯ譏ｴ繝ｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ繝ｻ縺､ﾂ驕ｶ謫ｾ・ｽ・ｫ髯晢ｽｲ繝ｻ・ｩ鬯ｯ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｲ鬮ｯ蜈ｷ・ｽ・ｹ郢晢ｽｻ繝ｻ・ｺ鬯ｯ・ｮ繝ｻ・｢鬮ｦ・ｮ陷ｷ・ｶ郢晢ｽｻ鬮ｯ貅ｷ萓帙・・ｾ陞ｽ・ｯ郢晢ｽｻ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬮ｯ蜿･・ｹ・｢繝ｻ・ｽ繝ｻ・ｴ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ騾趣ｽｯ繝ｻ・ｻ陞ｳ螟ｲ・ｽ・ｬ闔牙遜・ｽ・ｳ繝ｻ・ｨ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
 			missilePresetManager_->FirePlayerMissile(MissileType::MissileWithTrail, nullptr, 0.3f);
 		}
 		++specialAttackFrame_;
@@ -952,29 +979,29 @@ void GamePlayScene::Update() {
 			animationTime = std::fmod(animationTime, animationData.duration);
 		}
 		
-		// アニメーションの更新と骨への適用
+		// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｯ繝ｻ・ｪ郢晢ｽｻ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｩ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ
 		ApplyAnimation(skeleton, animationData, animationTime);
 		::Update(skeleton);
 		if (enableSkinning && myModelObject->GetModel()) {
 			myModelObject->GetModel()->UpdateSkinCluster(myModelObject->skinCluster, skeleton);
 		}
 
-		// 今EめEに合わせた状態で使ぁEめ、Skeletonから計算結果を取りEしてBox/Modelに適用する
+		// 鬮｣遒代・鬮ｦ諞ｺﾎ斐・・ｧ驛｢譎｢・ｽ・ｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ郢晢ｽｻ陷證ｦ・ｽ・ｸ繝ｻ・ｺ髯晢ｽｶ陷ｷ・ｮ髯橸ｽｺ鬮ｴ謇假ｽｽ・･郢晢ｽｻ繝ｻ・ｶ鬮ｫ・ｲ繝ｻ・ｷ髣包ｽｵ隴擾ｽｴ・つ陞ｳ螢ｽ蜑ｲ郢晢ｽｻ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ驕ｶ荳橸｣ｰ莉ｰﾂ驛｢譎｢・ｽ・ｾkeleton鬩搾ｽｵ繝ｻ・ｺ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髯具ｽｾ陜ｮ譛ｱ蟇・・・ｲ郢晢ｽｻ繝ｻ・ｮ鬩穂ｼ夲ｽｽ・ｼ郢晢ｽｻ繝ｻ・ｵ髯ｷ莠･豐ｺ繝ｻ・｣繝ｻ・｡鬩幢ｽ｢繝ｻ・ｧ鬮ｮ蛹ｺ・ｧ・ｫ陟募ｮ｣ﾎ斐・・ｧ鬨ｾ・｡隶呵ｶ｣・ｽ・ｸ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻBox/Model鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｩ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 		if (!skeleton.joints.empty()) {
 			myBox->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 			myBox->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 			myBox->SetScale(skeleton.joints[skeleton.root].transform.scale);
 
-			// スキニングが実裁Eれたため、スキンなしModelの場合EみTransformを適用する
-			// スキニングが実裁Eれたため、スキンなしModelの場合EみTransformを適用する
+			// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻゑｽｽ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髫ｰ逍ｲ・ｻ繧托ｽｽ・ｽ繝ｻ・ｮ髮九・・ｽ・ｯ郢晢ｽｻ繝ｻ・｣驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ髯溷供・ｨ・ｯ髯橸ｽｺ鬩搾ｽｵ繝ｻ・ｺ髮九・竏槭・・ｽ遶擾ｽｫ繝ｻ・ｸ繝ｻ・ｲ驕ｶ荳橸ｽ｣・ｹ隨ｳ遏ｩﾎ斐・・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ髫ｴ貅ｷ髯ｸdel鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿTransform鬩幢ｽ｢繝ｻ・ｧ髯晢ｽｶ隴擾ｽｶ郢晢ｽｻ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
+			// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻゑｽｽ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髫ｰ逍ｲ・ｻ繧托ｽｽ・ｽ繝ｻ・ｮ髮九・・ｽ・ｯ郢晢ｽｻ繝ｻ・｣驛｢譎｢・ｽ・ｻ鬩幢ｽ｢繝ｻ・ｧ髯溷供・ｨ・ｯ髯橸ｽｺ鬩搾ｽｵ繝ｻ・ｺ髮九・竏槭・・ｽ遶擾ｽｫ繝ｻ・ｸ繝ｻ・ｲ驕ｶ荳橸ｽ｣・ｹ隨ｳ遏ｩﾎ斐・・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ髫ｴ貅ｷ髯ｸdel鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿTransform鬩幢ｽ｢繝ｻ・ｧ髯晢ｽｶ隴擾ｽｶ郢晢ｽｻ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 			if (myModelObject->GetModel()) {
 				if (!myModelObject->skinCluster.isValid) {
 					myModelObject->SetTranslate(skeleton.joints[skeleton.root].transform.translate);
 					myModelObject->SetQuaternionRotate(skeleton.joints[skeleton.root].transform.rotate);
 					myModelObject->SetScale(skeleton.joints[skeleton.root].transform.scale);
 				} else {
-					// スキニングModelはアニメーションが行Eに含まれるため、EースのトランスフォームはリセチEする
-					// (これを行わなぁE二重に移動して画面外に消えめE
+					// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻゑｽｽ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰModel鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ髴托ｽｹ陞滂ｽｲ繝ｻ・ｽ繝ｻ・｡鬩包ｽｯ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｯ・ｷ繝ｻ・ｷ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ髯滓坩・ｯ莨夲ｽｽ・ｽ霑｢證ｦ・ｽ・ｸ繝ｻ・ｺ髮九・竏槭・・ｽ遶擾ｽｫ繝ｻ・ｸ繝ｻ・ｲ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢隴主・讓溘・荳ｻ・ｸ・ｷ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴弱・・ｽ・ｼ隴・搨・ｰ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｻ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
+					// (鬩搾ｽｵ繝ｻ・ｺ鬮ｦ・ｮ陷ｻ・ｻ繝ｻ・ｽ隶呵ｶ｣・ｽ・ｹ繝ｻ・ｧ髯橸ｽｳ陞滂ｽｲ繝ｻ・ｽ繝ｻ・｡髯滓坩・ｯ莨夲ｽｽ・ｽ陷證ｦ・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ鬮｣雋ｻ・｣・ｰ鬩募●繝ｻ髯ｬ貊・＠繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬯ｩ蜍溪・繝ｻ・ｽ繝ｻ・ｻ鬮ｯ・ｷ陝雜｣・ｽ・ｼ髮具ｽｻ繝ｻ・ｼ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬯ｯ・ｮ繝ｻ・ｱ郢晢ｽｻ繝ｻ・｢鬮ｯ讓奇ｽｻ阮卍ｧ驕ｶ鬆托ｽ･・｢繝ｻ・ｱ繝ｻ・ｸ髯具ｽｹ繝ｻ・ｻ驕ｶ謫ｾ・ｽ・ｴ鬩幢ｽ｢繝ｻ・ｧ驛｢譎｢・ｽ・ｻ
 					myModelObject->SetTranslate({ 0.0f, 0.0f, 0.0f });
 					myModelObject->SetQuaternionRotate({ 0.0f, 0.0f, 0.0f, 1.0f });
 					myModelObject->SetScale({ modelScale, modelScale, modelScale });
@@ -982,7 +1009,7 @@ void GamePlayScene::Update() {
 			}
 		}
 
-		// 骨描画の更新
+		// 鬯ｯ・ｯ繝ｻ・ｪ郢晢ｽｻ繝ｻ・ｨ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 		bool isAnimationEditor = IsSimulationMode() && uiManager_ && uiManager_->currentSimulationTarget_ == 5;
 		if ((showBones || isAnimationEditor) && player_) {
 			std::vector<VertexData> lineVertices;
@@ -995,7 +1022,7 @@ void GamePlayScene::Update() {
 					playerSkeleton.joints[i].skeletonSpaceMatrix.m[3][2]
 				};
 
-				// ライン用の頂点を作EE親がいる場合！E
+				// 鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｯ郢晢ｽｻ繝ｻ閾･・ｸ・ｺ陝ｶ・ｷ繝ｻ・ｹ繝ｻ・ｧ髯ｷ莉｣繝ｻ繝ｻ・ｽ繝ｻ・ｽ髯晄慣・ｽ・｢E鬯ｮ・ｫ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯滓坩・ｯ莨夲ｽｽ・ｼ隶捺慣・ｽ・ｹ繝ｻ・ｧ髯ｷ・ｿ繝ｻ・･郢晢ｽｻ繝ｻ・ｰ郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ鬮｣魃会ｽｽ・ｨ郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ
 				if (playerSkeleton.joints[i].parent) {
 					int32_t parentIndex = *playerSkeleton.joints[i].parent;
 					Vector3 parentPos = {
@@ -1013,7 +1040,7 @@ void GamePlayScene::Update() {
 					v2.normal = { 0.0f, 1.0f, 0.0f };
 					v2.texcoord = { 1.0f, 1.0f };
 
-					Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
+					Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f }; // 鬯ｨ・ｾ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｽ髮趣ｽｼ繝ｻ・ｶ郢晢ｽｻ繝ｻ・ｲ
 					if (simulationManager_ && simulationManager_->IsBoneSelected(playerSkeleton.joints[i].name)) {
 						v1.color = { 1.0f, 1.0f, 0.0f, 1.0f };
 						v2.color = { 1.0f, 1.0f, 0.0f, 1.0f };
@@ -1027,8 +1054,8 @@ void GamePlayScene::Update() {
 				}
 			}
 
-			// ラインModel��の頂点を更新
-			// ラインModelの頂点を更新
+			// 鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳModel驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｯ郢晢ｽｻ繝ｻ閾･・ｸ・ｺ陝ｶ・ｷ繝ｻ・ｹ繝ｻ・ｧ髯ｷ・ｻ闔・･繝ｻ・ｳ繝ｻ・ｩ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
+			// 鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳModel鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｯ郢晢ｽｻ繝ｻ閾･・ｸ・ｺ陝ｶ・ｷ繝ｻ・ｹ繝ｻ・ｧ髯ｷ・ｻ闔・･繝ｻ・ｳ繝ｻ・ｩ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 			if (player_ && player_->GetObject3d()) {
 				skeletonLinesObject->SetTranslate(player_->GetPosition());
 				skeletonLinesObject->SetQuaternionRotate(player_->GetQuaternion());
@@ -1041,7 +1068,7 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// Model��の更新
+	// Model驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 	if (showModel && myModelObject) {
 		myModelObject->Update();
 	}
@@ -1051,12 +1078,12 @@ void GamePlayScene::Update() {
 		SetDebugCameraActive(!isDebugCameraActive_);
 	}
 
-	// プレイヤーの移動とカメラ更新より先にロックオン状態を確定する。
-	// これにより、ロックオンしたフレームから機体の追従方向とカメラ方向が一致する。
+	// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｩ蜍溪・繝ｻ・ｽ繝ｻ・ｻ鬮ｯ・ｷ陝雜｣・ｽ・ｼ隰夲ｽｫ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ髯具ｽｹ繝ｻ・ｻ郢晢ｽｻ鬯倅ｿｶﾂ・ｦ髯具ｽｹ繝ｻ・ｻ驕ｶ莨∬ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｭ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬮ｴ謇假ｽｽ・･郢晢ｽｻ繝ｻ・ｶ鬮ｫ・ｲ繝ｻ・ｷ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ陝ｶ譎｢・ｿ・｡郢晢ｽｻ繝ｻ・ｺ鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｹ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
+	// 鬩搾ｽｵ繝ｻ・ｺ鬮ｦ・ｮ陷ｻ・ｻ繝ｻ・ｽ隶呵ｶ｣・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢繝ｻ・ｧ髯具ｽｹ繝ｻ・ｻ郢晢ｽｻ鬯倩ｲｻ・ｽ・ｸ繝ｻ・ｲ驕ｶ荳橸ｽ｢繝ｻ・ｺ・ｽ繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ繝ｻ・ｹ隴弱・・ｽ・ｼ鬩･繝ｻ・ｨ謚ｵ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・｣繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髣・ｽｽ繝ｻ・ｮ陋ｹ繝ｻ・ｽ・ｻ闔ｨ螟ｲ・ｽ・ｽ繝ｻ・ｽ鬮ｦ・ｮ陷ｷ・ｶ郢晢ｽｻ鬯ｮ・ｴ隰・∞・ｽ・ｽ繝ｻ・ｽ鬮ｯ貅ｷ・｢骰玖｢夜劑ﾂ繝ｻ・ｿ鬮ｯ・ｷ繝ｻ・ｷ髣比ｼ夲ｽｽ・｣驕ｶ髮・｣ｰ・､繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｹ鬮ｯ・ｷ繝ｻ・ｷ髣比ｼ夲ｽｽ・｣驕ｯ・ｶ繝ｻ・ｲ鬮｣蛹・ｽｽ・ｳ繝ｻ縺､ﾂ鬯ｮ・｢繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｴ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ霑｢證ｦ・ｽ・ｸ繝ｻ・ｲ驛｢譎｢・ｽ・ｻ
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	lockOnManager_->UpdateLockOn(activeCamera, allowLockOnBehavior);
 
-	// プレイヤーの更新と、カメラの追征E
+	// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｲ驕ｶ荳橸ｽ｣・ｹ遯ｶ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｮ・ｴ隰・∞・ｽ・ｽ繝ｻ・ｽ鬮ｯ貅ｯ・ｼ譁舌・
 	if (player_) {
 		if (updateSelectedPlayer) {
 			Vector3 lockOnTargetPosition;
@@ -1073,24 +1100,45 @@ void GamePlayScene::Update() {
 	}
 
 	// ==========================================
-	// 敵
+	// 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ
 	// ==========================================
-	// プレイヤーの最新座標を取得すめE
+	// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陝・｢・つ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬮ｯ貅ｯ・ｶ・｣繝ｻ・ｽ繝ｻ・ｧ鬮ｫ・ｶ霓｣蛟｡蜃ｽ郢晢ｽｻ陞ｳ螢ｽ笊るｬｮ・｢・つ郢晢ｽｻ繝ｻ・ｾ髯ｷ莨夲ｽｽ・ｱ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ
 	Vector3 playerPos = player_ ? player_->GetOBB().center : Vector3{ 0.0f, 0.0f, 0.0f };
 
 	if (updateSelectedEnemies) {
-		// 敵の弾の更新�E�被弾時�E爁E��座標を受け取る�E�E
+		// 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｮ・ｯ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｫ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬮ｫ・ｴ陟托ｽｱ繝ｻ莉｣繝ｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｴ雜｣・ｽ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｯ貅ｯ・ｶ・｣繝ｻ・ｽ繝ｻ・ｧ鬮ｫ・ｶ霓｣蛟｡蜃ｽ郢晢ｽｻ陞ｳ螢ｽ笊る匚莨夲ｽｽ・ｱ郢晢ｽｻ繝ｻ・ｰ鬮ｯ・ｷ繝ｻ・ｿ髫ｰ雋ｻ・ｽ・ｶ郢晢ｽｻ闕ｵ譏ｴ繝ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 		std::vector<Vector3> enemyBulletHits;
 		if (enemyBulletManager_ && player_) {
 			enemyBulletManager_->Update(player_.get(), enemyBulletHits, obstacles_);
 		}
 
-		// 敵の弾が�Eレイヤーに当たった場合も爁E��を発生させる
+		// 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ鬯ｲ繝ｻ・ｼ螟ｲ・ｽ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｬ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｯ貅ｷ繝ｻ關難ｽｭ髫ｨ・ｳ郢晢ｽｻ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・｣鬩搾ｽｵ繝ｻ・ｺ髮九・・ｽ・ｷ郢晢ｽｻ繝ｻ・ｰ郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ郢晢ｽｻ郢ｧ螂・ｽｽ・ｾ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ髯懶ｽ｣繝ｻ・､髯具ｽｹ繝ｻ・ｱ鬯ｨ・ｾ陟・屮・ｽ・ｺ陋帙・・ｽ・ｼ郢晢ｽｻ繝ｻ・ｸ繝ｻ・ｺ髯晢ｽｶ陷ｻ・ｻ繝ｻ・ｽ郢晢ｽｻ
 		if (explosionManager_ && !enemyBulletHits.empty()) {
 			explosionManager_->CreateHitEffects(enemyBulletHits);
 		}
 
 		for (auto it = enemies_.begin(); it != enemies_.end(); ) {
+			// 近接攻撃の当たり判定
+			if (player_ && player_->IsMeleeAttacking()) {
+				OBB meleeHitbox = player_->GetMeleeHitbox();
+				Sphere enemySphere;
+				enemySphere.center = (*it)->GetPosition();
+				enemySphere.radius = (*it)->GetCollisionRadius();
+				if (MyMath::IsCollision(enemySphere, meleeHitbox)) {
+					(*it)->TakeDamage(player_->GetMeleeDamage());
+				}
+			}
+
+			// 地上敵の近接攻撃当たり判定
+			GroundEnemy* groundEnemy = dynamic_cast<GroundEnemy*>(it->get());
+			if (groundEnemy && groundEnemy->IsMeleeActive() && player_ && !player_->IsDead()) {
+				OBB meleeOBB = groundEnemy->GetMeleeBoxOBB();
+				OBB playerOBB = player_->GetOBB();
+				if (MyMath::IsCollision(meleeOBB, playerOBB)) {
+					player_->TakeDamage(1);
+				}
+			}
+
 			(*it)->Update(playerPos, enemyBulletManager_.get(), obstacles_);
 			if (Boss *boss = dynamic_cast<Boss *>(it->get())) {
 				const int summonCount = boss->ConsumeSummonRequests();
@@ -1132,9 +1180,9 @@ void GamePlayScene::Update() {
 // 					ScheduleEnemySpawn(spawnPointIndex, kEnemyRespawnDelayFrames);
 				}
 				songGauge_ = (std::min)(songGauge_ + 20.0f, 100.0f);
-				it = enemies_.erase(it); // 当たった敵はリストから消去滁E
+				it = enemies_.erase(it); // 鬮ｯ貅ｷ繝ｻ關難ｽｭ髫ｨ・ｳ郢晢ｽｻ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・｣鬩搾ｽｵ繝ｻ・ｺ髮倶ｼ・ｽｦ・ｴ陝ｲ繝ｻ縺励・・ｺ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴主・讓溘・繧托ｽｽ・ｰ鬩幢ｽ｢繝ｻ・ｧ鬨ｾ蛹・ｽｽ・ｻ郢晢ｽｻ繝ｻ・ｶ髣費｣ｰ繝ｻ・･髫ｰ遒第ｭ薙・・ｲ驗呻ｽｫ郢晢ｽｻ
 
-				// ボスが召喚した雑魚敵が残っていても、ボス本体を倒した時点でクリアにする。
+				// 鬩幢ｽ｢隴弱・魃ｵ驍ｵ・ｺ陝ｶ・ｷ繝ｻ・ｸ繝ｻ・ｺ髫ｰ逍ｲ・ｺ・ｷ繝ｻ・ｰ陷托ｽｰ隰ｫ螟頑､ｶ繝ｻ・ｹ郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髮狗ｿｫ繝ｻ繝ｻ・ｰ郢晢ｽｻ繝ｻ・ｬ繝ｻ・ｲ髯橸ｽ｢繝ｻ・ｽ鬯ｮ・ｮ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髫ｴ・ｴ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｮ髣包ｽｵ隴擾ｽｶ陞滂ｽ｢鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驕ｯ・ｶ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ驛｢・ｧ郢晢ｽｻ・つ驕ｶ荳橸ｽ｣・ｹ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬮ｫ・ｴ陝ｷ・｢繝ｻ・ｽ繝ｻ・ｬ鬮｣蜴・ｽｽ・ｴ鬮ｦ・ｮ陷ｻ・ｻ繝ｻ・ｽ陞ｳ螢ｼ・ｱ蜊螻√・・ｵ郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髮矩｡板ｧ郢晢ｽｻ鬮ｴ髮｣・ｽ・､郢晢ｽｻ繝ｻ・ｹ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ霑｢證ｦ・ｽ・ｸ繝ｻ・ｲ驛｢譎｢・ｽ・ｻ
 				if (defeatedBoss && !IsSimulationMode() && !isGameOver_) {
 					SceneManager::GetInstance()->ChangeScene("CLEAR");
 					return;
@@ -1148,17 +1196,19 @@ void GamePlayScene::Update() {
 
 		if (!IsSimulationMode() && !isGameOver_ && enemies_.empty() && !HasPendingEnemySpawns()) {
 			if (!bossSpawned_) {
+				OutputDebugStringA("[GamePlayScene] All enemies defeated! Spawning Boss...\n");
 				auto boss = std::make_unique<Boss>();
 				boss->Initialize({ playerPos.x, playerPos.y + 18.0f, playerPos.z + 90.0f });
 				enemies_.push_back(std::move(boss));
 				bossSpawned_ = true;
 			} else {
+				OutputDebugStringA("[GamePlayScene] Boss defeated! Changing scene to CLEAR.\n");
 				SceneManager::GetInstance()->ChangeScene("CLEAR");
 				return;
 			}
 		}
 
-		// 障害物自身のUpdateを回す（現状中身は空に近いですが一応回します！）
+		// 鬯ｯ・ｮ繝ｻ・ｫ髫ｲ蟷｢・ｽ・ｷ郢晢ｽｻ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｳ鬮ｴ螟ｧ・､・ｲ繝ｻ・ｽ繝ｻ・ｩ鬯ｮ・｢繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｪ鬯ｮ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮUpdate鬩幢ｽ｢繝ｻ・ｧ鬮ｮ蛹ｺ・ｧ・ｫ繝ｻ・ｱ鬪ｰ蜈ｷ・ｽ・ｸ繝ｻ・ｺ髯ｷ・ｻ繝ｻ・ｻ郢晢ｽｻ繝ｻ・ｼ鬮｢・ｧ繝ｻ・ｲ髫ｶ謐ｺ・ｺ・ｯ繝ｻ・ｿ繝ｻ・･郢晢ｽｻ繝ｻ・ｶ鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｭ鬯ｮ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ鬯ｩ蛹・ｽｽ・ｨ郢晢ｽｻ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬯ｮ・ｴ陷ｿ・ｰ繝ｻ・ｻ繝ｻ・｣郢晢ｽｻ隶捺慣・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ驕ｯ・ｶ繝ｻ・ｲ鬮｣蛹・ｽｽ・ｳ繝ｻ縺､ﾂ鬮ｯ貊ゑｽｽ・｢髫ｲ蟷｢・ｽ・ｷ髯橸ｽｻ鬪ｰ蜈ｷ・ｽ・ｸ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ謫ｾ・ｽ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｻ繝ｻ・ｻ郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ
 		for (auto &obstacle : obstacles_) {
 			obstacle->Update();
 		}
@@ -1168,10 +1218,10 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// カメラの更新
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 	if (isDebugCameraActive_) {
 		debugFlyCamera_->SetCanUseKeyboard(canUseKeyboardInput);
-		debugFlyCamera_->Update(); // FlyCameraが内部でマウスホバー判定を行って更新する
+		debugFlyCamera_->Update(); // FlyCamera鬩搾ｽｵ繝ｻ・ｺ髫ｰ逍ｲ・ｺ蛟･繝ｻ鬯ｯ・ｩ陝ｷ・｢繝ｻ・ｽ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴弱・・ｽ・ｧ繝ｻ・ｭ驍ｵ・ｺ髢ｧ・ｲ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴取得・ｽ・ｸ陷ｷ・ｶ・趣ｽ｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬮ｯ蜈ｷ・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｹ郢晢ｽｻ陝ｶ譎剰ｷ晞辧蜍滂ｽｨ・ｯ陞滂ｽ｢鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 		
 		if (isAnimationEditor && simulationManager_) {
 			simulationManager_->UpdateShortcuts();
@@ -1209,7 +1259,7 @@ void GamePlayScene::Update() {
 
 							Sphere s;
 							s.center = pos;
-							s.radius = 0.5f * currentScale.x; // 判定半径を少し小さめに調整
+							s.radius = 0.5f * currentScale.x; // 鬮ｯ蜈ｷ・ｽ・ｻ郢晢ｽｻ繝ｻ・､鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｼ髮趣ｽｼ繝ｻ・ｰ鬮ｯ貅ｯ・ｼ譁舌・郢晢ｽｻ陞ｳ螢ｽ・ｰ・｣髣比ｼ夲ｽｽ・｣郢晢ｽｻ繝ｻ・ｰ鬮ｯ譏ｴ繝ｻ繝ｻ・ｸ陞ゅ・・ｽ・ｼ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ驕ｶ荳橸ｽ｣・ｺ郢晢ｽｻ鬯ｮ・ｫ繝ｻ・ｱ郢晢ｽｻ繝ｻ・ｿ鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｴ
 						
 						float dist;
 						if (MyMath::IntersectRaySphere(ray, s, &dist)) {
@@ -1232,7 +1282,7 @@ void GamePlayScene::Update() {
 								simulationManager_->AddSelectedBoneName(closestBone);
 							}
 						} else {
-							// すでに選択済みのボーンをクリックした場合は、複数選択を維持してドラッグできるようにする
+							// 鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ驍ｵ・ｲ陜｣・､繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｨ陞ゅ・・ｽ・ｽ繝ｻ・ｸ髯具ｽｹ繝ｻ・ｻ驕ｶ謫ｾ・ｽ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ髯句ｹ｢・ｽ・ｵ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｸ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ隰ｦ・ｻ郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ鬩搾ｽｵ繝ｻ・ｲ驕ｶ謫ｾ・ｽ・ｬ郢晢ｽｻ繝ｻ・､驛｢譎｢・ｽ・ｻ髴取ｺｷ・､謦ｰ・ｽ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｧ繝ｻ・ｭ郢晢ｽｻ陝ｶ譏ｴ・郢晢ｽｻ繝ｻ・ｭ鬮ｫ・ｰ陜荳翫・郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢隴取得・ｽ・ｳ繝ｻ・ｨ繝ｻ荳ｻ・ｸ・ｷ繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ陜｣・､繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ鬯ｮ・ｦ繝ｻ・ｪ郢晢ｽｻ霑｢證ｦ・ｽ・ｹ繝ｻ・ｧ髯具ｽｹ繝ｻ・ｻ驕ｶ蛹・ｽｽ・ｧ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 							if (!simulationManager_->IsBoneSelected(closestBone)) {
 								simulationManager_->ClearSelectedBones();
 								simulationManager_->AddSelectedBoneName(closestBone);
@@ -1241,15 +1291,15 @@ void GamePlayScene::Update() {
 						isBoxSelecting_ = false;
 						s_isDraggingBone = true;
 					} else {
-						// 何もない空間をクリックした時
+						// 鬮｣蜴・ｽｽ・ｴ鬮ｴ驛・ｽｲ・ｻ繝ｻ・ｽ郢ｧ莨夲ｽｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｩ郢晢ｽｻ繝ｻ・ｺ鬯ｯ・ｮ繝ｻ・｢鬮ｦ・ｮ陷ｻ・ｻ繝ｻ・ｽ陜｣・､繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｸ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ繝ｻ・ｭ陟托ｽｱ郢晢ｽｻ
 						if (io.KeyShift || simulationManager_->GetSelectedBoneNames().empty()) {
-							// Shiftキーを押しているか、何も選択されていない場合はボックス選択を開始
+							// Shift鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ陜捺ｻゑｽｽ・ｬ繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ霑｢證ｦ・ｽ・ｸ繝ｻ・ｺ髣包ｽｵ隰ｨ魑ｴﾂ驕ｶ謫ｾ・ｽ・ｽ郢晢ｽｻ繝ｻ・ｽ鬮ｴ驛・ｽｲ・ｻ繝ｻ・ｽ郢ｧ蜈ｷ・ｽ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｧ繝ｻ・ｭ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ髯溷供・ｨ・ｯ・つ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驕ｶ莨√・繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｰ郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・｣鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｧ繝ｻ・ｭ郢晢ｽｻ陝ｶ譎｢・ｽ・ｫ繝ｻ・｢髯ｷ・ｿ繝ｻ・･郢晢ｽｻ繝ｻ・ｧ驛｢譎｢・ｽ・ｻ
 							isBoxSelecting_ = true;
 							s_isDraggingBone = false;
 							boxSelectStartPos_ = localMousePos;
 							boxSelectEndPos_ = localMousePos;
 						} else {
-							// すでにボーンが選択されている場合、ドラッグで回転できるように待機
+							// 鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ驍ｵ・ｲ陜｣・､繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ鬩募●豐也ｹ晢ｽｻ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｧ繝ｻ・ｭ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ髯溷供・ｨ・ｯ・つ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ驍・戟謐礼ｹ晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ繝ｻ縺､ﾂ驕ｶ荳橸ｽ｣・ｹ・主ｹπ碑ｭ趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ陜｣・､繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｯ諛・ｻｸ繝ｻ・ｫ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｻ郢晢ｽｻ繝ｻ・｢鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ鬯ｮ・ｦ繝ｻ・ｪ郢晢ｽｻ霑｢證ｦ・ｽ・ｹ繝ｻ・ｧ髯具ｽｹ繝ｻ・ｻ驕ｶ蛹・ｽｽ・ｧ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｯ貅ｯ・ｼ譁舌・郢晢ｽｻ繝ｻ・ｩ驛｢譎｢・ｽ・ｻ
 							isBoxSelecting_ = false;
 							s_isDraggingBone = true;
 						}
@@ -1321,7 +1371,7 @@ void GamePlayScene::Update() {
 							}
 						}
 					} else {
-						// ドラッグせずにクリックだけで離した場合の選択解除処理
+						// 鬩幢ｽ｢隴取得・ｽ・ｳ繝ｻ・ｨ繝ｻ荳ｻ・ｸ・ｷ繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ陜｣・､繝ｻ・ｸ繝ｻ・ｺ髯晢ｽｶ陷ｷ・ｮ郢晢ｽｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驍ｵ・ｺ鬩｢謳ｾ・ｽ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髣比ｼ夲ｽｽ・｣驍ｵ・ｲ陝ｶ譎｢・ｽ・ｫ繝ｻ・ｮ郢晢ｽｻ繝ｻ・｢鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ隰ｦ・ｻ郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ鬯ｯ・ｩ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬮ｫ・ｰ陞｢・ｽ繝ｻ・ｫ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｧ郢晢ｽｻ繝ｻ・｣鬯ｯ・ｮ繝ｻ・ｯ郢晢ｽｻ繝ｻ・､鬮ｯ・ｷ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｦ鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 						if (!s_clickedOnBone && !io.KeyShift) {
 							ImVec2 dragDelta(io.MousePos.x - s_mouseDownPos.x, io.MousePos.y - s_mouseDownPos.y);
 							if (std::abs(dragDelta.x) < 2.0f && std::abs(dragDelta.y) < 2.0f) {
@@ -1384,11 +1434,11 @@ void GamePlayScene::Update() {
 
 
 	// ==========================================
-	// ミサイルの発封E�E琁E
+	// 鬩幢ｽ｢隴弱・・ｽ・ｺ陋滂ｽ･繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｨ・ｾ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｺ鬮ｯ譏ｴ繝ｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 	// ==========================================
 	if (allowMouseMissileFire && player_ && !isGameOver_ && !isSpecialAttackActive_) {
 		Input *input = Input::GetInstance();
-		// 左クリチE���E�速くて煙が出なぁE��常弾
+		// 鬮ｯ譎｢・ｽ・ｾ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｯ・ｨ繝ｻ・ｾ髮九・竏槭・・ｿ繝ｻ・･鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬮ｴ雜｣・ｽ・｣髯ｷ・ｷ繝ｻ・ｶ驕ｯ・ｶ繝ｻ・ｲ鬮ｯ・ｷ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｯ譎｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｸ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ
 		if (input->TriggerMouseButton(0)) {
 			Enemy* aimTarget = nullptr;
 			if (lockedEnemy_ && lockOnManager_->IsLockedEnemyAlive()) {
@@ -1399,7 +1449,7 @@ void GamePlayScene::Update() {
 			missilePresetManager_->FirePlayerMissile(MissileType::Normal, aimTarget);
 		}
 
-		// 右クリチE���E��Eを引きながら敵へ曲がるホ�Eミング弾
+		// 鬮ｯ・ｷ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢繝ｻ・ｧ鬮ｮ蛹ｺ・ｩ・ｸ繝ｻ・ｽ繝ｻ・ｼ鬮ｴ蝓溷繭・つ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯滓坩・ｯ莨夲ｽｽ・ｽ髣・ｽｽ繝ｻ・ｬ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｸ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｲ鬩搾ｽｵ繝ｻ・ｺ髯滓坩・ｯ莨夲ｽｽ・ｽ霑｢證ｦ・ｽ・ｹ隴取得・ｽ・ｹ繝ｻ・｢郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴弱・・ｽ・ｺ闖ｴ・ｩ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ
 		if (input->TriggerMouseButton(1)) {
 			lockOnManager_->BeginMultiLock();
 		}
@@ -1414,13 +1464,13 @@ void GamePlayScene::Update() {
 	}
 
 	// ==========================================
-	// 弾の更新処琁E
+	// 鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬮ｯ・ｷ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｦ鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 	// ==========================================
 	std::vector<Vector3> hitPositions;
 	std::vector<Vector3> destroyedPositions;
 	if (updateSelectedMissiles) {
 		if (missileManager_) {
-			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, destroyedPositions, lockedEnemy_);
+			missileManager_->Update(activeCamera, enemies_, obstacles_, hitPositions, destroyedPositions);
 		}
 
 		if (explosionManager_ && !hitPositions.empty()) {
@@ -1436,17 +1486,17 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// 爁E��マネージャーの更新
+	// 鬮ｴ雜｣・ｽ・ｷ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴弱・・ｽ・ｧ繝ｻ・ｭ驛｢譎｢・ｽ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｸ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 	if ((!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) && explosionManager_) {
 		explosionManager_->Update();
 	}
 
-	// 大允E�Eパ�EチE��クル全体�E更新
+	// 鬮ｯ讓奇ｽｻ繧托ｽｽ・ｽ繝ｻ・ｧ鬮ｯ・ｷ陋ｹ・ｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴弱・・ｱ螢ｹ繝ｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬮ｯ・ｷ髣鯉ｽｨ繝ｻ・ｽ繝ｻ・ｨ鬮｣蜴・ｽｽ・ｴ鬯ｮ・ｮ繝ｻ・｣郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ
 	if (!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) {
 	}
 
 	// ==========================================
-	// チE��チE��用コライダー頂点構篁E
+	// 鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隰ｨ魑ｴﾂ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬯ｯ・ｯ郢晢ｽｻ繝ｻ閾･・ｸ・ｺ陝ｷ繝ｻ・ｽ・ｮ陜｣・､髴肴亢繝ｻ繝ｻ・ｯ驛｢譎｢・ｽ・ｻ
 	// ==========================================
 	if (showDebugColliders && updateDebugWireframes && debugColliderLinesObject && debugColliderLinesObject->GetModel()) {
 		std::vector<VertexData> colliderVertices;
@@ -1571,23 +1621,23 @@ void GamePlayScene::Update() {
 			}
 		};
 
-		// 1. プレイヤーのAABBと琁E
+		// 1. 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮAABB鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 		if (drawPlayerDebugFrame && player_ && !player_->IsDead()) {
 			addOBBShape(player_->GetOBB(), { 0.0f, 1.0f, 0.0f, 1.0f });
 		}
 
-		// 2. 障害物のAABB
+		// 2. 鬯ｯ・ｮ繝ｻ・ｫ髫ｲ蟷｢・ｽ・ｷ郢晢ｽｻ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｳ鬮ｴ螟ｧ・､・ｲ繝ｻ・ｽ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮAABB
 		if (drawObstacleDebugFrame) {
 			for (const auto& obstacle : obstacles_) {
 				if (!obstacle || obstacle->IsStageBounds()) {
 					continue;
 				}
-				// Model��の実際のバウンチE��ングボックス ÁEBlenderスケール = 正確なワールドAABB
+				// Model驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ讖ｸ・ｽ・ｳ髮狗ｿｫ繝ｻ隲､蜥弱＠繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢隴寂・繝ｻ驍ｵ・ｺ髢ｧ・ｲ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・｣鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ 郢晢ｽｻ郢晢ｽｻ郢晢ｽｻBlender鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｱ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ = 鬮ｮ蠑ｱ繝ｻ繝ｻ・ｽ繝ｻ・｣鬯ｩ蠅捺・繝ｻ・ｽ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩幢ｽ｢隴取ｧｫ蛯羨BB
 				addOBBShape(obstacle->GetOBB(), { 0.0f, 1.0f, 1.0f, 1.0f });
 			}
 		}
 
-		// 3. 敵のAABBと琁E
+		// 3. 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮAABB鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 		if (drawEnemyDebugFrame) {
 			for (const auto& enemy : enemies_) {
 				if (!enemy->IsDead()) {
@@ -1600,7 +1650,7 @@ void GamePlayScene::Update() {
 			addSphere(lockedEnemy_->GetPosition(), lockedEnemy_->GetCollisionRadius() + 0.35f, { 1.0f, 0.95f, 0.0f, 1.0f });
 		}
 
-		// 4. 自機ミサイル�E�Elayer Bullets�E�E
+		// 4. 鬯ｮ・｢繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｪ鬮ｫ・ｶ陋ｹ繝ｻ・ｽ・ｺ闖ｴ・ｩ鬩｢謳ｾ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｵ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽElayer Bullets驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 		if (drawMissileDebugFrame && missileManager_) {
 			for (const auto& missile : missileManager_->GetMissiles()) {
 				if (!missile->IsDead()) {
@@ -1610,7 +1660,7 @@ void GamePlayScene::Update() {
 			}
 		}
 
-		// 5. 敵の弾�E�Enemy Bullets�E�E
+		// 5. 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽEnemy Bullets驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 		if (drawEnemyDebugFrame && enemyBulletManager_) {
 			for (const auto& bullet : enemyBulletManager_->GetBullets()) {
 				if (!bullet.isDead) {
@@ -1619,7 +1669,7 @@ void GamePlayScene::Update() {
 				}
 			}
 		}
-		// 空の場合EダミEの透Eな線を追加Eリソース stuck 防止EE
+		// 鬯ｩ蛹・ｽｽ・ｨ郢晢ｽｻ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隰ｨ魑ｴﾂ鬩幢ｽ｢隴弱・・ｽ・ｪ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｨ繝ｻ・ｾ髫ｲ・｡繝ｻ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬯ｩ謳ｾ・ｽ・ｱ髯橸ｽ｢繝ｻ・ｹ郢晢ｽｻ陝ｶ譎・鴬郢晢ｽｻ繝ｻ・ｽ鬮ｯ・ｷ闔ｨ螟ｲ・ｽ・｣繝ｻ・ｰE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ stuck 鬯ｯ・ｮ繝ｻ・ｦ郢晢ｽｻ繝ｻ・ｲ鬮ｮ蠑ｱ繝ｻ繝ｻ・ｽ繝ｻ・｢EE
 		if (colliderVertices.empty()) {
 			VertexData v1, v2;
 			v1.position = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1647,30 +1697,30 @@ void GamePlayScene::Update() {
 }
 
 void GamePlayScene::Draw() {
-	//3Dオブジェト描画準備
+	//3D鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴弱・ﾂｧ驍ｵ・ｺ陞溘ｑ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢隴惹ｹ暦ｽｲ・ｺ鬩搾ｽｱ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬮ｮ荵昴・髷ｫ・ｩ郢晢ｽｻ郢晢ｽｻ
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-	// プレイヤーの描画
+	// 鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 	if (player_) {
 		player_->Draw();
 	}
 
 	bool isAnimationEditor = IsSimulationMode() && uiManager_ && uiManager_->currentSimulationTarget_ == 5;
 	if (isAnimationEditor) {
-		// アニメーション編集時は常にボーンを描画
+		// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬯ｩ謳ｾ・ｽ・ｱ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｮ繝ｻ・ｮ驛｢譎｢・ｽ・ｻ髯ｷ繝ｻ・ｽ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ鬮ｯ譎｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ髢ｧ・ｲ繝ｻ・ｷ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
 			skeletonLinesObject->Draw();
 		}
-		return; // アニメーション編集時はプレイヤーとボーンのみ描画
+		return; // 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬯ｩ謳ｾ・ｽ・ｱ郢晢ｽｻ繝ｻ・ｨ鬯ｯ・ｮ繝ｻ・ｮ驛｢譎｢・ｽ・ｻ髯ｷ繝ｻ・ｽ・ｾ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ蜿厄ｽｨ謚ｵ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・魃ｵ驛｢譎｢・ｽ・ｻ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 	}
 
-	// すべてのミサイルを描画
+	// 鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ驕ｶ蜀苓ｷ昴・・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬩幢ｽ｢隴弱・・ｽ・ｺ陋滂ｽ･繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ髢ｧ・ｲ繝ｻ・ｷ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ
 	if (missileManager_) {
 		missileManager_->Draw();
 	}
 
-	// 敵の弾を描画
+	// 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ髢ｧ・ｲ繝ｻ・ｷ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ
 	if (enemyBulletManager_) {
 		enemyBulletManager_->Draw();
 	}
@@ -1678,13 +1728,13 @@ void GamePlayScene::Draw() {
 	Vector4 frustumPlanes[6];
 	MyMath::ExtractFrustumPlanes(camera->GetViewProjectionMatrix(), frustumPlanes);
 
-	// 敵の描画
+	// 鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 	for (const auto &enemy : enemies_) {
 		Sphere enemySphere;
 		enemySphere.center = enemy->GetPosition();
 		enemySphere.radius = enemy->GetCollisionRadius();
 
-		// 画面外の場合に描画しない（カリング）
+		// 鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬯ｯ・ｮ繝ｻ・ｱ郢晢ｽｻ繝ｻ・｢鬮ｯ讓奇ｽｻ阮卍ｧ驛｢譎｢・ｽ・ｻ鬮ｯ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ髯具ｽｹ繝ｻ・ｻ驕ｶ鬆托ｽ･・｢繝ｻ・ｬ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ莨√・繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｼ髯具ｽｹ繝ｻ・ｻ驍ｵ・ｺ陷･・ｲ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ
 		if (MyMath::IsInFrustum(enemySphere, frustumPlanes)) {
 			enemy->Draw();
 			Object3dCommon::GetInstance()->SetCommonDrawSettings();
@@ -1697,13 +1747,13 @@ void GamePlayScene::Draw() {
 		}
 	}
 
-	// 障害物の描画
+	// 鬯ｯ・ｮ繝ｻ・ｫ髫ｲ蟷｢・ｽ・ｷ郢晢ｽｻ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｳ鬮ｴ螟ｧ・､・ｲ繝ｻ・ｽ繝ｻ・ｩ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 	for (const auto &obstacle : obstacles_) {
 		Sphere obsSphere;
 		obsSphere.center = obstacle->GetPosition();
 		obsSphere.radius = MyMath::Length(obstacle->GetWorldHalfExtents());
 
-		// 画面外�E場合�E描画しなぁE��カリング�E�E
+		// 鬯ｨ・ｾ陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬯ｯ・ｮ繝ｻ・ｱ郢晢ｽｻ繝ｻ・｢鬮ｯ讓奇ｽｺ・ｷ驕倪・繝ｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｯ諛ｶ・ｽ・｣郢晢ｽｻ繝ｻ・ｴ鬮ｯ・ｷ繝ｻ・ｷ鬮｣魃会ｽｽ・ｨ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ莨√・繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 		if (MyMath::IsInFrustum(obsSphere, frustumPlanes)) {
 			obstacle->Draw();
 			Object3dCommon::GetInstance()->SetCommonDrawSettings();
@@ -1711,7 +1761,7 @@ void GamePlayScene::Draw() {
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-	//3Dオブジェクト�E描画
+	//3D鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢隴弱・ﾂｧ驍ｵ・ｺ陞溘ｑ・ｽ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｧ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴寂握縺狗ｹ晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 	if (showPlane) {
 		for (Object3d* object3d : objects) {
 			object3d->Draw();
@@ -1719,7 +1769,7 @@ void GamePlayScene::Draw() {
 	}
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-	// アニメーションModel��の個別描画制御
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢隴乗・・ｽ・ｹ隴∵ｻ・ｱｪ繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｧ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳModel驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ蛹ｺ・ｺ・ｷ陷夲ｽｱ髫ｰ蜴・ｽｽ・ｨ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬮ｯ蜈ｷ・ｽ・ｻ郢晢ｽｻ繝ｻ・ｶ鬮ｯ貅ｷ譯√・・ｽ繝ｻ・｡
 	if (showModel && myModelObject) {
 		myModelObject->Draw();
 	}
@@ -1775,10 +1825,10 @@ void GamePlayScene::Draw() {
 	}
 	
 	if (showBones) {
-		// ボ�Eン描画の前に設定を確実にする
+		// 鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｯ・ｷ魄・ｽｹ闔繧会ｽｫ莨・ｽｦ・ｴ陜ｮ蠑ｱ繝ｻ繝ｻ・ｭ鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｹ郢晢ｽｻ陝ｶ譎｢・ｿ・｡郢晢ｽｻ繝ｻ・ｺ鬮ｯ讖ｸ・ｽ・ｳ髮九・ﾂ・ｪ郢晢ｽｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 
-		// ボ�Eンラインの描画
+		// 鬩幢ｽ｢隴弱・繝ｻ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・
 		if (skeletonLinesObject && skeletonLinesObject->GetModel()) {
 			skeletonLinesObject->Draw();
 		}
@@ -1788,18 +1838,18 @@ void GamePlayScene::Draw() {
 		debugColliderLinesObject->Draw();
 	}
 	
-	// エフェクト系の描画 (深度書き込み無効)
+	// 鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴弱・・ｽ・ｼ隴∫ｵｶ蜃ｾ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴寂・・・ｹ晢ｽｻ繝ｻ・ｳ郢晢ｽｻ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・ (鬮ｮ雜｣・ｽ・ｺ郢晢ｽｻ繝ｻ・ｱ鬮ｯ貅ｯ・ｶ・｣繝ｻ・ｽ繝ｻ・ｦ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ髯晢｣ｰ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬮ｴ蜿厄ｽｻ繧托ｽｽ・ｽ繝ｻ・｡鬮ｯ・ｷ闔ｨ螟ｲ・ｽ・ｽ繝ｻ・ｹ)
 	Object3dCommon::GetInstance()->SetEffectDrawSettings();
 	if (environmentRenderer_) environmentRenderer_->Draw();
 
-	// explosionManagerはObject3d(リング)を描画するため、再度設定を呼び出す
+	// explosionManager鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｯObject3d(鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ)鬩幢ｽ｢繝ｻ・ｧ髯ｷ・ｻ髢ｧ・ｲ繝ｻ・ｷ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ霑｢證ｦ・ｽ・ｸ繝ｻ・ｺ髮九・竏槭・・ｽ遶擾ｽｫ繝ｻ・ｸ繝ｻ・ｲ驕ｶ荵嶺ｺ｢郢晢ｽｻ鬮ｯ貅ｯ・ｶ・｣繝ｻ・ｽ繝ｻ・ｦ鬯ｮ・ｫ繝ｻ・ｪ郢晢ｽｻ繝ｻ・ｭ鬮ｯ讖ｸ・ｽ・ｳ髯橸ｽ｢繝ｻ・ｹ郢晢ｽｻ陞ｳ螢ｽﾎ､郢晢ｽｻ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｳ鬮ｯ・ｷ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
 	Object3dCommon::GetInstance()->SetEffectDrawSettings();
 	if (explosionManager_) explosionManager_->Draw();
 
 
-	//Spriteの描画基溁E
+	//Sprite鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｰ繝ｻ・ｰ髯ｷﾂ隲､諛医・鬮ｯ諞ｺ螻ｮ繝ｻ・ｽ繝ｻ・ｺ鬮ｮ荵昴・郢晢ｽｻ
 	SpriteCommon::GetInstance()->SetCommonPipelineState();
-	//スプライト描画
+	//鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴惹ｸ橸ｽｹ・ｲ繝ｻ荳ｻ・ｸ・ｷ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴惹ｹ暦ｽｲ・ｺ鬩搾ｽｱ陝ｶ謨鳴陋ｹ繝ｻ・ｽ・ｽ繝ｻ・ｻ
 	if (showSprite) {
 		sprite->Draw();
 	}
@@ -1814,7 +1864,7 @@ void GamePlayScene::DrawOverlay() {
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (!activeCamera) return;
 
-	// 左下はHP/SP、右下は弾薬と役割ごとにHUDを分ける。
+	// HUD
 	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
 	const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
 	const float statusPanelX = 20.0f;
@@ -1919,7 +1969,7 @@ void GamePlayScene::DrawOverlay() {
 		hudHomingReloadGaugeSprite_->Draw();
 	}
 
-	// 中央の白線が必殺技1回分（50%）。
+	// gauge
 	const float gaugeX = statusGaugeX;
 	const float gaugeY = statusPanelY + 82.0f;
 	const float gaugeWidth = statusGaugeWidth;
@@ -1943,6 +1993,9 @@ void GamePlayScene::DrawOverlay() {
 		spGaugeCostMarkerSprite_->SetSize({ 2.0f, gaugeHeight });
 		spGaugeCostMarkerSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.9f });
 		spGaugeCostMarkerSprite_->Update();
+
+	constexpr float kRadarRange = 250.0f;
+	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
 		spGaugeCostMarkerSprite_->Draw();
 	}
 
@@ -1951,8 +2004,12 @@ void GamePlayScene::DrawOverlay() {
 	bool isJammed = lockOnManager_->IsPlayerJammed(activeCamera);
 
 	if (isMultiLockCharging_ && !multiLockTargets_.empty()) {
+		std::map<Enemy*, int> targetCounts;
 		for (Enemy *target : multiLockTargets_) {
-			DrawLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
+			targetCounts[target]++;
+		}
+		for (auto const& [target, count] : targetCounts) {
+			DrawMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprite_.get(), isJammed, count);
 		}
 	} else if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
 		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
@@ -1982,7 +2039,6 @@ void GamePlayScene::DrawRadar() {
 	radarFrameSprite_->Update();
 	radarFrameSprite_->Draw();
 
-	// 中心から伸びる細い走査線を回転させる。
 	radarSweepAngle_ += 0.025f;
 	if (radarSweepAngle_ >= 6.2831853f) {
 		radarSweepAngle_ -= 6.2831853f;
@@ -2039,5 +2095,3 @@ void GamePlayScene::DrawRadar() {
 		blip->Draw();
 	}
 }
-
-

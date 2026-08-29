@@ -177,8 +177,6 @@ void Sprite::CreateVertexData() {
 		return;
 	}
 	
-	
-
 	//リソースの先頭のアドレスから使う
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 

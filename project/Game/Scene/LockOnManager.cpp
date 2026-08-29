@@ -66,8 +66,11 @@ Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) const {
 	Enemy *bestScreenEnemy = nullptr;
 	float bestScreenScore = (std::numeric_limits<float>::max)();
 
+	PlayerModeParams p = scene_->player_->GetModeParams(scene_->player_->GetCurrentMode());
+	float maxDistSq = p.maxLockOnDistance * p.maxLockOnDistance;
+	
 	const bool isJammed = IsPlayerJammed(activeCamera);
-	const float maxJammedDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance * 0.04f;
+	const float maxJammedDistanceSq = maxDistSq * 0.04f;
 
 	float minX = 0.0f;
 	float minY = 0.0f;
@@ -97,7 +100,7 @@ Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) const {
 
 		const Vector3 direction = MyMath::Normalize(toEnemy);
 		const float forwardDot = MyMath::Dot(playerForward, direction);
-		if (forwardDot > 0.1f) {
+		if (forwardDot >= p.lockOnAngleDot) {
 			const float frontScore = distSq * 0.01f - forwardDot * 1000.0f;
 			if (frontScore < bestFrontScore) {
 				bestFrontScore = frontScore;
@@ -105,7 +108,7 @@ Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) const {
 			}
 		}
 
-		if (hasOverlayBounds && screenWidth > 0.0f && screenHeight > 0.0f && forwardDot > -0.1f) {
+		if (hasOverlayBounds && screenWidth > 0.0f && screenHeight > 0.0f && forwardDot >= p.lockOnAngleDot - 0.2f) {
 			Vector3 targetPosition = enemy->GetPosition();
 			float collisionRadius = 1.0f;
 			try {
@@ -198,9 +201,10 @@ Enemy *LockOnManager::FindAimAssistTarget(Camera *activeCamera) const {
 		return nullptr;
 	}
 
+	PlayerModeParams p = scene_->player_->GetModeParams(scene_->player_->GetCurrentMode());
 	const Vector3 playerPosition = scene_->player_->GetPosition();
 	const Vector3 playerForward = MyMath::Normalize(scene_->player_->GetForwardVector());
-	float maxDistanceSq = kAimAssistMaxDistance * kAimAssistMaxDistance;
+	float maxDistanceSq = p.maxLockOnDistance * p.maxLockOnDistance;
 	if (IsPlayerJammed(activeCamera)) {
 		maxDistanceSq *= 0.04f; // 距離を20%に制限 (0.2 * 0.2 = 0.04)
 	}
@@ -223,7 +227,7 @@ Enemy *LockOnManager::FindAimAssistTarget(Camera *activeCamera) const {
 
 		const Vector3 direction = MyMath::Normalize(toEnemy);
 		const float forwardDot = MyMath::Dot(playerForward, direction);
-		if (forwardDot <= 0.05f) {
+		if (forwardDot < p.lockOnAngleDot) {
 			continue;
 		}
 
@@ -265,7 +269,11 @@ Enemy *LockOnManager::FindAimAssistTarget(Camera *activeCamera) const {
 }
 
 Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
-	if (!scene_->player_ || !activeCamera || scene_->player_->IsDead() || scene_->multiLockTargets_.size() >= kMultiLockMaxTargets) {
+	if (!scene_->player_ || !activeCamera || scene_->player_->IsDead()) {
+		return nullptr;
+	}
+	PlayerModeParams p = scene_->player_->GetModeParams(scene_->player_->GetCurrentMode());
+	if (scene_->multiLockTargets_.size() >= p.maxMultiLock) {
 		return nullptr;
 	}
 
@@ -285,7 +293,7 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 
 	const Vector3 playerPosition = scene_->player_->GetPosition();
 	const Vector3 playerForward = NormalizeOrVector3(scene_->player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
-	float maxDistanceSq = kMultiLockMaxDistance * kMultiLockMaxDistance;
+	float maxDistanceSq = p.maxLockOnDistance * p.maxLockOnDistance;
 	if (IsPlayerJammed(activeCamera)) {
 		maxDistanceSq *= 0.04f; // 距離を20%に制限
 	}
@@ -300,16 +308,14 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 			if (enemy->IsDead()) continue;
 		} catch (...) { continue; }
 
-		bool alreadyLocked = false;
+		int lockCount = 0;
 		for (Enemy *target : scene_->multiLockTargets_) {
 			if (target == enemy.get()) {
-				alreadyLocked = true;
-				break;
+				lockCount++;
 			}
 		}
-		if (alreadyLocked) {
-			continue;
-		}
+		// 1体の敵に集中ロック可能にするため、alreadyLocked による continue は廃止する。
+		// 代わりに、同じ敵に偏りすぎないよう、ロック済み回数に応じてスコアペナルティを与える。
 
 		const Vector3 toEnemy = SubtractVector3(enemy->GetPosition(), playerPosition);
 		const float distSq = LengthSqVector3(toEnemy);
@@ -319,7 +325,7 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 
 		const Vector3 direction = NormalizeOrVector3(toEnemy, playerForward);
 		const float forwardDot = MyMath::Dot(playerForward, direction);
-		if (forwardDot <= 0.0f) {
+		if (forwardDot < p.lockOnAngleDot) {
 			continue;
 		}
 
@@ -350,7 +356,8 @@ Enemy *LockOnManager::FindMultiLockTarget(Camera *activeCamera) const {
 			continue;
 		}
 
-		const float score = screenDistanceSq + distSq * 0.006f - forwardDot * 80.0f;
+		// lockCount に応じてペナルティを加算（まだロックされていない敵がいればそちらを優先）
+		const float score = screenDistanceSq + distSq * 0.006f - forwardDot * 80.0f + (lockCount * 20000.0f);
 		if (score < bestScore) {
 			bestScore = score;
 			bestTarget = enemy.get();
@@ -397,11 +404,13 @@ void LockOnManager::UpdateMultiLock(Camera *activeCamera) {
 	}
 
 	PruneMultiLockTargets();
+	PlayerModeParams p = scene_->player_->GetModeParams(scene_->player_->GetCurrentMode());
 	int acquireInterval = scene_->isSongActive_ ? 1 : kMultiLockAcquireIntervalFrames;
-	if (scene_->multiLockTargets_.size() < kMultiLockMaxTargets &&
+	if (scene_->multiLockTargets_.size() < p.maxMultiLock &&
 		(scene_->multiLockChargeFrames_ == 0 || scene_->multiLockChargeFrames_ % acquireInterval == 0)) {
 		if (Enemy *target = FindMultiLockTarget(activeCamera)) {
 			scene_->multiLockTargets_.push_back(target);
+			target->StartChasingPlayer();
 		}
 	}
 

@@ -103,8 +103,42 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	if (spawnData.name.find("Boss") == 0) {
 		spawnData.isBoss = true;
 		spawnData.isInitialSpawn = false;
-	} else if (spawnData.name.find("VF2") == 0) {
+	} else if (spawnData.name.find("VF2") != std::string::npos) {
 		spawnData.isJammer = true;
+	} else {
+		// scene.json内の敵(VF1, VF1-1, AIEnemy_01〜07等)を地上敵 (GroundEnemy: 重力+山肌着地) として読み込む
+		spawnData.isGround = true;
+	}
+
+	bool hasExplicitInitialSpawnSetting = false;
+	bool explicitInitialSpawnValue = true;
+
+	auto parseInitialSpawnFlag = [&](const json &container) {
+		if (container.contains("is_initial_spawn") && container["is_initial_spawn"].is_boolean()) {
+			hasExplicitInitialSpawnSetting = true;
+			explicitInitialSpawnValue = container["is_initial_spawn"].get<bool>();
+		} else if (container.contains("isInitialSpawn") && container["isInitialSpawn"].is_boolean()) {
+			hasExplicitInitialSpawnSetting = true;
+			explicitInitialSpawnValue = container["isInitialSpawn"].get<bool>();
+		}
+	};
+
+	parseInitialSpawnFlag(objData);
+
+	if (objData.contains("enemy") && objData["enemy"].is_object()) {
+		const auto &enemyObj = objData["enemy"];
+		parseInitialSpawnFlag(enemyObj);
+		if (enemyObj.contains("type") && enemyObj["type"].is_string()) {
+			std::string enemyType = enemyObj["type"].get<std::string>();
+			if (enemyType == "Ground" || enemyType == "GroundEnemy" || enemyType == "VF3") {
+				spawnData.isGround = true;
+			} else if (enemyType == "Boss") {
+				spawnData.isBoss = true;
+				spawnData.isInitialSpawn = false;
+			} else if (enemyType == "VF2") {
+				spawnData.isJammer = true;
+			}
+		}
 	}
 
 	if (objData.contains("path_id") && objData["path_id"].is_string()) {
@@ -116,6 +150,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 
 	if (objData.contains("reinforcement") && objData["reinforcement"].is_object()) {
 		const auto &reinforcement = objData["reinforcement"];
+		parseInitialSpawnFlag(reinforcement);
 		spawnData.reinforcementTriggerName = reinforcement.value("trigger", "");
 		spawnData.reinforcementTriggerNames = SplitStringByComma(spawnData.reinforcementTriggerName);
 		spawnData.remainingReinforcementTriggers = spawnData.reinforcementTriggerNames;
@@ -124,8 +159,18 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		if (spawnData.reinforcementDelayFrames < 0) {
 			spawnData.reinforcementDelayFrames = 0;
 		}
-		spawnData.isInitialSpawn = !spawnData.HasReinforcementTrigger();
 	}
+
+	if (spawnData.isBoss) {
+		spawnData.isInitialSpawn = false;
+	} else if (hasExplicitInitialSpawnSetting) {
+		spawnData.isInitialSpawn = explicitInitialSpawnValue;
+	} else {
+		// ボス以外のすべての配置敵は、デフォルトで最初から全員（7体）出現させる
+		spawnData.isInitialSpawn = true;
+	}
+
+	return spawnData;
 
 	return spawnData;
 }
@@ -291,7 +336,12 @@ bool StageLoader::LoadSceneJson(
 				if (category == "OBSTACLE") {
 					auto newObstacle = std::make_unique<Obstacle>();
 					std::string modelName = ResolveObstacleModelName(objData);
-					newObstacle->Initialize(modelName, position, rotation, scale);
+					
+					Vector3 initPos = position;
+					Vector3 initRot = rotation;
+					Vector3 initScale = scale;
+					std::string objectName = GetObjectBaseName(objData);
+					newObstacle->Initialize(modelName, initPos, initRot, initScale);
 
 					if (objData.contains("useMeshCollider") && objData["useMeshCollider"].is_boolean()) {
 						newObstacle->SetUseMeshCollider(objData["useMeshCollider"].get<bool>());
@@ -309,7 +359,7 @@ bool StageLoader::LoadSceneJson(
 					}
 
 					// 地形モデルは強制的にメッシュコライダーを使用する
-					std::string objectName = GetObjectBaseName(objData);
+					objectName = GetObjectBaseName(objData);
 					if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
 						newObstacle->SetUseMeshCollider(true);
 					}

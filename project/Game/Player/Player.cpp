@@ -1,4 +1,4 @@
-﻿#include "Player.h"
+#include "Player.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <filesystem>
 
-namespace {
+namespace {
 	constexpr const char *kDefaultPlayerBoxModelName = "PlayerBox";
 	constexpr float kBattroidGravity = 0.006f;
 	constexpr float kBattroidMaxFallSpeed = 0.16f;
@@ -27,6 +27,7 @@ namespace {
 	float Length(const Vector3 &value) {
 		return std::sqrt(LengthSq(value));
 	}
+
 	Vector3 Add(const Vector3 &a, const Vector3 &b) {
 		return { a.x + b.x, a.y + b.y, a.z + b.z };
 	}
@@ -41,6 +42,21 @@ namespace {
 
 	float Abs(float value) {
 		return value < 0.0f ? -value : value;
+	}
+
+	bool GetTriangleY(const Vector3& p0, const Vector3& p1, const Vector3& p2, float x, float z, float& outY) {
+		float denom = (p1.z - p2.z) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.z - p2.z);
+		if (std::abs(denom) < 0.00001f) return false;
+
+		float w0 = ((p1.z - p2.z) * (x - p2.x) + (p2.x - p1.x) * (z - p2.z)) / denom;
+		float w1 = ((p2.z - p0.z) * (x - p2.x) + (p0.x - p2.x) * (z - p2.z)) / denom;
+		float w2 = 1.0f - w0 - w1;
+
+		if (w0 >= -0.01f && w1 >= -0.01f && w2 >= -0.01f) {
+			outY = w0 * p0.y + w1 * p1.y + w2 * p2.y;
+			return true;
+		}
+		return false;
 	}
 
 	Vector3 AbsVector(const Vector3 &value) {
@@ -199,14 +215,42 @@ void Player::Initialize(const std::string &modelName) {
 	targetDrawScale_ = modelScale_;
 	object_->SetScale(currentDrawScale_);
 
-	// ガウォーク／バトロイドのガード中に表示する専用バリア。
-	ModelManager::GetInstance()->CreateSphereModel("PlayerGuardBarrier", 32);
-	if (Model *barrierModel = ModelManager::GetInstance()->FindModel("PlayerGuardBarrier")) {
-		barrierModel->SetColor({ 0.05f, 0.85f, 1.0f, 0.20f });
+	// プレイヤーの前方に展開する高視認性3Dエナジーシールドモデル
+	ModelManager::GetInstance()->CreateSphereModel("PlayerGuardShieldDome", 32);
+	if (Model *m = ModelManager::GetInstance()->FindModel("PlayerGuardShieldDome")) {
+		m->SetTextureFilePath("resources/white1x1.png");
+		m->SetEnableLighting(false);
+		m->SetAlphaReference(0.0f);
+		m->SetColor({ 0.2f, 0.85f, 1.0f, 0.85f });
 	}
 	guardBarrier_ = std::make_unique<Object3d>();
 	guardBarrier_->Initialize(Object3dCommon::GetInstance());
-	guardBarrier_->SetModel("PlayerGuardBarrier");
+	guardBarrier_->SetModel("PlayerGuardShieldDome");
+
+	// リングは球ではなく、前方（ローカルZ方向）を向く平面リングとして生成する。
+	ModelManager::GetInstance()->CreateRingModel("PlayerGuardShieldRing", 48, 1.0f, 0.82f);
+	if (Model *m = ModelManager::GetInstance()->FindModel("PlayerGuardShieldRing")) {
+		m->SetTextureFilePath("resources/white1x1.png");
+		m->SetEnableLighting(false);
+		m->SetAlphaReference(0.0f);
+		m->SetColor({ 0.7f, 1.0f, 1.0f, 0.95f });
+	}
+	guardBarrierRing_ = std::make_unique<Object3d>();
+	guardBarrierRing_->Initialize(Object3dCommon::GetInstance());
+	guardBarrierRing_->SetModel("PlayerGuardShieldRing");
+
+	FILE* fpInit = nullptr;
+	fopen_s(&fpInit, "C:\\Users\\k024g\\.gemini\\antigravity\\brain\\7cca55d0-fd01-48ff-9ea7-7b27dd6bbc34\\debug_log.txt", "w"); // Create new log file
+	if (fpInit) {
+		fprintf(fpInit, "=== Initialize ===\n");
+		fprintf(fpInit, "DomeModel: %p, RingModel: %p\n",
+			ModelManager::GetInstance()->FindModel("PlayerGuardShieldDome"),
+			ModelManager::GetInstance()->FindModel("PlayerGuardShieldRing"));
+		fprintf(fpInit, "DomeObjModel: %p, RingObjModel: %p\n",
+			guardBarrier_->GetModel(),
+			guardBarrierRing_->GetModel());
+		fclose(fpInit);
+	}
 
 	position_ = { 0.0f, 0.0f, 0.0f };
 	velocity_ = { 0.0f, 0.0f, 0.0f };
@@ -219,6 +263,7 @@ void Player::Initialize(const std::string &modelName) {
 	dodgeDirection_ = 0.0f;
 	isGuarding_ = false;
 	guardBarrierPulse_ = 0.0f;
+	guardScale_ = 0.0f;
 
 	// アニメーションデータのロード
 	if (modelName.find("vf-15c") != std::string::npos) {
@@ -244,10 +289,31 @@ void Player::Initialize(const std::string &modelName) {
 
 	// アクションアニメーションの自動ロード
 	actionAnimations_.clear();
+    // モードパラメータの初期化
+    // ファイター（ミサイル乱射特化）
+    modeParams_[0].canGuard = false;
+    modeParams_[0].canMelee = false;
+    modeParams_[0].maxMultiLock = 8;
+    modeParams_[0].lockOnAngleDot = 0.5f;
+    modeParams_[0].maxLockOnDistance = 200.0f;
+
+    // ガウォーク（広角ロック標準形態）
+    modeParams_[1].canGuard = false;
+    modeParams_[1].canMelee = false;
+    modeParams_[1].maxMultiLock = 4;
+    modeParams_[1].lockOnAngleDot = -0.2f;
+    modeParams_[1].maxLockOnDistance = 100.0f;
+
+    // バトロイド（防御＆格闘特化）
     modeParams_[2].moveDamping = 0.80f;
     modeParams_[2].pitchSpeed = 0.02f;
     modeParams_[2].yawSpeed = 0.02f;
     modeParams_[2].rollSpeed = 0.02f;
+    modeParams_[2].canGuard = true;
+    modeParams_[2].canMelee = true;
+    modeParams_[2].maxMultiLock = 2;
+    modeParams_[2].lockOnAngleDot = -1.0f;
+    modeParams_[2].maxLockOnDistance = 60.0f;
 
     // 初期形態
     ChangeMode(PlayerMode::Fighter);
@@ -300,10 +366,10 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 	isNearCeilingBoundary_ = false;
 	ceilingBoundaryWarningIntensity_ = 0.0f;
 
-	if (Input::GetInstance()->PushKey(DIK_G)) {
+	if (Input::GetInstance()->PushKey(DIK_B)) {
 		PlayActionAnimation("Guard");
 	} else if (isPlayingAction_ && currentActionAnim_ && currentActionAnim_ == &actionAnimations_["Guard"]) {
-		StopActionAnimation(); // Gキーを離したら元に戻す
+		StopActionAnimation(); // ガードキーを離したら元に戻す
 	}
 
 	if (lockOnTarget) {
@@ -438,18 +504,101 @@ void Player::UpdateModel() {
 	    object_->Update();
     }
 
-	if (isGuarding_ && guardBarrier_) {
-		guardBarrierPulse_ += 0.12f;
+	// Bキーを押している間だけガードを展開する。
+	const bool guardInput = input->PushKey(DIK_B);
+	isGuarding_ = guardInput && !isSpecialAttackActive_;
+	const float targetGuardScale = isGuarding_ ? 1.0f : 0.0f;
+	guardScale_ += (targetGuardScale - guardScale_) * 0.25f;
+
+	// シールドが背景に溶けても状態を認識できるよう、ガード中は機体を青く発光させる。
+	if (object_ && object_->GetModel()) {
+		const Vector4 normalColor = UsesNaturalPlayerModelScale(modelName_)
+			? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }
+			: Vector4{ 0.2f, 0.5f, 1.0f, 1.0f };
+		object_->GetModel()->SetEnableLighting(!isGuarding_);
+		object_->GetModel()->SetColor(isGuarding_
+			? Vector4{ 0.15f, 0.75f, 1.0f, 1.0f }
+			: normalColor);
+	}
+
+	if (guardScale_ > 0.01f) {
+		guardBarrierPulse_ += 0.15f;
 		const float pulse = 0.5f + 0.5f * std::sin(guardBarrierPulse_);
-		const float radius = GetCollisionRadius() * 2.2f + 0.25f;
-		const float scale = radius * (1.0f + pulse * 0.08f);
-		guardBarrier_->SetTranslate(GetOBB().center);
-		guardBarrier_->SetScale({ scale, scale, scale });
-		guardBarrier_->SetRotate({ 0.0f, guardBarrierPulse_ * 0.18f, 0.0f });
-		if (guardBarrier_->GetModel()) {
-			guardBarrier_->GetModel()->SetColor({ 0.05f, 0.82f, 1.0f, 0.14f + pulse * 0.10f });
+
+		Vector3 forward = GetForwardVector();
+		Vector3 up = MyMath::RotateVector({ 0.0f, 1.0f, 0.0f }, quaternion_);
+
+		// 形態ごとの胸部・視点高さ（目前の高さ）
+		float eyeHeight = 0.1f;
+		if (currentMode_ == PlayerMode::Battroid) {
+			eyeHeight = 0.8f;
+		} else if (currentMode_ == PlayerMode::Gerwalk) {
+			eyeHeight = 0.35f;
 		}
-		guardBarrier_->Update();
+
+		Vector3 origin = {
+			position_.x + up.x * eyeHeight,
+			position_.y + up.y * eyeHeight,
+			position_.z + up.z * eyeHeight
+		};
+
+		// 自機の表面のすぐ前に配置する。ハードコードした距離だと、
+		// 小さいファイター形態では機体から離れすぎて見失いやすい。
+		// カメラから見切れず、かつ機体と重ならない前方距離に固定する。
+		const float forwardDistance = 0.80f;
+		Vector3 shieldPos = {
+			origin.x + forward.x * forwardDistance,
+			origin.y + forward.y * forwardDistance,
+			origin.z + forward.z * forwardDistance
+		};
+
+		static int logCounter = 0;
+		if (logCounter++ % 60 == 0) {
+			FILE* fp = nullptr;
+			fopen_s(&fp, "C:\\Users\\k024g\\.gemini\\antigravity\\brain\\7cca55d0-fd01-48ff-9ea7-7b27dd6bbc34\\debug_log.txt", "a");
+			if (fp) {
+				fprintf(fp, "Pos: (%.3f, %.3f, %.3f) Fwd: (%.3f, %.3f, %.3f) ShieldPos: (%.3f, %.3f, %.3f)\n",
+					position_.x, position_.y, position_.z,
+					forward.x, forward.y, forward.z,
+					shieldPos.x, shieldPos.y, shieldPos.z);
+				fclose(fp);
+			}
+		}
+
+		const float pulseScale = 1.0f + pulse * 0.06f;
+
+		// メインの3D曲面エナジーシールドドーム
+		if (guardBarrier_) {
+			const float shieldRadius = 1.10f * guardScale_ * pulseScale;
+			const float shieldDepth = 0.30f * guardScale_;
+			guardBarrier_->SetTranslate(shieldPos);
+			guardBarrier_->SetScale({ shieldRadius, shieldRadius, shieldDepth });
+			guardBarrier_->SetQuaternionRotate(quaternion_); // プレイヤーの前方をカバー
+			if (guardBarrier_->GetModel()) {
+				guardBarrier_->GetModel()->SetEnableLighting(false);
+				guardBarrier_->GetModel()->SetTextureFilePath("resources/white1x1.png");
+				guardBarrier_->GetModel()->SetColor({ 0.20f, 0.85f, 1.0f, (0.80f + pulse * 0.15f) * guardScale_ });
+			}
+			guardBarrier_->Update();
+		}
+
+		// 外周の鮮烈な3Dエナジーフレームリング
+		if (guardBarrierRing_) {
+			const float ringRadius = 1.20f * guardScale_ * pulseScale;
+			const float ringDepth = 1.0f;
+			guardBarrierRing_->SetTranslate(shieldPos);
+			guardBarrierRing_->SetScale({ ringRadius, ringRadius, ringDepth });
+			
+			// 外周リングを回転させてバリアのエネルギー展開感を強調
+			Quaternion ringRot = MyMath::Multiply(quaternion_, MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, guardBarrierPulse_ * 0.6f));
+			guardBarrierRing_->SetQuaternionRotate(ringRot);
+			if (guardBarrierRing_->GetModel()) {
+				guardBarrierRing_->GetModel()->SetEnableLighting(false);
+				guardBarrierRing_->GetModel()->SetTextureFilePath("resources/white1x1.png");
+				guardBarrierRing_->GetModel()->SetColor({ 0.80f, 1.0f, 1.0f, (0.95f + pulse * 0.05f) * guardScale_ });
+			}
+			guardBarrierRing_->Update();
+		}
 	}
 }
 
@@ -485,9 +634,15 @@ void Player::Draw(Camera* camera) {
 	if (object_) {
 		object_->Draw();
 	}
-	if (isGuarding_ && guardBarrier_) {
+	if (guardScale_ > 0.01f) {
+		Object3dCommon::GetInstance()->SetAlphaBlendDrawSettings();
+		if (guardBarrier_) {
+			guardBarrier_->Draw();
+		}
 		Object3dCommon::GetInstance()->SetEffectDrawSettings();
-		guardBarrier_->Draw();
+		if (guardBarrierRing_) {
+			guardBarrierRing_->Draw();
+		}
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 	}
 	if (boosterEffect_) {
@@ -763,8 +918,8 @@ void Player::Move(bool rotationLocked) {
 	const bool moveBackward = input->PushKey(DIK_S);
 	const bool moveUp = input->PushKey(DIK_SPACE);
 	const bool moveDown = input->PushKey(DIK_LSHIFT);
-	const bool guardInput = input->PushKey(DIK_A) || input->PushKey(DIK_D);
-	isGuarding_ = currentMode_ != PlayerMode::Fighter && guardInput;
+	const bool guardInput = input->PushKey(DIK_B);
+	isGuarding_ = guardInput;
 	isBattroidWalking_ = currentMode_ == PlayerMode::Battroid && (moveForward || moveBackward);
 	if (!isBattroidWalking_) {
 		battroidWalkTime_ = 0.0f;
@@ -959,8 +1114,34 @@ void Player::Move(bool rotationLocked) {
 	if (dodgeTimer_ > 0) {
 		const Vector3 dodgeRight = MyMath::RotateVector({ 1.0f, 0.0f, 0.0f }, quaternion_);
 		position_ = Add(position_, Scale(dodgeRight, dodgeDirection_ * 0.38f));
-		--dodgeTimer_;
-		if (dodgeTimer_ == 0) {
+	}
+
+	// 近接攻撃（Vキー）
+	if (p.canMelee && !isMeleeAttacking_ && input->TriggerKey(DIK_V)) {
+		isMeleeAttacking_ = true;
+		meleeTimer_ = 30; // 30フレーム持続
+		PlayActionAnimation("Melee"); // アニメーションがあれば再生
+	}
+
+	if (isMeleeAttacking_) {
+		meleeTimer_--;
+		if (meleeTimer_ <= 0) {
+			isMeleeAttacking_ = false;
+		} else {
+			// 前方へダッシュする力を少し加える
+			Vector3 forward = GetForwardVector();
+			velocity_ = Add(velocity_, Scale(forward, 0.03f));
+		}
+	}
+
+	if (isMeleeAttacking_) {
+		// 近接攻撃中は他の移動入力を無視するか、弱める
+		pitch = 0.0f;
+		yaw = 0.0f;
+		roll = 0.0f;
+	} else if (dodgeTimer_ > 0) {
+		dodgeTimer_--;
+		if (dodgeTimer_ <= 0) {
 			dodgeCooldownTimer_ = kDodgeCooldownFrames;
 		}
 	} else if (dodgeCooldownTimer_ > 0) {
@@ -1065,6 +1246,29 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 				s.radius = GetCollisionRadius();
 				playerSpheres.push_back(s);
 			}
+			// 地底抜け防止レスキュー：足元の地形の最高標高を特定し、潜り込んでいたら即時地上に押し上げる
+			float maxTerrainY = -99999.0f;
+			bool foundTerrain = false;
+			for (const auto& tri : triangles) {
+				if (tri.normal.y > 0.2f) {
+					float triY = 0.0f;
+					if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], position_.x, position_.z, triY)) {
+						if (triY > maxTerrainY) {
+							maxTerrainY = triY;
+							foundTerrain = true;
+						}
+					}
+				}
+			}
+
+			float playerRadius = GetCollisionRadius();
+			if (foundTerrain && position_.y < maxTerrainY + playerRadius * 0.5f) {
+				position_.y = maxTerrainY + playerRadius * 0.5f;
+				if (velocity_.y < 0.0f) {
+					velocity_.y = 0.0f;
+				}
+				playerOBB = GetOBB();
+			}
 
 			for (auto& playerSphere : playerSpheres) {
 				for (const auto& tri : triangles) {
@@ -1101,9 +1305,13 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 					Vector3 pushVector;
 					if (MyMath::IsCollision(playerSphere, tri, pushVector)) {
 						// 地面（上向きの面）との衝突で、裏側に回り込んで下に押し下げられるのを防止
-						if (tri.normal.y > 0.3f && pushVector.y < 0.0f) {
+						if (tri.normal.y > 0.3f) {
 							float pushLen = MyMath::Length(pushVector);
+							if (pushLen < 0.05f) pushLen = 0.05f;
 							pushVector = MyMath::Multiply(pushLen, tri.normal);
+							if (pushVector.y < 0.0f) {
+								pushVector.y = -pushVector.y;
+							}
 						}
 
 						position_.x += pushVector.x;
@@ -1191,7 +1399,7 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 					if (axis == 2) localPushOut.z = limit - localDistance[axis];
 				} else if (localDistance[axis] < -limit) {
 					if (axis == 0) localPushOut.x = -limit - localDistance[axis];
-					if (axis == 1) localPushOut.y = -limit - localDistance[axis];
+					// axis == 1 のマイナスY方向（底面）は山モデルがあるので、山への着地を妨げないよう押し戻しを行わない
 					if (axis == 2) localPushOut.z = -limit - localDistance[axis];
 				}
 			}
@@ -1294,6 +1502,20 @@ void Player::StopActionAnimation() {
     currentActionAnim_ = nullptr;
 }
 
+OBB Player::GetMeleeHitbox() const {
+	OBB obb = GetOBB();
+	// 前方に判定を出す
+	Vector3 forward = GetForwardVector();
+	// 攻撃範囲のサイズ設定
+	obb.size.x += 4.0f; // 横に広く
+	obb.size.y += 4.0f; // 縦に広く
+	obb.size.z += 8.0f; // 前方に長く
 
+	// 中心位置を前方にずらす
+	obb.center.x += forward.x * 6.0f;
+	obb.center.y += forward.y * 6.0f;
+	obb.center.z += forward.z * 6.0f;
+	return obb;
+}
 
 

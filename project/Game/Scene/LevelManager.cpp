@@ -1,6 +1,7 @@
 #include "LevelManager.h"
 #include "Game/enemy/Boss.h"
 #include "Game/enemy/JammerEnemy.h"
+#include "Game/enemy/GroundEnemy.h"
 #include <algorithm>
 
 namespace {
@@ -48,6 +49,17 @@ void LevelManager::Update(std::vector<Vector3>& enemyBulletHits) {
 			}
 			
 			enemy->Update(player_ ? player_->GetPosition() : Vector3{0,0,0}, enemyBulletManager_.get(), obstacles_);
+
+			// 地上敵の近接攻撃判定（近接ブロックがプレイヤーに当たったかチェック）
+			GroundEnemy* groundEnemy = dynamic_cast<GroundEnemy*>(enemy);
+			if (groundEnemy && groundEnemy->IsMeleeActive() && player_ && !player_->IsDead()) {
+				OBB meleeOBB = groundEnemy->GetMeleeBoxOBB();
+				OBB playerOBB = player_->GetOBB();
+				if (MyMath::IsCollision(meleeOBB, playerOBB)) {
+					player_->TakeDamage(1);
+				}
+			}
+
 			++it;
 		} catch (...) {
 			it = enemies_.erase(it);
@@ -112,11 +124,21 @@ void LevelManager::SpawnEnemiesFromSpawnPoints() {
 	enemies_.clear();
 	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoRespawnTimer);
 
+	// 障害物のメッシュコライダー等を事前に構築・更新（敵の着地スナップ前に必須）
+	for (auto& obstacle : obstacles_) {
+		if (obstacle) {
+			obstacle->Update();
+		}
+	}
+
 	for (size_t spawnPointIndex = 0; spawnPointIndex < enemySpawns_.size(); ++spawnPointIndex) {
 		if (enemySpawns_[spawnPointIndex].isInitialSpawn) {
 			SpawnEnemyFromSpawnPoint(spawnPointIndex);
 		}
 	}
+
+	// 要望により、地上雑魚敵5体をステージ上に直出し配置する
+	SpawnDefaultGroundEnemies();
 }
 
 void LevelManager::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
@@ -130,6 +152,8 @@ void LevelManager::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 		enemy = std::make_unique<Boss>();
 	} else if (spawnData.isJammer) {
 		enemy = std::make_unique<JammerEnemy>();
+	} else if (spawnData.isGround) {
+		enemy = std::make_unique<GroundEnemy>();
 	} else {
 		enemy = std::make_unique<Enemy>();
 	}
@@ -142,10 +166,33 @@ void LevelManager::SpawnEnemyFromSpawnPoint(size_t spawnPointIndex) {
 	}
 	
 	enemy->SetSpawnPointIndex(spawnPointIndex);
+
+	if (GroundEnemy *ge = dynamic_cast<GroundEnemy *>(enemy.get())) {
+		ge->SnapToGround(obstacles_);
+	}
+
 	enemies_.push_back(std::move(enemy));
 
 	if (spawnPointIndex < enemyRespawnTimers_.size()) {
 		enemyRespawnTimers_[spawnPointIndex] = kNoRespawnTimer;
+	}
+}
+
+void LevelManager::SpawnDefaultGroundEnemies() {
+	// プレイヤー前方の地上に扇状に 5 体の GroundEnemy を直出し配置（上空から重力で山の斜面に接地）
+	Vector3 spawnPositions[5] = {
+		{ -35.0f, 100.0f, 45.0f },
+		{ -18.0f, 100.0f, 65.0f },
+		{   0.0f, 100.0f, 85.0f },
+		{  18.0f, 100.0f, 65.0f },
+		{  35.0f, 100.0f, 45.0f },
+	};
+
+	for (int i = 0; i < 5; ++i) {
+		auto groundEnemy = std::make_unique<GroundEnemy>();
+		groundEnemy->Initialize(spawnPositions[i]);
+		groundEnemy->SnapToGround(obstacles_);
+		enemies_.push_back(std::move(groundEnemy));
 	}
 }
 

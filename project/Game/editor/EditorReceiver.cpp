@@ -86,6 +86,25 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	spawnData.position = position;
 	spawnData.rotation = rotation;
 
+	bool hasExplicitInitialSpawnSetting = false;
+	bool explicitInitialSpawnValue = true;
+
+	auto parseInitialSpawnFlag = [&](const json &container) {
+		if (container.contains("is_initial_spawn") && container["is_initial_spawn"].is_boolean()) {
+			hasExplicitInitialSpawnSetting = true;
+			explicitInitialSpawnValue = container["is_initial_spawn"].get<bool>();
+		} else if (container.contains("isInitialSpawn") && container["isInitialSpawn"].is_boolean()) {
+			hasExplicitInitialSpawnSetting = true;
+			explicitInitialSpawnValue = container["isInitialSpawn"].get<bool>();
+		}
+	};
+
+	parseInitialSpawnFlag(objData);
+
+	if (objData.contains("enemy") && objData["enemy"].is_object()) {
+		parseInitialSpawnFlag(objData["enemy"]);
+	}
+
 	if (objData.contains("path_id") && objData["path_id"].is_string()) {
 		auto pathIt = paths.find(objData["path_id"].get<std::string>());
 		if (pathIt != paths.end()) {
@@ -95,12 +114,21 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 
 	if (objData.contains("reinforcement") && objData["reinforcement"].is_object()) {
 		const auto &reinforcement = objData["reinforcement"];
+		parseInitialSpawnFlag(reinforcement);
 		spawnData.reinforcementTriggerName = reinforcement.value("trigger", "");
 		spawnData.reinforcementDelayFrames = reinforcement.value("delay", 0);
 		if (spawnData.reinforcementDelayFrames < 0) {
 			spawnData.reinforcementDelayFrames = 0;
 		}
-		spawnData.isInitialSpawn = !spawnData.HasReinforcementTrigger();
+	}
+
+	if (spawnData.name.find("Boss") == 0) {
+		spawnData.isInitialSpawn = false;
+	} else if (hasExplicitInitialSpawnSetting) {
+		spawnData.isInitialSpawn = explicitInitialSpawnValue;
+	} else {
+		// ボス以外のすべての配置敵は、デフォルトで最初から全員（7体）出現させる
+		spawnData.isInitialSpawn = true;
 	}
 
 	return spawnData;

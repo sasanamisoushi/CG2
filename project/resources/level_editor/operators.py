@@ -24,6 +24,8 @@ def _default_scene_json_path():
     blend_dir = os.path.dirname(bpy.data.filepath)
     if not blend_dir:
         return "scene.json"
+    if os.path.basename(blend_dir) == "level_editor":
+        return os.path.abspath(os.path.join(blend_dir, "..", "scene.json"))
     return os.path.join(blend_dir, "scene.json")
 
 
@@ -58,6 +60,9 @@ def _resolve_game_exe_path(scene):
 def _is_obj_export_target(obj):
     if obj.type != 'MESH':
         return False
+    if obj.name == "OhirayamaTerrain":
+        return False
+
 
     try:
         return obj.visible_get()
@@ -426,7 +431,9 @@ def _parse_ai_enemy_prompt(prompt_text):
 
     
     style = 'BALANCED'
-    if check( "挟み撃ち", "背後", "回り込", "ambush"):
+    if check( "ばらつ", "ばらつけ", "散ら", "バラバラ", "散布", "分散", "集まらない", "中心に集まらない", "中心に集まら", "広範囲", "広げる", "全域", "scatter", "spread", "disperse", "random"):
+        style = 'SCATTER'
+    elif check( "挟み撃ち", "背後", "回り込", "ambush"):
         style = 'AMBUSH'
     elif check( "群れ", "集団", "一団", "大量", "swarm"):
         style = 'SWARM'
@@ -450,9 +457,11 @@ def _parse_ai_enemy_prompt(prompt_text):
         "enemy_path_id": None,
     }
     
-    if check( "vf1-1"):
+    if check( "vf3", "vf-3", "地上"):
+        motion["enemy_type"] = "VF3"
+    elif check( "vf1-1", "vf-1-1"):
         motion["enemy_type"] = "VF1-1"
-    elif check( "vf1"):
+    elif check( "vf1", "vf-1"):
         motion["enemy_type"] = "VF1"
 
     if check( "反時計", "左回り", "counter", "ccw"):
@@ -895,10 +904,16 @@ def _sanitize_enemy_plan_data(plan_data, count, center, extents, player):
         else:
             points = [spawn]
 
-        points = _sanitize_path_distances(points)
-        if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
-            offset = Vector((1.0 if spawn.x < center.x else -1.0, 0, 0))
-            points = [spawn, _clamp_point_to_box(spawn + offset, center, extents, margin)]
+        enemy_type_check = str(enemy.get("enemy_type", "")).strip().upper().replace("-", "").replace("_", "").replace(" ", "")
+        is_ground_blueprint = ("VF3" in enemy_type_check or "GROUND" in enemy_type_check or "TANK" in enemy_type_check or "LAND" in enemy_type_check)
+
+        if not is_ground_blueprint:
+            points = _sanitize_path_distances(points)
+            if len(points) < 2 or all((point - spawn).length < 0.05 for point in points[1:]):
+                offset = Vector((1.0 if spawn.x < center.x else -1.0, 0, 0))
+                points = [spawn, _clamp_point_to_box(spawn + offset, center, extents, margin)]
+        else:
+            points = [spawn]
 
         loop = bool(enemy.get("loop", False))
         speed = float(enemy.get("speed", 0.05))
@@ -1387,30 +1402,125 @@ def _path_start_facing(points, fallback):
     return fallback
 
 
+def _snap_point_to_terrain(point, terrain_objs):
+    if not terrain_objs:
+        return point.x, point.y, 0.0
+
+    px = float(point.x)
+    py = float(point.y)
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+
+    highest_z = -99999.0
+    found = False
+
+    for t_obj in terrain_objs:
+        try:
+            mw = t_obj.matrix_world
+            inv_mw = mw.inverted()
+            l_orig = inv_mw @ Vector((px, py, 5000.0))
+            l_dir = inv_mw.to_3x3() @ Vector((0.0, 0.0, -1.0))
+            l_dir.normalize()
+
+            hit, loc, norm, _ = t_obj.ray_cast(l_orig, l_dir)
+            if hit:
+                w_loc = mw @ loc
+                if w_loc.z > highest_z:
+                    highest_z = w_loc.z
+                    found = True
+        except:
+            pass
+
+    if found and highest_z > -9000.0:
+        return px, py, highest_z + 0.35
+
+    closest_dist_sq = 1e9
+    closest_z = -99999.0
+
+    for t_obj in terrain_objs:
+        try:
+            mw = t_obj.matrix_world
+            eval_obj = t_obj.evaluated_get(depsgraph)
+            mesh = eval_obj.to_mesh()
+
+            for v in mesh.vertices:
+                wv = mw @ v.co
+                dx = wv.x - px
+                dy = wv.y - py
+                d_sq = dx * dx + dy * dy
+                if d_sq < closest_dist_sq:
+                    closest_dist_sq = d_sq
+                    closest_z = wv.z
+
+            eval_obj.to_mesh_clear()
+        except:
+            pass
+
+    if closest_dist_sq < 225.0 and closest_z > -9000.0:
+        return px, py, closest_z + 0.35
+
+    min_z = 0.0
+    try:
+        all_z = []
+        for t_obj in terrain_objs:
+            mw = t_obj.matrix_world
+            for v in t_obj.data.vertices:
+                all_z.append((mw @ v.co).z)
+        if all_z:
+            min_z = min(all_z)
+    except:
+        pass
+
+    target_z = max(0.0, min_z) + 0.35
+    return px, py, target_z
+
+
 def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, motion_prompt, player, provider_label):
     generated_objects = []
     generated_enemies = []
+
+    terrain_objs = [
+        obj for obj in scene.objects 
+        if obj.type == 'MESH' 
+        and obj.name != "StageBounds" 
+        and not obj.name.startswith("AIEnemy") 
+        and not obj.name.startswith("Enemy")
+        and not obj.name.startswith("Camera")
+        and not obj.name.startswith("Light")
+    ]
+
     for index, blueprint in enumerate(blueprints):
         spawn = blueprint["spawn"]
         points = blueprint.get("points") or blueprint.get("path")
-        
+        enemy_type = str(blueprint.get("enemy_type", "VF3")).strip()
+
+        clean_type = enemy_type.upper().replace("-", "").replace("_", "").replace(" ", "")
+        is_ground_type = ("VF3" in clean_type or "GROUND" in clean_type or "TANK" in clean_type or "LAND" in clean_type)
+
+        if is_ground_type and terrain_objs:
+            spawn_x, spawn_y, spawn_z = _snap_point_to_terrain(spawn, terrain_objs)
+            spawn = Vector((spawn_x, spawn_y, spawn_z))
+            points = [spawn]
+
         enemy_path_id_input = str(blueprint.get("enemy_path_id", "")).strip()
         path_obj = None
-        
-        if enemy_path_id_input:
-            path_id = enemy_path_id_input
+
+        if not is_ground_type:
+            if enemy_path_id_input:
+                path_id = enemy_path_id_input
+            else:
+                path_id = _unique_enemy_path_id(scene)
+                path_obj = _create_ai_enemy_path(
+                    collection,
+                    path_id,
+                    points,
+                    blueprint["loop"],
+                    blueprint["speed"],
+                    blueprint["handle_type"],
+                )
+                path_obj["myaddon_ai_motion_prompt"] = motion_prompt
+                path_obj["myaddon_ai_provider"] = provider_label
         else:
-            path_id = _unique_enemy_path_id(scene)
-            path_obj = _create_ai_enemy_path(
-                collection,
-                path_id,
-                points,
-                blueprint["loop"],
-                blueprint["speed"],
-                blueprint["handle_type"],
-            )
-            path_obj["myaddon_ai_motion_prompt"] = motion_prompt
-            path_obj["myaddon_ai_provider"] = provider_label
+            path_id = ""
 
         trigger_name = ""
         trigger_index = blueprint.get("trigger_index", -1)
@@ -1427,7 +1537,7 @@ def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, moti
             enemy_name,
             spawn,
             _path_start_facing(points, player - spawn),
-            blueprint["enemy_type"],
+            enemy_type,
             path_id,
             trigger_name,
             blueprint.get("delay_frames", 0),
@@ -1439,7 +1549,7 @@ def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, moti
             generated_objects.extend([path_obj, enemy_obj])
         else:
             generated_objects.append(enemy_obj)
-            
+
         generated_enemies.append(enemy_obj)
 
     return generated_objects, generated_enemies
@@ -1741,19 +1851,39 @@ def _export_individual_meshes_to_obj(scene, model_filenames):
 
 def _auto_export_scene_json(model_filenames=None):
     filepath = _default_scene_json_path()
-    errors, warnings = validation.validate_scene(bpy.context.scene)
-    if errors:
-        print(f"scene.json o͂XLbv܂Bof[VG[ {len(errors)}܂B")
-        return
+    scene = bpy.context.scene
+
+    valid_path_ids = {
+        getattr(o, "enemy_path_id", "None") 
+        for o in scene.objects 
+        if o.type == 'CURVE' or o.name.startswith("EnemyPath")
+    }
+    all_enemy_names = {
+        o.name for o in scene.objects 
+        if getattr(o, "game_obj_type", "NONE") == "ENEMY" or o.name.startswith("AIEnemy")
+    }
+
+    for obj in scene.objects:
+        if getattr(obj, "game_obj_type", "NONE") == "ENEMY" or obj.name.startswith("AIEnemy"):
+            if _is_unset_text(getattr(obj, "enemy_type", None)):
+                obj.enemy_type = "VF3"
+            path_id = getattr(obj, "enemy_path_id", "None")
+            if path_id != "None" and path_id not in valid_path_ids:
+                obj.enemy_path_id = "None"
+            trig = getattr(obj, "enemy_reinforcement_trigger_name", "")
+            if trig and trig not in all_enemy_names:
+                obj.enemy_reinforcement_trigger_name = ""
+
+    errors, warnings = validation.validate_scene(scene)
 
     try:
-        _export_scene_to_path(bpy.context.scene, filepath, model_filenames)
+        _export_scene_to_path(scene, filepath, model_filenames)
         if warnings:
-            print(f"scene.json o͂܂ix {len(warnings)}j: {filepath}")
+            print(f"scene.json を自動エクスポートしました (警告 {len(warnings)} 件): {filepath}")
         else:
-            print(f"scene.json o͂܂: {filepath}")
+            print(f"scene.json を自動エクスポートしました: {filepath}")
     except Exception as exc:
-        print(f"scene.json o͂Ɏs܂: {exc}")
+        print(f"scene.json の自動エクスポートに失敗しました: {exc}")
 
 
 def _auto_export_obj(model_filenames=None):
@@ -1816,8 +1946,8 @@ class MYADDON_OT_create_ico_sphere(bpy.types.Operator):
 
 class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     bl_idname = "myaddon.myaddon_ot_export_scene"
-    bl_label = "V[o"
-    bl_description = "V[Q[pscene.json֏o͂܂"
+    bl_label = "シーンJSON出力"
+    bl_description = "現在のシーンをゲーム用 scene.json へ出力保存します"
 
     filename_ext = ".json"
 
@@ -1841,57 +1971,139 @@ class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelp
         if not self.filepath:
             self.filepath = _default_scene_json_path()
 
-        errors, warnings = validation.validate_and_store(context.scene)
+        scene = context.scene
+
+        valid_path_ids = {
+            getattr(o, "enemy_path_id", "None") 
+            for o in scene.objects 
+            if o.type == 'CURVE' or o.name.startswith("EnemyPath")
+        }
+        all_enemy_names = {
+            o.name for o in scene.objects 
+            if getattr(o, "game_obj_type", "NONE") == "ENEMY" or o.name.startswith("AIEnemy")
+        }
+
+        for obj in scene.objects:
+            if getattr(obj, "game_obj_type", "NONE") == "ENEMY" or obj.name.startswith("AIEnemy"):
+                if _is_unset_text(getattr(obj, "enemy_type", None)):
+                    obj.enemy_type = "VF3"
+                path_id = getattr(obj, "enemy_path_id", "None")
+                if path_id != "None" and path_id not in valid_path_ids:
+                    obj.enemy_path_id = "None"
+                trig = getattr(obj, "enemy_reinforcement_trigger_name", "")
+                if trig and trig not in all_enemy_names:
+                    obj.enemy_reinforcement_trigger_name = ""
+
+        errors, warnings = validation.validate_and_store(scene)
         if errors:
-            self.report({'ERROR'}, "of[VG[܂Bڍׂ̓plmFĂB")
+            first_err = str(errors[0])
+            self.report({'ERROR'}, f"エクスポートエラー: {first_err}")
             return {'CANCELLED'}
 
         self.export()
         if warnings:
-            self.report({'WARNING'}, f"x {len(warnings)}܂AV[Export܂: {self.filepath}")
+            self.report({'WARNING'}, f"警告 {len(warnings)} 件あり: {self.filepath} に保存しました")
             return {'FINISHED'}
 
-        self.report({'INFO'}, f"V[Export܂: {self.filepath}")
+        self.report({'INFO'}, f"シーンを正常にエクスポートしました: {self.filepath}")
         return {'FINISHED'}
 
 
 class MYADDON_OT_validate_scene(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_validate_scene"
-    bl_label = "V[`FbN"
-    bl_description = "݂̃V[Q[pf[^ƂĎg邩`FbN܂"
+    bl_label = "シーンチェック"
+    bl_description = "現在のシーンがゲーム用データとして正しいかチェックします"
     bl_options = {'REGISTER'}
 
     def execute(self, context):
         errors, warnings = validation.validate_and_store(context.scene)
         if errors:
-            self.report({'ERROR'}, f"of[VG[ {len(errors)}")
+            self.report({'ERROR'}, f"バリデーションエラー: {errors[0]} (全{len(errors)}件)")
         elif warnings:
-            self.report({'WARNING'}, f"of[Vx {len(warnings)}")
+            self.report({'WARNING'}, f"バリデーション警告 {len(warnings)}件")
         else:
-            self.report({'INFO'}, "of[VOK")
+            self.report({'INFO'}, "バリデーションOK: エラーはありません")
         return {'FINISHED'}
 
 
 class MYADDON_OT_playtest_game(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_playtest_game"
-    bl_label = "Q[vC"
-    bl_description = "݂̔zuo͂ăQ[N܂"
-    bl_options = {'REGISTER'}
+    bl_label = "ゲームをプレイ"
+    bl_description class MYADDON_OT_apply_active_properties_to_selection(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_apply_active_properties_to_selection"
+    bl_label = "選択オブジェクトへ一括適用"
+    bl_description = "アクティブオブジェクトのゲーム用設定を選択中の全オブジェクトへコピーします"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    copy_collider: bpy.props.BoolProperty(name="コライダーもコピー", default=True)
 
     def execute(self, context):
-        scene = context.scene
-        errors, warnings = validation.validate_and_store(scene)
-        if errors:
-            self.report({'ERROR'}, "of[VG[܂BCĂPlaytestĂB")
+        active = context.active_object
+        if not active:
+            self.report({'ERROR'}, "コピー元オブジェクトをアクティブにしてください。")
             return {'CANCELLED'}
 
-        model_filenames = _build_model_filename_map(scene)
-        _export_scene_to_path(scene, _default_scene_json_path(), model_filenames)
-        if bpy.data.filepath:
-            _export_individual_meshes_to_obj(scene, model_filenames)
+        targets = [obj for obj in context.selected_objects if obj != active]
+        if not targets:
+            self.report({'ERROR'}, "コピー先のオブジェクトを一緒に選択してください。")
+            return {'CANCELLED'}
 
-        exe_path = _resolve_game_exe_path(scene)
-        if not os.path.isfile(exe_path):
+        property_names = [
+            "game_obj_type",
+            "game_model_file",
+            "enemy_type",
+            "enemy_path_id",
+        ]
+
+        if self.copy_collider:
+            property_names.extend([
+                "collider",
+                "collider_center",
+                "collider_size",
+            ])
+
+        if _is_enemy_path_object(active):
+            property_names.extend([
+                "enemy_path_loop",
+                "enemy_path_speed",
+            ])
+
+        copied_count = 0
+        for target in targets:
+            for property_name in property_names:
+                if not hasattr(active, property_name) or not hasattr(target, property_name):
+                    continue
+                value = getattr(active, property_name)
+                if hasattr(value, "__len__") and not isinstance(value, str):
+                    value = tuple(value)
+                setattr(target, property_name, value)
+            copied_count += 1
+
+        validation.validate_and_store(context.scene)
+        self.report({'INFO'}, f"{copied_count}個のオブジェクトへ設定を一括適用しました。")
+        return {'FINISHED'}��ました: {exc}")
+            return {'CANCELLED'}
+
+        if warnings:
+            self.report({'WARNING'}, f"警告 {len(warnings)}件あり。ゲームを起動しました。")
+        else:
+            self.report({'INFO'}, "ゲームを起動しました。")
+        return {'FINISHED'}
+
+
+class MYADDON_OT_apply_active_properties_to_selection(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_apply_active_properties_to_selection"
+    bl_label = "選択オブジェクトへ一括適用"
+    bl_description = "アクティブオブジェクトのゲーム用設定を選択中の全オブジェクトへコピーします"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    copy_collider: bpy.props.BoolProperty(name="コライダーもコピー", default=True)
+
+    def execute(self, context):
+        active = context.active_object
+        if not active:
+            self.report({'ERROR'}, "コピー元オブジェクトをアクティブにしてください。")
+            return {'CANCELLED'}:
             self.report({'ERROR'}, f"Q[EXE܂: {exe_path}")
             return {'CANCELLED'}
 
@@ -2394,36 +2606,91 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
             z_span = min(extents.z * 0.32, 4.0)
             height = rng.uniform(-z_span, z_span)
 
-            if style == 'AMBUSH':
-                lateral = side * extents.x * rng.uniform(0.55, 0.82)
-                depth = extents.y * rng.uniform(-0.05, 0.42)
-            elif style == 'SWARM':
-                swarm_step = min(2.2, extents.x * 0.12)
-                lateral = (index - (count - 1) * 0.5) * swarm_step + rng.uniform(-0.7, 0.7)
-                depth = extents.y * rng.uniform(0.18, 0.34)
-            elif style == 'PATROL':
-                lateral = side * extents.x * (0.28 + 0.38 * lane_t)
-                depth = extents.y * (0.02 + 0.34 * lane_t)
-            else:
-                lateral = side * extents.x * (0.22 + 0.45 * lane_t)
-                depth = extents.y * (0.22 + 0.28 * (1.0 - lane_t))
+            if style == 'SCATTER':
+                cols = max(1, math.ceil(math.sqrt(count)))
+                rows = max(1, math.ceil(count / cols))
+                cell_w = (extents.x * 2.0 * 0.78) / max(1, cols)
+                cell_h = (extents.y * 2.0 * 0.78) / max(1, rows)
 
-            spawn = (
-                center
-                + player_forward * depth
-                + player_right * lateral
-                + Vector((0.0, 0.0, height))
-            )
+                c = index % cols
+                r = index // cols
+
+                cell_center_x = (center.x - extents.x * 0.78) + (c + 0.5) * cell_w
+                cell_center_y = (center.y - extents.y * 0.78) + (r + 0.5) * cell_h
+
+                jx = rng.uniform(-cell_w * 0.35, cell_w * 0.35)
+                jy = rng.uniform(-cell_h * 0.35, cell_h * 0.35)
+
+                spawn = Vector((cell_center_x + jx, cell_center_y + jy, center.z + height))
+            else:
+                if style == 'AMBUSH':
+                    lateral = side * extents.x * rng.uniform(0.55, 0.82)
+                    depth = extents.y * rng.uniform(-0.05, 0.42)
+                elif style == 'SWARM':
+                    swarm_step = min(2.2, extents.x * 0.12)
+                    lateral = (index - (count - 1) * 0.5) * swarm_step + rng.uniform(-0.7, 0.7)
+                    depth = extents.y * rng.uniform(0.18, 0.34)
+                elif style == 'PATROL':
+                    lateral = side * extents.x * (0.28 + 0.38 * lane_t)
+                    depth = extents.y * (0.02 + 0.34 * lane_t)
+                else:
+                    lateral = side * extents.x * (0.22 + 0.45 * lane_t)
+                    depth = extents.y * (0.22 + 0.28 * (1.0 - lane_t))
+
+                spawn = (
+                    center
+                    + player_forward * depth
+                    + player_right * lateral
+                    + Vector((0.0, 0.0, height))
+                )
             spawn = _clamp_point_to_box(spawn, center, extents, margin)
             formation_offset = formation_offsets[index] if index < len(formation_offsets) else Vector((0.0, 0.0, 0.0))
             if motion.get("keep_formation") and motion.get("pattern") != "EDGE_ORBIT":
                 spawn = _clamp_point_to_box(spawn + formation_offset, center, extents, margin)
 
+            def snap_to_terrain(point, terrain_objs):
+                return _snap_point_to_terrain(point, terrain_objs)
+
+            base_type = getattr(scene, "myaddon_ai_enemy_base_type", "VF3").strip()
+            if not base_type:
+                base_type = "VF3"
+            enemy_type = base_type
+            if motion and motion.get("enemy_type"):
+                enemy_type = motion.get("enemy_type")
+
+            terrain_objs = [
+                obj for obj in scene.objects 
+                if obj.type == 'MESH' 
+                and obj.name != "StageBounds" 
+                and not obj.name.startswith("AIEnemy") 
+                and not obj.name.startswith("Enemy")
+                and not obj.name.startswith("Camera")
+                and not obj.name.startswith("Light")
+            ]
+
+            clean_type = enemy_type.upper().replace("-", "").replace("_", "").replace(" ", "")
+            is_ground_type = ("VF3" in clean_type or "GROUND" in clean_type or "TANK" in clean_type or "LAND" in clean_type)
+
             speed_jitter = 1.0 if motion.get("keep_formation") else rng.uniform(0.88, 1.12)
             speed = speed_by_style.get(style, 0.050) * motion.get("speed_multiplier", 1.0) * speed_jitter * w_speed
             loop = motion["loop"] if motion.get("loop") is not None else style == 'PATROL'
             points = _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, pair_index, rng, formation_offset)
-            if motion.get("pattern") == "EDGE_ORBIT" and points:
+
+            if is_ground_type:
+                # 1. 水平座標 X, Y をステージ枠(StageBounds)内に保持
+                spawn = _clamp_point_to_box(spawn, center, extents, margin)
+
+                # 2. 地形標高(snap_to_terrain)へ確実スナップ
+                spawn_x, spawn_y, spawn_z = snap_to_terrain(spawn, terrain_objs)
+
+                # 3. スナップ後も X, Y 座標が枠外に出ないよう再クランプし、標高 Z は山肌位置に固定
+                clamped_xy = _clamp_point_to_box(Vector((spawn_x, spawn_y, 0.0)), center, extents, margin)
+                spawn = Vector((clamped_xy.x, clamped_xy.y, spawn_z))
+
+                # 4. 地上敵(VF3)は空中の飛行パス(EnemyPath)を生成せず、山肌表面に固定
+                points = [spawn]
+                motion["enemy_path_id"] = None
+            elif motion.get("pattern") == "EDGE_ORBIT" and points:
                 spawn = points[0]
             handle_type = 'VECTOR' if motion.get("pattern") == "EDGE_ORBIT" and motion.get("respect_bounds") else 'AUTO'
 
@@ -2433,11 +2700,6 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 trigger_index = index - opener_count
                 delay_jitter = wave_delay // 5
                 delay_frames = max(0, wave_delay + rng.randint(-delay_jitter, delay_jitter))
-
-            base_type = getattr(scene, "myaddon_ai_enemy_base_type", "VF1")
-            enemy_type = motion.get("enemy_type")
-            if not enemy_type:
-                enemy_type = base_type
                 
             enemy_plan = {
                 "spawn": {"x": spawn.x, "y": spawn.y, "z": spawn.z},
@@ -2449,7 +2711,7 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
                 "delay_frames": delay_frames,
                 "handle_type": handle_type,
             }
-            if motion.get("enemy_path_id"):
+            if not is_ground_type and motion.get("enemy_path_id"):
                 enemy_plan["enemy_path_id"] = motion["enemy_path_id"]
                 
             builtin_plan["enemies"].append(enemy_plan)
@@ -2469,7 +2731,8 @@ class MYADDON_OT_ai_generate_enemy_plan(bpy.types.Operator):
             "OLLAMA" if ollama_used else "BUILTIN",
         )
 
-        bpy.ops.object.select_all(action='DESELECT')
+        for o in scene.objects:
+            o.select_set(False)
         for obj in generated_objects:
             obj.select_set(True)
         if generated_enemies:
@@ -2537,7 +2800,8 @@ class MYADDON_OT_create_enemy_path(bpy.types.Operator):
         obj.enemy_path_loop = False
         obj.enemy_path_speed = 0.05
 
-        bpy.ops.object.select_all(action='DESELECT')
+        for o in scene.objects:
+            o.select_set(False)
         obj.select_set(True)
         context.view_layer.objects.active = obj
 
@@ -3284,6 +3548,43 @@ def _sanitize_path_distances(points):
     return sanitized
 
 
+class MYADDON_OT_snap_all_enemies_to_ground(bpy.types.Operator):
+    bl_idname = "myaddon.myaddon_ot_snap_all_enemies_to_ground"
+    bl_label = "全VF3敵を山肌標高の上に直接着地"
+    bl_description = "配置されたすべてのVF3敵を地上の山モデル(立方体/Ohirayama)の表面に一瞬で直接吸着・着地させます"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        scene = context.scene
+        terrain_objs = [
+            obj for obj in scene.objects 
+            if obj.type == 'MESH' and obj.name != "StageBounds" and not obj.name.startswith("AIEnemy") and not obj.name.startswith("Enemy") and (
+                any(k in obj.name.lower() for k in ["terrain", "ground", "mountain", "ohirayama", "stage", "field", "map", "立方体"]) 
+                or (hasattr(obj.data, "vertices") and len(obj.data.vertices) >= 50)
+            )
+        ]
+
+        snapped_count = 0
+        for obj in scene.objects:
+            if getattr(obj, "game_obj_type", "NONE") == "ENEMY" or obj.name.startswith("AIEnemy"):
+                clean_type = str(getattr(obj, "enemy_type", "VF3")).upper().replace("-", "").replace("_", "").replace(" ", "")
+                if "VF3" in clean_type or "GROUND" in clean_type or "TANK" in clean_type or "LAND" in clean_type or True:
+                    world_pos = obj.matrix_world.translation.copy()
+                    sx, sy, sz = _snap_point_to_terrain(world_pos, terrain_objs)
+                    target_world_pos = Vector((sx, sy, sz))
+                    
+                    if obj.parent:
+                        obj.location = obj.parent.matrix_world.inverted() @ target_world_pos
+                    else:
+                        obj.location = target_world_pos
+
+                    obj.enemy_path_id = ""
+                    snapped_count += 1
+
+        self.report({'INFO'}, f"{snapped_count}体のVF3敵を山肌標高の上に直接着地させました。")
+        return {'FINISHED'}
+
+
 classes = (
     MYADDON_OT_stretch_vertex,
     MYADDON_OT_create_ico_sphere,
@@ -3307,6 +3608,7 @@ classes = (
     MYADDON_OT_assign_ai_reinforcement_trigger,
     MYADDON_OT_create_stage_bounds,
     MYADDON_OT_create_spawn_point,
+    MYADDON_OT_snap_all_enemies_to_ground,
 )
 
 

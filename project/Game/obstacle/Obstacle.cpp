@@ -1,4 +1,4 @@
-﻿#include "Obstacle.h"
+#include "Obstacle.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include <vector>

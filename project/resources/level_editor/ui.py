@@ -240,6 +240,7 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_clear_existing", text="前回生成を削除")
         ai_box.operator(async_gemini.MYADDON_OT_ai_generate_enemy_plan_async.bl_idname, text="AIで敵プラン生成", icon='MOD_PARTICLES')
+        ai_box.operator(operators.MYADDON_OT_snap_all_enemies_to_ground.bl_idname, text="全VF3敵を山肌の地面の上に直接着地", icon='SNAP_ON')
         ai_box.operator(operators.MYADDON_OT_ai_edit_selected_enemy_path.bl_idname, text="選択したパスだけをAIで再生成（編集）", icon='GREASEPENCIL')
 
         level_box = layout.box()

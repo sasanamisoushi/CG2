@@ -30,6 +30,7 @@ namespace {
 	const char *kMissilePresetsFilePath = "resources/missile_presets.json";
 	const char *kPlayerModelName = "vf-15c/scene.gltf";
 	const char *kLockOnReticleTexturePath = "resources/lock_on_reticle.png";
+	const char *kMissileLockOnReticleTexturePath = "resources/missile_lock_on_reticle.png";
 	const char *kAimCursorTexturePath = "resources/aim_cursor.png";
 	const char *kBoundaryAlertTexturePath = "resources/boundary_alert.png";
 
@@ -381,6 +382,85 @@ namespace {
 			lockOnReticleSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
 			lockOnReticleSprite_->Update();
 			lockOnReticleSprite_->Draw();
+		}
+	}
+
+	void DrawMissileLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* missileLockOnReticleSprite_, bool isJammed = false, int lockCount = 1) {
+		if (!target) {
+			return;
+		}
+
+		try {
+			if (target->IsDead()) {
+				return;
+			}
+		} catch (...) {
+			return;
+		}
+
+		Vector3 worldPosition = target->GetPosition();
+		float collisionRadius = 1.0f;
+		try {
+			collisionRadius = target->GetCollisionRadius();
+		} catch (...) {}
+		worldPosition.y += collisionRadius * 0.3f;
+		float minX = 0.0f;
+		float minY = 0.0f;
+		float maxX = 0.0f;
+		float maxY = 0.0f;
+		if (!GetOverlayBounds(minX, minY, maxX, maxY)) {
+			return;
+		}
+
+		const float width = maxX - minX;
+		const float height = maxY - minY;
+		Vector3 screenPosition = MyMath::WorldToScreen(worldPosition, viewProjectionMatrix, width, height);
+		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f ||
+			screenPosition.x < 0.0f || screenPosition.x > width ||
+			screenPosition.y < 0.0f || screenPosition.y > height) {
+			return;
+		}
+
+		const float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
+		const float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
+		float spriteX = screenPosition.x * winAppWidth / width;
+		float spriteY = screenPosition.y * winAppHeight / height;
+		if (isJammed) {
+			spriteX += (rand() % 11 - 5) * 1.5f;
+			spriteY += (rand() % 11 - 5) * 1.5f;
+		}
+
+		if (missileLockOnReticleSprite_) {
+			const float baseReticleSize = std::clamp(32.0f + collisionRadius * 4.0f, 24.0f, 64.0f);
+			const float aspectScaleX = (height / width) * (winAppWidth / winAppHeight);
+			const float radiusOffset = std::clamp(collisionRadius * 12.0f, 20.0f, 50.0f);
+			
+			Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			if (lockCount >= 3) {
+				color = { 1.0f, 0.2f, 0.2f, 1.0f }; // 赤
+			} else if (lockCount == 2) {
+				color = { 1.0f, 0.6f, 0.0f, 1.0f }; // オレンジ
+			}
+			missileLockOnReticleSprite_->SetColor(color);
+
+			static float timeAngle = 0.0f;
+			timeAngle += 0.02f;
+
+			for (int i = 0; i < lockCount; ++i) {
+				float angle = (3.14159265f * 2.0f / lockCount) * i + timeAngle;
+				float offsetX = std::cos(angle) * radiusOffset;
+				float offsetY = std::sin(angle) * radiusOffset;
+
+				if (lockCount == 1) {
+					offsetX = 0.0f;
+					offsetY = 0.0f;
+				}
+
+				missileLockOnReticleSprite_->SetPosition({ spriteX + offsetX, spriteY + offsetY });
+				missileLockOnReticleSprite_->SetSize({ baseReticleSize * aspectScaleX, baseReticleSize });
+				missileLockOnReticleSprite_->Update();
+				missileLockOnReticleSprite_->Draw();
+			}
 		}
 	}
 

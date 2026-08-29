@@ -1,13 +1,15 @@
 #include "Missile.h"
 #include "3D/Object3dCommon.h"
 #include "Game/enemy/Enemy.h"
+#include "3D/ModelManager.h"
+#include "engine/Particle/ParticleManager.h"
 #include <algorithm>
 #include <cmath>
 #include <vector>
 
 namespace {
 	constexpr bool kEnableMissileTrails = true;
-	constexpr int kHomingForwardLaunchFrames = 30;
+	constexpr int kHomingForwardLaunchFrames = 10; // 30から10に短縮して、すぐ誘導開始する
 
 	float LengthSq(const Vector3 &value) {
 		return value.x * value.x + value.y * value.y + value.z * value.z;
@@ -42,9 +44,11 @@ namespace {
 	}
 }
 
-void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning) {
+void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning, ParticleManager* pManager, Enemy* target) {
 	type_ = type;
 	tuning_ = tuning;
+	particleManager_ = pManager;
+	target_ = target;
 
 	object_ = std::make_unique<Object3d>();
 	object_->Initialize(Object3dCommon::GetInstance());
@@ -69,8 +73,9 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 		Vector3 up = NormalizeOr(MyMath::Cross(right, forward), { 0.0f, 1.0f, 0.0f });
 		float spreadX = ((float)(rand() % 100) / 100.0f - 0.5f) * 2.0f;
 		float spreadY = ((float)(rand() % 100) / 100.0f - 0.5f) * 2.0f;
-		velocity_ = Add(velocity_, Scale(right, spreadX * 1.5f));
-		velocity_ = Add(velocity_, Scale(up, spreadY * 1.5f));
+		// 初期の広がりを抑える (1.5f -> 0.5f)
+		velocity_ = Add(velocity_, Scale(right, spreadX * 0.5f));
+		velocity_ = Add(velocity_, Scale(up, spreadY * 0.5f));
 	}
 
 	lifeTimer_ = (std::max)(1, tuning_.lifeTime);
@@ -81,25 +86,23 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 	waveSign_ = (rand() % 2 == 0) ? 1.0f : -1.0f;
 	spiralSpeed_ = 0.12f + (float)(rand() % 8) * 0.01f;
 
-	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail) {
-		trail_ = std::make_unique<Trail>();
-		trail_->Initialize(120);
-		trailObject_ = std::make_unique<Object3d>();
-		trailObject_->Initialize(Object3dCommon::GetInstance());
-		trailObject_->SetModel("SmokeTrail");
-	}
+	// トレイルの初期化処理は削除しました（パーティクルを使用）
 }
 
-void Missile::Update(Camera *camera, Enemy *enemy) {
+void Missile::Update(Camera *camera) {
 	if (isDead_) return;
 
 	if (type_ == MissileType::MissileWithTrail && elapsedFrames_ >= kHomingForwardLaunchFrames) {
 		Vector3 targetPos = position_;
 		bool hasTarget = false;
 
-		if (enemy) {
-			targetPos = enemy->GetPosition();
-			hasTarget = true;
+		if (target_) {
+			if (target_->IsDead()) {
+				target_ = nullptr;
+			} else {
+				targetPos = target_->GetPosition();
+				hasTarget = true;
+			}
 		}
 
 		if (hasTarget) {
@@ -129,10 +132,12 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 				fade *= (lifeTimer_ / 60.0f);
 			}
 
-			float amplitude = 1.0f * fade; 
+			// 振幅が強すぎるとうねりが蓄積して一定の場所をループしてしまうため弱める
+			float amplitude = 0.2f * fade; 
 			Vector3 wave = Add(Scale(rightVec, std::cos(theta) * amplitude), Scale(upVec, std::sin(theta) * waveSign_ * amplitude));
 
-			Vector3 finalDirection = NormalizeOr(Add(homingDirection, wave), homingDirection);
+			// 前進ベクトルを強めに合成して軌道の破綻を防ぐ
+			Vector3 finalDirection = NormalizeOr(Add(Scale(homingDirection, 2.0f), wave), homingDirection);
 			float homingSpeed = (std::max)(0.01f, tuning_.speed * 1.5f);
 			velocity_ = Scale(finalDirection, homingSpeed);
 		} else {
@@ -144,10 +149,10 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 			float time = (float)(tuning_.lifeTime - lifeTimer_);
 			float theta = time * spiralSpeed_ + phaseOffset_;
 			
-			float amplitude = 0.5f;
+			float amplitude = 0.1f;
 			Vector3 wave = Add(Scale(rightVec, std::cos(theta) * amplitude), Scale(upVec, std::sin(theta) * waveSign_ * amplitude));
 			
-			Vector3 finalDirection = NormalizeOr(Add(currentDirection, wave), currentDirection);
+			Vector3 finalDirection = NormalizeOr(Add(Scale(currentDirection, 2.0f), wave), currentDirection);
 			velocity_ = Scale(finalDirection, (std::max)(0.01f, tuning_.speed * 1.5f));
 		}
 	}
@@ -163,13 +168,23 @@ void Missile::Update(Camera *camera, Enemy *enemy) {
 
 	UpdateModel();
 
-	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trail_ && trailObject_) {
-		trail_->Update(position_);
-		std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
-		if (trailObject_->GetModel()) {
-			trailObject_->GetModel()->UpdateTrailVertices(trailVertices);
-		}
-		trailObject_->Update();
+	// トレイルの代わりに煙パーティクルを放出する
+	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && particleManager_) {
+		// 煙っぽく見せるため、初めは少しオレンジで、すぐにグレーになるようなパーティクルなどを想定。
+		// 加算ブレンドの影響を抑えるため、色は暗めのグレーにし、サイズを大きくして放出数を増やします。
+		particleManager_->Emit(
+			"smoke",            // ParticleGroup の名前
+			position_,          // 発生座標
+			3,                  // count (1から3に増やして煙を濃くする)
+			{ 0.2f, 0.2f, 0.2f, 0.5f }, // 色（暗いグレーにしてキラキラ感を抑える）
+			0.01f,              // speed (その場に留まらせるため遅く)
+			0.02f,              // speedVariance
+			1.2f,               // scale (初期サイズを大きくしてモクモク感を出す)
+			0.3f,               // scaleVariance
+			0.4f,               // lifeTimeMin
+			0.7f,               // lifeTimeMax
+			0.2f                // posVariance
+		);
 	}
 }
 
@@ -178,13 +193,6 @@ void Missile::UpdateModel(Camera *camera) {
 		object_->SetTranslate(position_);
 		object_->Update();
 	}
-	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trailObject_) {
-		if (camera && trail_ && trailObject_->GetModel()) {
-			std::vector<VertexData> trailVertices = trail_->GenerateVertices(camera, (std::max)(0.01f, tuning_.trailWidth));
-			trailObject_->GetModel()->UpdateTrailVertices(trailVertices);
-		}
-		trailObject_->Update();
-	}
 }
 
 void Missile::Draw() {
@@ -192,10 +200,6 @@ void Missile::Draw() {
 
 	if (object_) {
 		object_->Draw();
-	}
-
-	if (kEnableMissileTrails && type_ == MissileType::MissileWithTrail && trailObject_) {
-		trailObject_->Draw();
 	}
 }
 

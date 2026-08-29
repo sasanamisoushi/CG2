@@ -47,36 +47,53 @@ std::vector<VertexData> Trail::GenerateVertices(Camera *camera, float thickness)
         Vector3 right = MyMath::Cross(dir, toCam);
         right = MyMath::Normalize(right);
 
-        // 4. 尻尾にいくほど細くなるようにする（先頭は1.0、尻尾は0.0）
+        // 4. リアルな煙の表現：先端（progress=1.0）は細く、尻尾（progress=0.0）にいくほど太く広がる
         float progress = 1.0f - ((float)i / (points_.size() - 1));
-        float currentThickness = thickness * progress;
+        
+        // 指数関数的に広がる（最初は細く、あとで大きく広がる）
+        float spread = std::pow(1.0f - progress, 1.2f);
+        float currentThickness = thickness * (0.3f + spread * 3.0f);
 
-        // 左右の頂点座標
+        // 揺らぎ（ノイズ）を追加して、煙がもくもくしている感を出す
+        // 頂点インデックス(i)を使って疑似ランダムな揺れ幅を作る
+        float noiseX = (std::sin(i * 1.5f) * 0.2f) * spread;
+        float noiseY = (std::cos(i * 1.3f) * 0.2f) * spread;
+        float noiseZ = (std::sin(i * 1.1f) * 0.2f) * spread;
+
+        // 左右の頂点座標（ノイズを足す）
         Vector3 leftPos = {
-            points_[i].x - right.x * currentThickness,
-            points_[i].y - right.y * currentThickness,
-            points_[i].z - right.z * currentThickness
+            points_[i].x - right.x * currentThickness + noiseX,
+            points_[i].y - right.y * currentThickness + noiseY,
+            points_[i].z - right.z * currentThickness + noiseZ
         };
         Vector3 rightPos = {
-            points_[i].x + right.x * currentThickness,
-            points_[i].y + right.y * currentThickness,
-            points_[i].z + right.z * currentThickness
+            points_[i].x + right.x * currentThickness + noiseX,
+            points_[i].y + right.y * currentThickness + noiseY,
+            points_[i].z + right.z * currentThickness + noiseZ
         };
 
-        // 5. 頂点データの生成（古いほど透明にするなどの色設定）
+        // 5. 頂点データの生成
         VertexData vLeft, vRight;
+
+        // 煙の色：先端はオレンジ（炎）、後ろはグレー（煙）
+        float r = 0.3f + progress * 0.7f;
+        float g = 0.3f + progress * 0.4f;
+        float b = 0.3f + progress * 0.1f;
+        
+        // 尻尾にかけてフェードアウト（アルファ値）
+        float alpha = std::pow(progress, 1.5f);
 
         // 左側の頂点
         vLeft.position = { leftPos.x, leftPos.y, leftPos.z, 1.0f };
         vLeft.normal = { toCam.x, toCam.y, toCam.z, 0.0f }; // 法線はカメラの方向
         vLeft.texcoord = { 0.0f, 1.0f - progress, 0.0f, 0.0f }; // V方向にスクロールするようにUVを設定
-        vLeft.color = { 1.0f, 1.0f, 1.0f, progress }; // 尻尾ほど透明（アルファ値）
+        vLeft.color = { r, g, b, alpha };
 
         // 右側の頂点
         vRight.position = { rightPos.x, rightPos.y, rightPos.z, 1.0f };
         vRight.normal = { toCam.x, toCam.y, toCam.z, 0.0f };
         vRight.texcoord = { 1.0f, 1.0f - progress, 0.0f, 0.0f };
-        vRight.color = { 1.0f, 1.0f, 1.0f, progress };
+        vRight.color = { r, g, b, alpha };
 
         // リストに追加（TriangleStripで描画される前提の順番）
         vertices.push_back(vLeft);

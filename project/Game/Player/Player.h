@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "3D/Object3d.h"
 #include "engine/Input/Input.h"
 #include "engine/Camera/Camera.h"
@@ -25,6 +25,11 @@ struct PlayerModeParams {
     float pitchSpeed = 0.015f;
     float yawSpeed = 0.014f;
     float rollSpeed = 0.025f;
+    bool canGuard = false;
+    bool canMelee = false;
+    int maxMultiLock = 4;
+    float lockOnAngleDot = 0.0f;
+    float maxLockOnDistance = 1000.0f;
 };
 
 class Player {
@@ -98,6 +103,10 @@ public:
     bool IsSongActive() const { return isSongActive_; }
     bool IsDodging() const { return dodgeTimer_ > 0; }
     bool IsGuarding() const { return isGuarding_; }
+    
+    bool IsMeleeAttacking() const { return isMeleeAttacking_; }
+    OBB GetMeleeHitbox() const;
+    int GetMeleeDamage() const { return 50; } // 近接攻撃の大ダメージ
 
     void Move(bool rotationLocked = false); // 移動と回転の処理
     void CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles); // 当たり判定の処理
@@ -131,6 +140,7 @@ private:
 
 	std::unique_ptr<Object3d> object_;
 	std::unique_ptr<Object3d> guardBarrier_;
+	std::unique_ptr<Object3d> guardBarrierRing_;
 	std::string modelName_;
 	Vector3 modelScale_ = { 1.0f, 1.0f, 1.0f };
     Vector3 currentDrawScale_ = { 1.0f, 1.0f, 1.0f };
@@ -158,6 +168,10 @@ private:
     float dodgeDirection_ = 0.0f;
     bool isGuarding_ = false;
     float guardBarrierPulse_ = 0.0f;
+    float guardScale_ = 0.0f;
+    
+    bool isMeleeAttacking_ = false;
+    int meleeTimer_ = 0;
 
     Animation animationData_;
     Skeleton skeleton_;

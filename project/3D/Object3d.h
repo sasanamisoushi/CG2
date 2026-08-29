@@ -67,6 +67,7 @@ public:
 
 	//セッター
 	void SetModel(const std::string &filepath);
+	void SetModelPointer(Model* modelPtr) { this->model = modelPtr; }
 	void SetScale(const Vector3 &scale) { this->transform.scale = scale; }
 	void SetRotate(const Vector3 &rotate) { this->transform.rotate = rotate; this->useQuaternion_ = false; }
 	void SetTranslate(const Vector3 &translate) { this->transform.translate = translate; }

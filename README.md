@@ -1,5 +1,30 @@
-[![DebugBuild](https://github.com/sasanamisoushi/CG2/actions/workflows/DebugBuild.yml/badge.svg)](https://github.com/sasanamisoushi/CG2/actions/workflows/DebugBuild.yml)
+# 加点項目
 
-[![ReleascBuild](https://github.com/sasanamisoushi/CG2/actions/workflows/ReleaseBuild.yml/badge.svg)](https://github.com/sasanamisoushi/CG2/actions/workflows/ReleaseBuild.yml)
+* ローダーと配置
+* コライダーをゲーム側当たり判定に適用
+* ホットリロード（ゲーム側）
+* 無効フラグの追加（チェックボックス）
+* SpawnPoint（敵などの発生地点）の配置
+* イベントトリガーの配置
+* ギミックの配置
+* カメラの配置
+* 敵の巡回ルートを配置
+* Terrain（地形）の配置
+* メッシュシンク
 
-[![DevelopmentBuild](https://github.com/sasanamisoushi/CG2/actions/workflows/DevelopmentBuild.yml/badge.svg)](https://github.com/sasanamisoushi/CG2/actions/workflows/DevelopmentBuild.yml)
+# 独自実装
+
+* ローカルLLM (Ollama) による敵・障害物レイアウトの非同期自動生成
+    * Blenderプロンプト入力からローカルLLMを非同期スレッド実行し操作フリーズゼロで3D配置を自動生成します。
+* 選択した特定の敵パス・オブジェクトのみをピンポイント再生成する部分修正機能
+    * ステージ全体を保持したまま選択中の特定の敵飛行ルートや障害物のみをAIで再生成できる部分編集機能を実装しています。
+* AI対話履歴の管理および過去状態へのワンクリック・ロールバック機能
+    * プロンプトと生成結果の会話履歴を記録しボタン一発で過去のプロンプト状態へ復元できる履歴管理機能を搭載しています。
+* ステージデータの不備をパース前に自動検知するリアルタイムデータ検証 (StageValidation)
+    * 存在しないモデル参照や壊れた飛行パス、プレイヤー未配置をリアルタイムで検知しパネルに警告表示してゲームクラッシュを防ぎます。
+* アクティブオブジェクトの属性を選択中オブジェクトへ一括適用する効率化ツール
+    * 敵タイプや飛行パスID、ウェーブ遅延などのパラメータを複数選択したオブジェクトへボタン一発で一括コピー適用できます。
+* BlenderからC++ゲームを直接起動して即座にテストプレイするワンクリックプレイ機能
+    * シーンJSONの出力からC++ゲームEXE(CG2.exe)の自動起動・バインド・接続確認までを全自動で行う連携機能を実装しています。
+* ステージ移動限界領域 (StageBounds) のワイヤーフレーム表示・視覚化機能
+    * フィールドの可動限界範囲をバウンディングボックスとしてワイヤーフレーム可視化し安全な限界境界線を直感設定できます。

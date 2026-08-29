@@ -208,7 +208,7 @@ void Enemy::Initialize(const Vector3 &position) {
     flightPathSpeed_ = kEnemyCruiseSpeed;
     flightPathSegmentIndex_ = 0;
     flightPathSegmentT_ = 0.0f;
-    isChasingPlayer_ = false;
+    isChasingPlayer_ = true;
     hp_ = kEnemyMaxHp;
 
     // リスポーン直後の描画でもBlenderで設定した地点に表示されるように同期する。
@@ -357,7 +357,7 @@ void Enemy::SetFlightPath(const std::vector<Vector3> &points, bool loop, float s
     flightPathSpeed_ = (std::isfinite(speed) && speed > 0.0f) ? speed : kEnemyCruiseSpeed;
     flightPathSegmentIndex_ = 0;
     flightPathSegmentT_ = 0.0f;
-    isChasingPlayer_ = false;
+    isChasingPlayer_ = true;
     
     pathVisualizers_.clear();
 

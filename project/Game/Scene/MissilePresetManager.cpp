@@ -1,4 +1,4 @@
-﻿#include "MissilePresetManager.h"
+#include "MissilePresetManager.h"
 #include "GamePlayScene.h"
 #include "GamePlaySceneHelpers.h"
 #include <externals/imgui/imgui.h>
@@ -306,13 +306,14 @@ bool MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, fl
 		fireDirection = NormalizeOrVector3(SubtractVector3(targetPosition, muzzlePos), forward);
 	}
 
+	const Vector3 playerVelocity = scene_->player_->GetVelocity();
 	const Vector3 velocity = {
-		fireDirection.x * (std::max)(0.01f, tuning.speed),
-		fireDirection.y * (std::max)(0.01f, tuning.speed),
-		fireDirection.z * (std::max)(0.01f, tuning.speed),
+		fireDirection.x * (std::max)(0.01f, tuning.speed) + playerVelocity.x,
+		fireDirection.y * (std::max)(0.01f, tuning.speed) + playerVelocity.y,
+		fireDirection.z * (std::max)(0.01f, tuning.speed) + playerVelocity.z,
 	};
 
-	scene_->missileManager_->Shoot(muzzlePos, velocity, type, tuning);
+	scene_->missileManager_->Shoot(muzzlePos, velocity, type, tuning, target);
 	return true;
 }
 

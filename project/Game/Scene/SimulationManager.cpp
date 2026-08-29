@@ -486,7 +486,7 @@ bool SimulationManager::ApplySimulationAction(const std::string &filePath, const
 	}
 
 	if (scene_->missileManager_) {
-		scene_->missileManager_->Initialize();
+		scene_->missileManager_->Initialize(scene_->environmentRenderer_->GetParticleManager());
 	}
 	if (scene_->enemyBulletManager_) {
 		scene_->enemyBulletManager_->Initialize();

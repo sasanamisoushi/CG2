@@ -2,7 +2,6 @@
 #include "engine/Camera/Camera.h"
 #include "engine/Camera/FlyCamera.h"
 #include "2D/Sprite.h"
-#include "3D/Object3d.h"
 #include "engine/Particle/ParticleManager.h"
 #include "engine/Particle/ParticleEmitter.h"
 #include "engine/Particle/ExplosionManager.h"
@@ -17,6 +16,9 @@
 #include "3D/Trail.h"
 #include "Game/bullet/MissileManager.h"
 #include "Game/enemy/Enemy.h"
+#include "Game/enemy/Boss.h"
+#include "Game/enemy/JammerEnemy.h"
+#include "Game/enemy/GroundEnemy.h"
 #include "Game/enemy/EnemyBulletManager.h"
 #include "Game/enemy/EnemyEventManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -72,6 +74,7 @@ private:
 	void ResetEditorPreview();
 	MissileTuning MakeMissileTuning(MissileType type) const;
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
+	void SpawnDefaultGroundEnemies();
 	bool IsEnemySpawnPointActive(size_t spawnPointIndex) const;
 	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
 	void TriggerEnemyReinforcements(const std::string &deadEnemyName);
@@ -92,6 +95,8 @@ private:
 
 	std::unique_ptr<Sprite> aimCursorSprite_;
 	std::unique_ptr<Sprite> lockOnReticleSprite_;
+	std::unique_ptr<Sprite> missileLockOnReticleSprite_;
+	std::unique_ptr<Sprite> multiLockMarkerSprite_;
 	std::unique_ptr<Sprite> spGaugeBackgroundSprite_;
 	std::unique_ptr<Sprite> spGaugeFillSprite_;
 	std::unique_ptr<Sprite> spGaugeCostMarkerSprite_;

@@ -20,6 +20,7 @@ public:
     void Shoot(const Vector3 &position, const Vector3 &velocity);
     void ShootHeavyCannon(const Vector3 &position, const Vector3 &velocity);
     void ShootBeam(const Vector3 &position, const Vector3 &velocity);
+    void ShootMissile(const Vector3 &position, const Vector3 &velocity);
 
     // 弾1発のデータ構造
     struct Bullet {
@@ -30,6 +31,12 @@ public:
         int lifeTimer = 120; // 120フレーム（2秒）で自然消滅
         float collisionRadius = 0.2f;
         int damage = 1;
+        bool isHoming = false;
+        float speed = 0.25f;
+        int elapsedFrames = 0;
+        float phaseOffset = 0.0f;
+        float waveSign = 1.0f;
+        float spiralSpeed = 0.12f;
     };
 
     // デバッグ表示用のゲッター

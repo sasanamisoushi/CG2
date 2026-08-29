@@ -1,13 +1,13 @@
 #pragma once
 #include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
-#include "3D/Trail.h" 
 #include "engine/Camera/Camera.h"
 #include <memory>
 #include <string>
 
 
 class Enemy;
+class ParticleManager;
 
 // 弾の種類を定義
 enum class MissileType {
@@ -27,10 +27,10 @@ struct MissileTuning {
 class Missile {
 public:
     // 初期化（発生位置と飛んでいく方向を渡す）
-    void Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning);
+    void Initialize(const Vector3 &position, const Vector3 &velocity, MissileType type, const MissileTuning &tuning, ParticleManager* pManager = nullptr, Enemy* target = nullptr);
 
     // 毎フレームの更新
-    void Update(Camera *camera, Enemy *enemy);
+    void Update(Camera *camera);
 
     // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
     void UpdateModel(Camera *camera = nullptr);
@@ -53,9 +53,9 @@ private:
     MissileType type_;     // 自分のタイプを保持
     MissileTuning tuning_;
 
-    // このミサイル専用の軌跡（煙）オブジェクト
-    std::unique_ptr<Trail> trail_;
-    std::unique_ptr<Object3d> trailObject_;
+    // このミサイルが煙を出すためのパーティクルマネージャ
+    ParticleManager* particleManager_ = nullptr;
+    Enemy* target_ = nullptr;
 
     Vector3 position_ = { 0.0f, 0.0f, 0.0f };
     Vector3 velocity_ = { 0.0f, 0.0f, 0.0f }; // 1フレームに進む量

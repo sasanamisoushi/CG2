@@ -40,6 +40,7 @@ public:
 	// 敵のスポーン関連
 	void SpawnEnemiesFromSpawnPoints();
 	void SpawnEnemyFromSpawnPoint(size_t spawnPointIndex);
+	void SpawnDefaultGroundEnemies();
 	void ScheduleEnemySpawn(size_t spawnPointIndex, int delayFrames);
 	void TriggerEnemyReinforcements(const std::string& deadEnemyName);
 	void UpdateEnemyRespawns();

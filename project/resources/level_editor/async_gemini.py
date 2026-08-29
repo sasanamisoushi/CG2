@@ -82,7 +82,10 @@ class MYADDON_OT_ai_generate_enemy_plan_async(bpy.types.Operator):
         if provider != 'OLLAMA':
             fallback_enabled = getattr(scene, "myaddon_ai_enemy_ollama_fallback", True)
             if fallback_enabled:
-                from .operators import _parse_ai_enemy_prompt
+                try:
+                    from .operators import _parse_ai_enemy_prompt
+                except ImportError:
+                    from operators import _parse_ai_enemy_prompt
                 full_text = " ".join([m.content for m in history]) + " " + prompt
                 _, motion = _parse_ai_enemy_prompt(full_text)
                 if not motion.get("matched_keywords", False) and len(full_text.strip()) > 0:
