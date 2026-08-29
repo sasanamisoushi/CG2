@@ -512,11 +512,11 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
     }
 
     const float footOffset = scale_.y * 0.5f;
-    if (foundGround) {
+    if (foundGround && maxGroundY > -50.0f) {
         position_.y = maxGroundY + footOffset;
     } else {
-        // 大平山フィールドの表面標高に安全着地
-        position_.y = -108.0f + footOffset;
+        // 地表のデフォルト標高（Y = 0.0f）に安全着地
+        position_.y = 0.0f + footOffset;
     }
 
     velocityY_ = 0.0f;
