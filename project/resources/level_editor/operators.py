@@ -1680,8 +1680,8 @@ class MYADDON_OT_create_ico_sphere(bpy.types.Operator):
 
 class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     bl_idname = "myaddon.myaddon_ot_export_scene"
-    bl_label = "V[o"
-    bl_description = "V[Q[pscene.json֏o͂܂"
+    bl_label = "Export Scene"
+    bl_description = "Export scene to scene.json for game"
 
     filename_ext = ".json"
 
@@ -1706,19 +1706,16 @@ class MYADDON_OT_export_scene(bpy.types.Operator, bpy_extras.io_utils.ExportHelp
             self.filepath = _default_scene_json_path()
 
         errors, warnings = validation.validate_and_store(context.scene)
-        if errors:
-            self.report({'ERROR'}, "of[VG[܂Bڍׂ̓plmFĂB")
-            return {'CANCELLED'}
-
         self.export()
-        if warnings:
-            self.report({'WARNING'}, f"x {len(warnings)}܂AV[Export܂: {self.filepath}")
-            return {'FINISHED'}
 
-        self.report({'INFO'}, f"V[Export܂: {self.filepath}")
+        if errors:
+            self.report({'WARNING'}, f"Exported scene.json with {len(errors)} validation warnings: {self.filepath}")
+        elif warnings:
+            self.report({'WARNING'}, f"Exported scene.json with {len(warnings)} warnings: {self.filepath}")
+        else:
+            self.report({'INFO'}, f"Exported scene.json successfully: {self.filepath}")
+
         return {'FINISHED'}
-
-
 class MYADDON_OT_validate_scene(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_validate_scene"
     bl_label = "V[`FbN"
