@@ -1,13 +1,15 @@
-#include "Player.h"
+﻿#include "Player.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <initializer_list>
 
-namespace {
+namespace {
 	constexpr const char *kDefaultPlayerBoxModelName = "PlayerBox";
+	constexpr const char *kTransformPlayerModelName = "TransformFighter";
 	constexpr float kBattroidGravity = 0.006f;
 	constexpr float kBattroidMaxFallSpeed = 0.16f;
 	constexpr float kBattroidIdleAnimationTime = 5.0f;
@@ -18,6 +20,10 @@
 
 	bool UsesNaturalPlayerModelScale(const std::string &modelName) {
 		return modelName != kDefaultPlayerBoxModelName;
+	}
+
+	bool IsTransformPlayerModelName(const std::string& modelName) {
+		return modelName == kTransformPlayerModelName;
 	}
 
 	float LengthSq(const Vector3 &value) {
@@ -34,6 +40,21 @@
 
 	Vector3 Scale(const Vector3 &value, float scalar) {
 		return { value.x * scalar, value.y * scalar, value.z * scalar };
+	}
+
+	Vector3 Lerp(const Vector3& from, const Vector3& to, float t) {
+		return {
+			from.x + (to.x - from.x) * t,
+			from.y + (to.y - from.y) * t,
+			from.z + (to.z - from.z) * t,
+		};
+	}
+
+	Quaternion MakeLocalRotation(float x, float y, float z) {
+		const Quaternion qx = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, x);
+		const Quaternion qy = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, y);
+		const Quaternion qz = MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, z);
+		return MyMath::Normalize(MyMath::Multiply(MyMath::Multiply(qx, qy), qz));
 	}
 
 	float Dot(const Vector3 &a, const Vector3 &b) {
@@ -188,28 +209,89 @@
 		Joint &joint = skeleton.joints[jointIndex];
 		joint.transform.translate = Add(joint.transform.translate, translation);
 	}
+
+	int32_t FindJointByExactName(const Skeleton& skeleton, const char* name) {
+		for (const Joint& joint : skeleton.joints) {
+			if (joint.name == name) {
+				return joint.index;
+			}
+		}
+		return -1;
+	}
+
+	Vector3 GetJointTranslation(const Skeleton& skeleton, const char* name) {
+		const int32_t jointIndex = FindJointByExactName(skeleton, name);
+		if (jointIndex < 0 || jointIndex >= static_cast<int32_t>(skeleton.joints.size())) {
+			return { 0.0f, 0.0f, 0.0f };
+		}
+		return skeleton.joints[jointIndex].transform.translate;
+	}
+
+	// vf-15c は手足の装甲が別メッシュの剛体モデルなので、関係するノードを
+	// 同じ支点で回転させて、ボーン親子付けと同じ追従を作る。
+	void RotateJointGroupAroundPivot(
+		Skeleton& skeleton,
+		std::initializer_list<const char*> jointNames,
+		const Vector3& pivot,
+		const Vector3& axis,
+		float angle) {
+		if (std::abs(angle) <= 0.0001f) {
+			return;
+		}
+
+		const Quaternion rotation = MyMath::MakeAxisAngle(axis, angle);
+		for (const char* name : jointNames) {
+			const int32_t jointIndex = FindJointByExactName(skeleton, name);
+			if (jointIndex < 0 || jointIndex >= static_cast<int32_t>(skeleton.joints.size())) {
+				continue;
+			}
+
+			Joint& joint = skeleton.joints[jointIndex];
+			const Vector3 offset = {
+				joint.transform.translate.x - pivot.x,
+				joint.transform.translate.y - pivot.y,
+				joint.transform.translate.z - pivot.z,
+			};
+			joint.transform.translate = Add(pivot, MyMath::RotateVector(offset, rotation));
+			joint.transform.rotate = MyMath::Normalize(MyMath::Multiply(rotation, joint.transform.rotate));
+		}
+	}
+
+	void TranslateJointGroup(Skeleton& skeleton, std::initializer_list<const char*> jointNames, const Vector3& translation) {
+		for (const char* name : jointNames) {
+			const int32_t jointIndex = FindJointByExactName(skeleton, name);
+			if (jointIndex < 0 || jointIndex >= static_cast<int32_t>(skeleton.joints.size())) {
+				continue;
+			}
+			skeleton.joints[jointIndex].transform.translate = Add(skeleton.joints[jointIndex].transform.translate, translation);
+		}
+	}
 }
 
 void Player::Initialize(const std::string &modelName) {
 	modelName_ = modelName;
-	
-	if (modelName.find("vf-15c") != std::string::npos) {
+	const bool isTransformPlayer = IsTransformPlayerModel();
+
+	if (modelName.find("vf-15c") != std::string::npos || isTransformPlayer) {
 		modelScale_ = { 0.08f, 0.08f, 0.08f }; // スケールを0.08に調整
 	} else {
 		modelScale_ = { 1.0f, 1.0f, 1.0f };
 	}
-	
-	// モデルマネージャに読み込みを指示
-	ModelManager::GetInstance()->LoadModel(modelName);
-	
-	const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
 
-	object_ = std::make_unique<Object3d>();
-	object_->Initialize(Object3dCommon::GetInstance());
-	object_->SetModel(modelName);
+	if (isTransformPlayer) {
+		InitializeTransformPlayerModel();
+	} else {
+		// モデルマネージャに読み込みを指示
+		ModelManager::GetInstance()->LoadModel(modelName);
+		const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
 
-	if (object_->GetModel()) {
-		object_->GetModel()->SetColor(usesNaturalScale ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 0.2f, 0.5f, 1.0f, 1.0f });
+		object_ = std::make_unique<Object3d>();
+		object_->Initialize(Object3dCommon::GetInstance());
+		object_->SetModel(modelName);
+
+		if (object_->GetModel()) {
+			object_->GetModel()->SetColor(usesNaturalScale ? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f } : Vector4{ 0.2f, 0.5f, 1.0f, 1.0f });
+		}
 	}
 	currentDrawScale_ = modelScale_;
 	targetDrawScale_ = modelScale_;
@@ -264,6 +346,7 @@ void Player::Initialize(const std::string &modelName) {
 	isGuarding_ = false;
 	guardBarrierPulse_ = 0.0f;
 	guardScale_ = 0.0f;
+	guardPoseWeight_ = 0.0f;
 
 	// アニメーションデータのロード
 	if (modelName.find("vf-15c") != std::string::npos) {
@@ -323,6 +406,7 @@ void Player::Initialize(const std::string &modelName) {
 }
 
 void Player::ChangeMode(PlayerMode newMode) {
+	const PlayerMode previousMode = currentMode_;
 	if (newMode != PlayerMode::Fighter) {
 		// ガウォーク／バトロイドへ変形した時点でファイター専用回避を終了する。
 		dodgeTimer_ = 0;
@@ -338,6 +422,10 @@ void Player::ChangeMode(PlayerMode newMode) {
 	}
 
     currentMode_ = newMode;
+    if (IsTransformPlayerModel() && previousMode != newMode) {
+        transformFromMode_ = previousMode;
+        transformModeBlend_ = 0.0f;
+    }
     const bool usesNaturalScale = UsesNaturalPlayerModelScale(modelName_);
     
     // 形態ごとの見た目の変更（スケールを変えて滑らかに変形させる）
@@ -356,6 +444,161 @@ void Player::ChangeMode(PlayerMode newMode) {
     }
 }
 
+bool Player::IsTransformPlayerModel() const {
+	return IsTransformPlayerModelName(modelName_);
+}
+
+void Player::InitializeTransformPlayerModel() {
+	ModelManager* modelManager = ModelManager::GetInstance();
+	const auto prepareBox = [&](const char* name, const Vector4& color) {
+		modelManager->CreateBoxModel(name);
+		if (Model* model = modelManager->FindModel(name)) {
+			model->SetTextureFilePath("resources/white1x1.png");
+			model->SetEnableLighting(true);
+			model->SetColor(color);
+		}
+	};
+	const auto prepareCylinder = [&](const char* name, const Vector4& color) {
+		modelManager->CreateCylinderModel(name, 12, 0.65f, 0.85f, 2.0f);
+		if (Model* model = modelManager->FindModel(name)) {
+			model->SetTextureFilePath("resources/white1x1.png");
+			model->SetEnableLighting(true);
+			model->SetColor(color);
+		}
+	};
+	prepareBox("TransformMechArmor", { 0.82f, 0.86f, 0.91f, 1.0f });
+	prepareBox("TransformMechFrame", { 0.06f, 0.08f, 0.12f, 1.0f });
+	prepareBox("TransformMechAccent", { 0.86f, 0.04f, 0.06f, 1.0f });
+	prepareBox("TransformMechVisor", { 0.03f, 0.90f, 0.72f, 1.0f });
+	prepareCylinder("TransformMechEngine", { 0.10f, 0.12f, 0.16f, 1.0f });
+
+	const auto pose = [](float x, float y, float z, float sx, float sy, float sz,
+		float rx = 0.0f, float ry = 0.0f, float rz = 0.0f) {
+		// 細身のヒロイックなシルエット。肩幅・胴の奥行きを絞り、脚と頭部までの高さを伸ばす。
+		return TransformPlayerPose{
+			{ x * 0.74f, y * 1.32f, z * 0.88f },
+			{ sx * 0.70f, sy * 1.12f, sz * 0.78f },
+			MakeLocalRotation(rx, ry, rz)
+		};
+	};
+	const auto makeObject = [](const char* modelName) {
+		auto object = std::make_unique<Object3d>();
+		object->Initialize(Object3dCommon::GetInstance());
+		object->SetModel(modelName);
+		return object;
+	};
+	const auto addPart = [&](const char* name, const char* modelName,
+		const TransformPlayerPose& fighter, const TransformPlayerPose& gerwalk, const TransformPlayerPose& battroid) {
+		TransformPlayerPart part;
+		part.name = name;
+		part.object = makeObject(modelName);
+		part.poses = { fighter, gerwalk, battroid };
+		transformParts_.push_back(std::move(part));
+	};
+
+	transformParts_.clear();
+	transformCore_.name = "Core";
+	transformCore_.object = makeObject("TransformMechFrame");
+	transformCore_.poses = {
+		pose(0.0f, 0.0f, 0.0f, 5.0f, 1.6f, 8.0f),
+		pose(0.0f, 3.8f, 0.0f, 3.8f, 1.6f, 4.8f),
+		pose(0.0f, 5.2f, 0.0f, 2.6f, 2.0f, 1.6f)
+	};
+	object_ = std::move(transformCore_.object);
+
+	// 胴体・頭部。画像の細身の白装甲、赤いセンターライン、緑色のバイザーを抽象化した意匠。
+	addPart("Chest", "TransformMechArmor", pose(0, 0.8f, 1.2f, 4.6f, 1.4f, 3.2f), pose(0, 5.0f, 0.6f, 4.2f, 1.8f, 3.0f), pose(0, 7.2f, 0.0f, 4.2f, 2.1f, 2.2f));
+	addPart("ChestAccent", "TransformMechAccent", pose(0, 1.0f, 3.4f, 0.65f, 0.65f, 2.0f), pose(0, 5.1f, 2.5f, 0.65f, 0.8f, 1.3f), pose(0, 7.4f, 1.9f, 0.65f, 1.0f, 0.25f));
+	addPart("Head", "TransformMechArmor", pose(0, 0.8f, 4.0f, 1.35f, 1.05f, 1.5f), pose(0, 6.9f, 1.6f, 1.35f, 1.15f, 1.4f), pose(0, 10.0f, 0.0f, 1.35f, 1.35f, 1.35f));
+	addPart("Visor", "TransformMechVisor", pose(0, 0.8f, 5.3f, 0.9f, 0.35f, 0.24f), pose(0, 6.9f, 2.95f, 0.9f, 0.35f, 0.24f), pose(0, 10.0f, 1.25f, 0.9f, 0.35f, 0.24f));
+	addPart("Crest", "TransformMechAccent", pose(0, 1.8f, 4.0f, 0.3f, 1.5f, 0.6f), pose(0, 8.2f, 1.6f, 0.3f, 1.5f, 0.6f), pose(0, 11.7f, 0.0f, 0.3f, 1.5f, 0.6f));
+
+	// 左右の腕。ファイターでは翼、ガウォークでは支持腕、人型では腕として展開する。
+	addPart("LeftShoulder", "TransformMechArmor", pose(-5.0f, 0.0f, 0.4f, 2.3f, 0.75f, 4.8f, 0, 0, -0.18f), pose(-4.6f, 5.4f, 0.2f, 2.1f, 1.4f, 2.8f, 0, 0, -0.4f), pose(-5.0f, 7.5f, 0.0f, 2.0f, 1.7f, 1.8f));
+	addPart("RightShoulder", "TransformMechArmor", pose(5.0f, 0.0f, 0.4f, 2.3f, 0.75f, 4.8f, 0, 0, 0.18f), pose(4.6f, 5.4f, 0.2f, 2.1f, 1.4f, 2.8f, 0, 0, 0.4f), pose(5.0f, 7.5f, 0.0f, 2.0f, 1.7f, 1.8f));
+	addPart("LeftForearm", "TransformMechFrame", pose(-7.2f, -0.3f, 0.4f, 1.1f, 0.75f, 5.5f, 0, 0, -0.18f), pose(-5.9f, 3.2f, 1.2f, 1.25f, 1.1f, 3.0f, -0.45f, 0, -0.22f), pose(-6.0f, 4.4f, 0.8f, 1.25f, 2.8f, 1.25f, 0, 0, -0.08f));
+	addPart("RightForearm", "TransformMechFrame", pose(7.2f, -0.3f, 0.4f, 1.1f, 0.75f, 5.5f, 0, 0, 0.18f), pose(5.9f, 3.2f, 1.2f, 1.25f, 1.1f, 3.0f, -0.45f, 0, 0.22f), pose(6.0f, 4.4f, 0.8f, 1.25f, 2.8f, 1.25f, 0, 0, 0.08f));
+	addPart("LeftHand", "TransformMechArmor", pose(-8.0f, -0.4f, 2.6f, 1.2f, 0.7f, 1.8f), pose(-6.4f, 2.2f, 2.5f, 1.2f, 0.8f, 1.3f), pose(-6.0f, 1.2f, 1.0f, 1.15f, 1.0f, 1.0f));
+	addPart("RightHand", "TransformMechArmor", pose(8.0f, -0.4f, 2.6f, 1.2f, 0.7f, 1.8f), pose(6.4f, 2.2f, 2.5f, 1.2f, 0.8f, 1.3f), pose(6.0f, 1.2f, 1.0f, 1.15f, 1.0f, 1.0f));
+
+	// 脚部はファイターでは機体後部へ収納、ガウォークを経由して人型の脚へ展開する。
+	addPart("LeftHip", "TransformMechArmor", pose(-2.5f, -0.5f, -3.0f, 2.0f, 1.1f, 4.0f, -0.35f), pose(-2.2f, 1.8f, -1.8f, 1.9f, 1.8f, 2.7f, -0.3f), pose(-2.4f, 3.8f, 0.0f, 1.8f, 1.8f, 1.8f));
+	addPart("RightHip", "TransformMechArmor", pose(2.5f, -0.5f, -3.0f, 2.0f, 1.1f, 4.0f, -0.35f), pose(2.2f, 1.8f, -1.8f, 1.9f, 1.8f, 2.7f, -0.3f), pose(2.4f, 3.8f, 0.0f, 1.8f, 1.8f, 1.8f));
+	addPart("LeftShin", "TransformMechArmor", pose(-2.5f, -0.6f, -6.2f, 1.6f, 0.9f, 3.6f, -0.25f), pose(-2.2f, -1.1f, -2.4f, 1.45f, 3.4f, 1.5f, -0.12f), pose(-2.4f, -1.2f, 0.3f, 1.5f, 4.0f, 1.65f));
+	addPart("RightShin", "TransformMechArmor", pose(2.5f, -0.6f, -6.2f, 1.6f, 0.9f, 3.6f, -0.25f), pose(2.2f, -1.1f, -2.4f, 1.45f, 3.4f, 1.5f, -0.12f), pose(2.4f, -1.2f, 0.3f, 1.5f, 4.0f, 1.65f));
+	addPart("LeftFoot", "TransformMechFrame", pose(-2.5f, -0.8f, -9.0f, 1.7f, 0.65f, 2.7f), pose(-2.2f, -4.4f, -0.8f, 1.8f, 0.7f, 2.7f), pose(-2.4f, -5.5f, 1.5f, 1.9f, 0.75f, 2.8f));
+	addPart("RightFoot", "TransformMechFrame", pose(2.5f, -0.8f, -9.0f, 1.7f, 0.65f, 2.7f), pose(2.2f, -4.4f, -0.8f, 1.8f, 0.7f, 2.7f), pose(2.4f, -5.5f, 1.5f, 1.9f, 0.75f, 2.8f));
+
+	// 背面ユニット、主翼、推進器で可変戦闘機らしいシルエットを作る。
+	addPart("LeftWing", "TransformMechArmor", pose(-7.0f, 0.0f, -1.5f, 4.8f, 0.35f, 5.0f, 0, 0, -0.15f), pose(-5.5f, 4.4f, -1.8f, 3.8f, 0.5f, 3.8f, 0, 0, -0.45f), pose(-4.1f, 6.0f, -2.6f, 1.2f, 2.0f, 3.6f, 0, 0, -0.24f));
+	addPart("RightWing", "TransformMechArmor", pose(7.0f, 0.0f, -1.5f, 4.8f, 0.35f, 5.0f, 0, 0, 0.15f), pose(5.5f, 4.4f, -1.8f, 3.8f, 0.5f, 3.8f, 0, 0, 0.45f), pose(4.1f, 6.0f, -2.6f, 1.2f, 2.0f, 3.6f, 0, 0, 0.24f));
+	addPart("LeftEngine", "TransformMechEngine", pose(-2.6f, 0.1f, -6.5f, 1.4f, 2.8f, 1.4f, 1.57f), pose(-2.7f, 3.4f, -4.0f, 1.4f, 2.8f, 1.4f, 0.55f), pose(-2.8f, 6.0f, -3.5f, 1.4f, 2.8f, 1.4f, 0.18f));
+	addPart("RightEngine", "TransformMechEngine", pose(2.6f, 0.1f, -6.5f, 1.4f, 2.8f, 1.4f, 1.57f), pose(2.7f, 3.4f, -4.0f, 1.4f, 2.8f, 1.4f, 0.55f), pose(2.8f, 6.0f, -3.5f, 1.4f, 2.8f, 1.4f, 0.18f));
+
+	// 可変戦闘機らしいディテール。大きな箱形の胴体を、コクピット、吸気口、装甲板、推進バックパックへ分割する。
+	addPart("CockpitCanopy", "TransformMechVisor", pose(0, 0.9f, 5.8f, 1.8f, 0.75f, 2.4f), pose(0, 6.8f, 3.5f, 1.6f, 0.8f, 1.8f), pose(0, 8.0f, 2.05f, 1.65f, 1.25f, 0.35f));
+	addPart("LeftIntake", "TransformMechFrame", pose(-2.5f, 0.4f, 2.4f, 1.15f, 0.8f, 2.6f), pose(-2.4f, 5.0f, 1.5f, 1.05f, 1.1f, 1.6f), pose(-2.55f, 7.0f, 1.45f, 1.0f, 1.1f, 0.45f));
+	addPart("RightIntake", "TransformMechFrame", pose(2.5f, 0.4f, 2.4f, 1.15f, 0.8f, 2.6f), pose(2.4f, 5.0f, 1.5f, 1.05f, 1.1f, 1.6f), pose(2.55f, 7.0f, 1.45f, 1.0f, 1.1f, 0.45f));
+	addPart("LeftShoulderPod", "TransformMechArmor", pose(-5.5f, 0.4f, -3.6f, 2.0f, 1.1f, 3.2f, 0, 0, -0.24f), pose(-5.0f, 6.4f, -1.5f, 2.0f, 1.6f, 2.0f, 0, 0, -0.32f), pose(-5.25f, 8.7f, -1.4f, 2.15f, 1.7f, 1.55f, 0, 0, -0.16f));
+	addPart("RightShoulderPod", "TransformMechArmor", pose(5.5f, 0.4f, -3.6f, 2.0f, 1.1f, 3.2f, 0, 0, 0.24f), pose(5.0f, 6.4f, -1.5f, 2.0f, 1.6f, 2.0f, 0, 0, 0.32f), pose(5.25f, 8.7f, -1.4f, 2.15f, 1.7f, 1.55f, 0, 0, 0.16f));
+	addPart("LeftBicep", "TransformMechAccent", pose(-6.2f, -0.2f, 1.3f, 0.55f, 0.6f, 3.0f), pose(-5.2f, 4.2f, 0.7f, 0.65f, 1.7f, 0.7f, -0.3f), pose(-5.75f, 5.9f, 0.45f, 0.65f, 1.65f, 0.7f));
+	addPart("RightBicep", "TransformMechAccent", pose(6.2f, -0.2f, 1.3f, 0.55f, 0.6f, 3.0f), pose(5.2f, 4.2f, 0.7f, 0.65f, 1.7f, 0.7f, -0.3f), pose(5.75f, 5.9f, 0.45f, 0.65f, 1.65f, 0.7f));
+	addPart("Waist", "TransformMechFrame", pose(0, -0.2f, -1.8f, 2.8f, 0.85f, 2.5f), pose(0, 3.0f, -0.8f, 2.7f, 1.15f, 1.9f), pose(0, 4.8f, 0, 2.35f, 0.85f, 1.55f));
+	addPart("FrontSkirt", "TransformMechArmor", pose(0, -0.7f, -3.9f, 2.6f, 0.7f, 1.3f), pose(0, 1.7f, 0.2f, 2.5f, 1.65f, 0.65f), pose(0, 3.9f, 1.5f, 2.7f, 1.55f, 0.5f));
+	addPart("LeftSideSkirt", "TransformMechArmor", pose(-3.6f, -0.6f, -3.4f, 0.8f, 0.8f, 2.5f), pose(-3.1f, 1.8f, -0.2f, 0.8f, 1.55f, 1.35f), pose(-3.45f, 3.8f, 0.4f, 0.8f, 1.75f, 1.0f));
+	addPart("RightSideSkirt", "TransformMechArmor", pose(3.6f, -0.6f, -3.4f, 0.8f, 0.8f, 2.5f), pose(3.1f, 1.8f, -0.2f, 0.8f, 1.55f, 1.35f), pose(3.45f, 3.8f, 0.4f, 0.8f, 1.75f, 1.0f));
+	addPart("LeftKneeArmor", "TransformMechAccent", pose(-2.5f, -0.7f, -7.0f, 1.2f, 0.55f, 1.5f), pose(-2.2f, 0.3f, -1.2f, 1.15f, 0.9f, 0.65f), pose(-2.4f, 0.4f, 1.7f, 1.25f, 1.2f, 0.5f));
+	addPart("RightKneeArmor", "TransformMechAccent", pose(2.5f, -0.7f, -7.0f, 1.2f, 0.55f, 1.5f), pose(2.2f, 0.3f, -1.2f, 1.15f, 0.9f, 0.65f), pose(2.4f, 0.4f, 1.7f, 1.25f, 1.2f, 0.5f));
+	addPart("LeftCalfFin", "TransformMechArmor", pose(-3.7f, -0.6f, -7.5f, 0.55f, 0.55f, 3.0f, 0, 0, -0.25f), pose(-3.4f, -1.5f, -2.7f, 0.5f, 2.2f, 1.2f, 0, 0, -0.18f), pose(-3.75f, -1.5f, -0.8f, 0.45f, 2.45f, 1.4f, 0, 0, -0.16f));
+	addPart("RightCalfFin", "TransformMechArmor", pose(3.7f, -0.6f, -7.5f, 0.55f, 0.55f, 3.0f, 0, 0, 0.25f), pose(3.4f, -1.5f, -2.7f, 0.5f, 2.2f, 1.2f, 0, 0, 0.18f), pose(3.75f, -1.5f, -0.8f, 0.45f, 2.45f, 1.4f, 0, 0, 0.16f));
+	addPart("LeftWingStripe", "TransformMechAccent", pose(-7.0f, 0.45f, 0.8f, 3.7f, 0.18f, 0.4f, 0, 0, -0.15f), pose(-5.6f, 4.8f, -0.2f, 2.6f, 0.2f, 0.35f, 0, 0, -0.45f), pose(-4.2f, 6.3f, -0.2f, 0.65f, 1.55f, 0.32f, 0, 0, -0.24f));
+	addPart("RightWingStripe", "TransformMechAccent", pose(7.0f, 0.45f, 0.8f, 3.7f, 0.18f, 0.4f, 0, 0, 0.15f), pose(5.6f, 4.8f, -0.2f, 2.6f, 0.2f, 0.35f, 0, 0, 0.45f), pose(4.2f, 6.3f, -0.2f, 0.65f, 1.55f, 0.32f, 0, 0, 0.24f));
+	addPart("LeftAntenna", "TransformMechAccent", pose(-0.8f, 2.2f, 3.7f, 0.18f, 2.0f, 0.18f, 0, 0, -0.12f), pose(-0.8f, 9.0f, 1.5f, 0.18f, 2.1f, 0.18f, 0, 0, -0.12f), pose(-0.8f, 12.4f, -0.1f, 0.18f, 2.3f, 0.18f, 0, 0, -0.12f));
+	addPart("RightAntenna", "TransformMechAccent", pose(0.8f, 2.2f, 3.7f, 0.18f, 2.0f, 0.18f, 0, 0, 0.12f), pose(0.8f, 9.0f, 1.5f, 0.18f, 2.1f, 0.18f, 0, 0, 0.12f), pose(0.8f, 12.4f, -0.1f, 0.18f, 2.3f, 0.18f, 0, 0, 0.12f));
+	addPart("LeftChestPlate", "TransformMechArmor", pose(-1.9f, 1.1f, 4.1f, 1.35f, 0.9f, 1.1f, 0, 0, -0.30f), pose(-1.7f, 6.0f, 2.8f, 1.3f, 1.1f, 0.55f, 0, 0, -0.30f), pose(-1.6f, 7.5f, 2.2f, 1.3f, 1.35f, 0.32f, 0, 0, -0.30f));
+	addPart("RightChestPlate", "TransformMechArmor", pose(1.9f, 1.1f, 4.1f, 1.35f, 0.9f, 1.1f, 0, 0, 0.30f), pose(1.7f, 6.0f, 2.8f, 1.3f, 1.1f, 0.55f, 0, 0, 0.30f), pose(1.6f, 7.5f, 2.2f, 1.3f, 1.35f, 0.32f, 0, 0, 0.30f));
+	addPart("LeftHelmetCheek", "TransformMechArmor", pose(-1.15f, 1.0f, 5.0f, 0.25f, 0.6f, 0.55f), pose(-1.15f, 7.0f, 2.7f, 0.25f, 0.65f, 0.5f), pose(-1.15f, 10.0f, 0.95f, 0.25f, 0.85f, 0.42f));
+	addPart("RightHelmetCheek", "TransformMechArmor", pose(1.15f, 1.0f, 5.0f, 0.25f, 0.6f, 0.55f), pose(1.15f, 7.0f, 2.7f, 0.25f, 0.65f, 0.5f), pose(1.15f, 10.0f, 0.95f, 0.25f, 0.85f, 0.42f));
+	addPart("LeftToeArmor", "TransformMechArmor", pose(-2.5f, -0.9f, -10.7f, 1.5f, 0.4f, 1.4f), pose(-2.2f, -4.5f, 1.1f, 1.55f, 0.45f, 1.25f), pose(-2.4f, -5.5f, 3.5f, 1.7f, 0.45f, 1.3f));
+	addPart("RightToeArmor", "TransformMechArmor", pose(2.5f, -0.9f, -10.7f, 1.5f, 0.4f, 1.4f), pose(2.2f, -4.5f, 1.1f, 1.55f, 0.45f, 1.25f), pose(2.4f, -5.5f, 3.5f, 1.7f, 0.45f, 1.3f));
+	addPart("RifleBody", "TransformMechFrame", pose(0.0f, -0.8f, 8.0f, 0.7f, 0.7f, 6.8f), pose(-6.5f, 1.0f, 3.4f, 0.7f, 3.8f, 0.7f, 0, 0, -0.22f), pose(-7.2f, -0.4f, 2.2f, 0.7f, 4.8f, 0.7f, 0, 0, -0.18f));
+	addPart("RifleBarrel", "TransformMechAccent", pose(0.0f, -0.8f, 13.6f, 0.26f, 0.26f, 1.6f), pose(-7.6f, -2.6f, 3.4f, 0.26f, 1.5f, 0.26f, 0, 0, -0.22f), pose(-8.6f, -5.0f, 2.2f, 0.26f, 1.7f, 0.26f, 0, 0, -0.18f));
+
+	transformFromMode_ = PlayerMode::Fighter;
+	transformModeBlend_ = 1.0f;
+}
+
+void Player::UpdateTransformPlayerModel() {
+	transformModeBlend_ = (std::min)(1.0f, transformModeBlend_ + 0.10f);
+	const int from = static_cast<int>(transformFromMode_);
+	const int to = static_cast<int>(currentMode_);
+	const auto updateObject = [&](Object3d* object, const std::string& name,
+		const std::array<TransformPlayerPose, 3>& poses) {
+		if (!object) return;
+		const TransformPlayerPose& fromPose = poses[from];
+		const TransformPlayerPose& toPose = poses[to];
+		Vector3 localPosition = Lerp(fromPose.translate, toPose.translate, transformModeBlend_);
+		const Vector3 localScale = Lerp(fromPose.scale, toPose.scale, transformModeBlend_);
+		const Quaternion localRotation = MyMath::Slerp(fromPose.rotate, toPose.rotate, transformModeBlend_);
+
+		// 前回追加したガード姿勢も、この新しいリグなしモデルで維持する。
+		if (name == "LeftForearm" || name == "LeftHand") {
+			localPosition.z += 2.8f * guardPoseWeight_;
+		}
+
+		const Vector3 worldPosition = Add(position_, MyMath::RotateVector(Scale(localPosition, modelScale_.x), quaternion_));
+		object->SetTranslate(worldPosition);
+		object->SetScale(Scale(localScale, modelScale_.x));
+		object->SetQuaternionRotate(MyMath::Normalize(MyMath::Multiply(localRotation, quaternion_)));
+		object->Update();
+	};
+
+	updateObject(object_.get(), transformCore_.name, transformCore_.poses);
+	for (TransformPlayerPart& part : transformParts_) {
+		updateObject(part.object.get(), part.name, part.poses);
+	}
+}
+
 void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const Vector3 *lockOnTarget) {
 	if (isDead_) return;
 
@@ -365,12 +608,6 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 	wallBoundaryWarningIntensity_ = 0.0f;
 	isNearCeilingBoundary_ = false;
 	ceilingBoundaryWarningIntensity_ = 0.0f;
-
-	if (Input::GetInstance()->PushKey(DIK_B)) {
-		PlayActionAnimation("Guard");
-	} else if (isPlayingAction_ && currentActionAnim_ && currentActionAnim_ == &actionAnimations_["Guard"]) {
-		StopActionAnimation(); // ガードキーを離したら元に戻す
-	}
 
 	if (lockOnTarget) {
 		UpdateLockOnRotation(*lockOnTarget);
@@ -384,10 +621,10 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 		Input *input = Input::GetInstance();
 		constexpr float kSpecialCameraKeySpeed = 0.025f;
 		constexpr float kSpecialCameraMouseSensitivity = 0.002f;
-		if (input->PushKey(DIK_LEFT)) specialAttackCameraYaw_ -= kSpecialCameraKeySpeed;
-		if (input->PushKey(DIK_RIGHT)) specialAttackCameraYaw_ += kSpecialCameraKeySpeed;
-		if (input->PushKey(DIK_UP)) specialAttackCameraPitch_ -= kSpecialCameraKeySpeed;
-		if (input->PushKey(DIK_DOWN)) specialAttackCameraPitch_ += kSpecialCameraKeySpeed;
+		if (input->PushAction(PlayerAction::TurnLeft)) specialAttackCameraYaw_ -= kSpecialCameraKeySpeed;
+		if (input->PushAction(PlayerAction::TurnRight)) specialAttackCameraYaw_ += kSpecialCameraKeySpeed;
+		if (input->PushAction(PlayerAction::PitchUp)) specialAttackCameraPitch_ -= kSpecialCameraKeySpeed;
+		if (input->PushAction(PlayerAction::PitchDown)) specialAttackCameraPitch_ += kSpecialCameraKeySpeed;
 		specialAttackCameraYaw_ += static_cast<float>(input->GetMouseDeltaX()) * kSpecialCameraMouseSensitivity;
 		specialAttackCameraPitch_ += static_cast<float>(input->GetMouseDeltaY()) * kSpecialCameraMouseSensitivity;
 		specialAttackCameraPitch_ = std::clamp(specialAttackCameraPitch_, -1.2f, 1.2f);
@@ -401,7 +638,7 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 		PlayerModeParams& p = modeParams_[static_cast<int>(currentMode_)];
 		float speedVal = Length(velocity_);
 		float speedRatio = speedVal / (std::max)(0.0001f, p.maxMoveSpeed);
-		bool isAccelerating = input->PushKey(DIK_W);
+		bool isAccelerating = input->PushAction(PlayerAction::MoveForward);
 		boosterEffect_->Update(position_, quaternion_, static_cast<int>(currentMode_), speedRatio, isAccelerating);
 	}
 
@@ -410,9 +647,15 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 
 void Player::UpdateModel() {
     auto input = Input::GetInstance();
-    if (input->TriggerKey(DIK_1)) ChangeMode(PlayerMode::Fighter);
-    if (input->TriggerKey(DIK_2)) ChangeMode(PlayerMode::Gerwalk);
-    if (input->TriggerKey(DIK_3)) ChangeMode(PlayerMode::Battroid);
+    if (input->TriggerAction(PlayerAction::TransformFighter)) ChangeMode(PlayerMode::Fighter);
+    if (input->TriggerAction(PlayerAction::TransformGerwalk)) ChangeMode(PlayerMode::Gerwalk);
+    if (input->TriggerAction(PlayerAction::TransformBattroid)) ChangeMode(PlayerMode::Battroid);
+
+    // Bキーでの既存ガード状態に、左腕のポーズ用ブレンド値を同期する。
+    // この時点で更新しておくことで、シールド・無敵判定・モデルの見た目が同じフレームで揃う。
+    isGuarding_ = input->PushAction(PlayerAction::Guard) && !isSpecialAttackActive_;
+    const float guardPoseTarget = isGuarding_ ? 1.0f : 0.0f;
+    guardPoseWeight_ += (guardPoseTarget - guardPoseWeight_) * 0.22f;
 
     // アニメーションの更新と適用
     if (animationData_.duration > 0.0f && !skeleton_.joints.empty()) {
@@ -479,6 +722,9 @@ void Player::UpdateModel() {
         if (!isAnimDebugActive_ && currentMode_ == PlayerMode::Battroid && isBattroidWalking_) {
             ApplyBattroidProceduralWalk();
         }
+        if (!isAnimDebugActive_ && guardPoseWeight_ > 0.001f) {
+            ApplyGuardPose(guardPoseWeight_);
+        }
         ::Update(skeleton_);
 
         if (enableSkinning_ && object_ && object_->GetModel()) {
@@ -497,7 +743,9 @@ void Player::UpdateModel() {
 		visualQuaternion = MyMath::Normalize(MyMath::Multiply(
 			quaternion_, MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, rollAngle)));
 	}
-    if (object_) {
+    if (IsTransformPlayerModel()) {
+		UpdateTransformPlayerModel();
+    } else if (object_) {
 	    object_->SetScale(currentDrawScale_);
 	    object_->SetTranslate(position_);
 	    object_->SetQuaternionRotate(visualQuaternion);
@@ -505,13 +753,11 @@ void Player::UpdateModel() {
     }
 
 	// Bキーを押している間だけガードを展開する。
-	const bool guardInput = input->PushKey(DIK_B);
-	isGuarding_ = guardInput && !isSpecialAttackActive_;
 	const float targetGuardScale = isGuarding_ ? 1.0f : 0.0f;
 	guardScale_ += (targetGuardScale - guardScale_) * 0.25f;
 
 	// シールドが背景に溶けても状態を認識できるよう、ガード中は機体を青く発光させる。
-	if (object_ && object_->GetModel()) {
+	if (object_ && object_->GetModel() && !IsTransformPlayerModel()) {
 		const Vector4 normalColor = UsesNaturalPlayerModelScale(modelName_)
 			? Vector4{ 1.0f, 1.0f, 1.0f, 1.0f }
 			: Vector4{ 0.2f, 0.5f, 1.0f, 1.0f };
@@ -630,9 +876,68 @@ void Player::ApplyBattroidProceduralWalk() {
 	AddJointLocalRotation(skeleton_, "FootRear.001", { 1.0f, 0.0f, 0.0f }, footSwing * 0.7f);
 }
 
+void Player::ApplyGuardPose(float blendWeight) {
+	// このモデルでは .001 側がゲーム画面の右腕だったため、左腕の実体である
+	// 非 .001 側を操作する。各部は独立した剛体メッシュなので、手首だけを
+	// 動かすのではなく、肩→肘→手首の順に支点回転させる。
+	const float weight = std::clamp(blendWeight, 0.0f, 1.0f);
+	const std::initializer_list<const char*> kLeftArm = {
+		"Shoulder_29", "ShoulderJoint1_28", "UpperArm_30", "Elbow_21", "Forearm_22", "Hand_23",
+		"Cube.040_61", "Cube.021_75", "Cube.017_74", "Cube.039_78", "Cube.013_51",
+		"Cube.018_56", "Cube.015_55", "Cube.022_57", "Cube.001_52", "Cube.042_79",
+		"Cube.020_66", "Cube.041_70", "Cube.006_3", "Cube.016_65", "Cube.038_69",
+		"Cube.012_50", "Cube.019_95",
+	};
+	const std::initializer_list<const char*> kLeftElbowToHand = {
+		"Elbow_21", "Forearm_22", "Hand_23", "Cube.040_61", "Cube.021_75", "Cube.017_74",
+		"Cube.039_78", "Cube.013_51", "Cube.018_56", "Cube.015_55", "Cube.022_57",
+		"Cube.001_52", "Cube.042_79", "Cube.020_66", "Cube.041_70", "Cube.006_3",
+		"Cube.016_65", "Cube.038_69", "Cube.012_50", "Cube.019_95",
+	};
+	const std::initializer_list<const char*> kLeftHand = {
+		"Hand_23", "Cube.040_61", "Cube.021_75", "Cube.017_74", "Cube.039_78", "Cube.013_51",
+		"Cube.018_56", "Cube.015_55", "Cube.022_57", "Cube.001_52", "Cube.042_79",
+		"Cube.020_66", "Cube.041_70", "Cube.006_3", "Cube.016_65", "Cube.038_69",
+		"Cube.012_50", "Cube.019_95",
+	};
+	const std::initializer_list<const char*> kRightHandWeapon = {
+		"GunGrip_100", "BarrelBack_98", "barrelFront_99",
+	};
+
+	// マクロスΔスクランブル風のバトロイドガード。モデルの前方は -Z。
+	// 左上腕を前方かつ内側へ入れ、肘を大きく畳んで前腕をコクピット前に
+	// 立てる。銃身はソース内で独立ノードになっているので、右手へ固定する。
+	// 右手の装備は左腕ガードの回転対象に入れない。
+	const Vector3 rightHandRest = GetJointTranslation(skeleton_, "Hand.001_46");
+	const Vector3 gunGripRest = GetJointTranslation(skeleton_, "GunGrip_100");
+	const Vector3 weaponAttachOffset = {
+		(rightHandRest.x - gunGripRest.x) * weight,
+		(rightHandRest.y - gunGripRest.y) * weight,
+		(rightHandRest.z - gunGripRest.z) * weight,
+	};
+	TranslateJointGroup(skeleton_, kRightHandWeapon, weaponAttachOffset);
+
+	const Vector3 shoulderPivot = GetJointTranslation(skeleton_, "Shoulder_29");
+	RotateJointGroupAroundPivot(skeleton_, kLeftArm, shoulderPivot, { 1.0f, 0.0f, 0.0f }, 0.42f * weight);
+	RotateJointGroupAroundPivot(skeleton_, kLeftArm, shoulderPivot, { 0.0f, 1.0f, 0.0f }, 0.32f * weight);
+	RotateJointGroupAroundPivot(skeleton_, kLeftArm, shoulderPivot, { 0.0f, 0.0f, 1.0f }, 0.65f * weight);
+
+	const Vector3 elbowPivot = GetJointTranslation(skeleton_, "Elbow_21");
+	RotateJointGroupAroundPivot(skeleton_, kLeftElbowToHand, elbowPivot, { 1.0f, 0.0f, 0.0f }, 1.34f * weight);
+
+	const Vector3 wristPivot = GetJointTranslation(skeleton_, "Hand_23");
+	RotateJointGroupAroundPivot(skeleton_, kLeftHand, wristPivot, { 1.0f, 0.0f, 0.0f }, -0.20f * weight);
+	TranslateJointGroup(skeleton_, kLeftHand, { 0.0f, -0.45f * weight, -0.25f * weight });
+}
+
 void Player::Draw(Camera* camera) {
 	if (object_) {
 		object_->Draw();
+	}
+	for (const TransformPlayerPart& part : transformParts_) {
+		if (part.object) {
+			part.object->Draw();
+		}
 	}
 	if (guardScale_ > 0.01f) {
 		Object3dCommon::GetInstance()->SetAlphaBlendDrawSettings();
@@ -653,6 +958,11 @@ void Player::Draw(Camera* camera) {
 Vector3 Player::GetWorldHalfExtents() const {
 	if (!object_ || !object_->GetModel()) {
 		return { 0.2f, 0.2f, 0.2f };
+	}
+	if (IsTransformPlayerModel()) {
+		if (currentMode_ == PlayerMode::Fighter) return { 0.72f, 0.20f, 0.88f };
+		if (currentMode_ == PlayerMode::Gerwalk) return { 0.58f, 0.65f, 0.52f };
+		return { 0.42f, 1.12f, 0.34f };
 	}
 
 	if (modelName_.find("vf-15c") != std::string::npos) {
@@ -817,9 +1127,9 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	if (currentMode_ == PlayerMode::Fighter) {
 		auto input = Input::GetInstance();
 		float rollAngle = 0.0f;
-		if (input->PushKey(DIK_A) || input->PushKey(DIK_LEFT)) {
+		if (input->PushAction(PlayerAction::DodgeLeft) || input->PushAction(PlayerAction::TurnLeft)) {
 			rollAngle = 0.35f;
-		} else if (input->PushKey(DIK_D) || input->PushKey(DIK_RIGHT)) {
+		} else if (input->PushAction(PlayerAction::DodgeRight) || input->PushAction(PlayerAction::TurnRight)) {
 			rollAngle = -0.35f;
 		}
 		
@@ -891,6 +1201,8 @@ void Player::OnCollision() {
 	if (object_) {
 		object_.reset();
 	}
+	transformParts_.clear();
+	transformCore_ = {};
 	if (boosterEffect_) {
 		boosterEffect_.reset();
 	}
@@ -908,17 +1220,17 @@ void Player::TakeDamage(int damage) {
 void Player::Move(bool rotationLocked) {
 	auto input = Input::GetInstance();
 
-    if (input->TriggerKey(DIK_1)) ChangeMode(PlayerMode::Fighter);
-    if (input->TriggerKey(DIK_2)) ChangeMode(PlayerMode::Gerwalk);
-    if (input->TriggerKey(DIK_3)) ChangeMode(PlayerMode::Battroid);
+    if (input->TriggerAction(PlayerAction::TransformFighter)) ChangeMode(PlayerMode::Fighter);
+    if (input->TriggerAction(PlayerAction::TransformGerwalk)) ChangeMode(PlayerMode::Gerwalk);
+    if (input->TriggerAction(PlayerAction::TransformBattroid)) ChangeMode(PlayerMode::Battroid);
 
     PlayerModeParams& p = modeParams_[static_cast<int>(currentMode_)];
 
-	const bool moveForward = input->PushKey(DIK_W);
-	const bool moveBackward = input->PushKey(DIK_S);
-	const bool moveUp = input->PushKey(DIK_SPACE);
-	const bool moveDown = input->PushKey(DIK_LSHIFT);
-	const bool guardInput = input->PushKey(DIK_B);
+	const bool moveForward = input->PushAction(PlayerAction::MoveForward);
+	const bool moveBackward = input->PushAction(PlayerAction::MoveBackward);
+	const bool moveUp = input->PushAction(PlayerAction::MoveUp);
+	const bool moveDown = input->PushAction(PlayerAction::MoveDown);
+	const bool guardInput = input->PushAction(PlayerAction::Guard);
 	isGuarding_ = guardInput;
 	isBattroidWalking_ = currentMode_ == PlayerMode::Battroid && (moveForward || moveBackward);
 	if (!isBattroidWalking_) {
@@ -933,35 +1245,35 @@ void Player::Move(bool rotationLocked) {
 
 	// 回避はファイター形態専用。TriggerKeyなので1入力につき1回だけ回転する。
 	if (currentMode_ == PlayerMode::Fighter && dodgeCooldownTimer_ <= 0 && dodgeTimer_ <= 0) {
-		if (input->TriggerKey(DIK_A)) {
+		if (input->TriggerAction(PlayerAction::DodgeLeft)) {
 			dodgeTimer_ = kDodgeDurationFrames;
 			dodgeDirection_ = -1.0f;
-		} else if (input->TriggerKey(DIK_D)) {
+		} else if (input->TriggerAction(PlayerAction::DodgeRight)) {
 			dodgeTimer_ = kDodgeDurationFrames;
 			dodgeDirection_ = 1.0f;
 		}
 	}
 
 	// 姿勢制御（共通）
-	if (!rotationLocked && input->PushKey(DIK_UP)) {
+	if (!rotationLocked && input->PushAction(PlayerAction::PitchUp)) {
 		if (usesDetachedCameraPitch) {
 			cameraPitchDelta -= p.pitchSpeed;
 		} else {
 			pitch -= p.pitchSpeed;
 		}
 	}
-	if (!rotationLocked && input->PushKey(DIK_DOWN)) {
+	if (!rotationLocked && input->PushAction(PlayerAction::PitchDown)) {
 		if (usesDetachedCameraPitch) {
 			cameraPitchDelta += p.pitchSpeed;
 		} else {
 			pitch += p.pitchSpeed;
 		}
 	}
-	if (!rotationLocked && input->PushKey(DIK_RIGHT)) yaw += p.yawSpeed;
-	if (!rotationLocked && input->PushKey(DIK_LEFT)) yaw -= p.yawSpeed;
+	if (!rotationLocked && input->PushAction(PlayerAction::TurnRight)) yaw += p.yawSpeed;
+	if (!rotationLocked && input->PushAction(PlayerAction::TurnLeft)) yaw -= p.yawSpeed;
 	if (!usesDetachedCameraPitch) {
-		if (!rotationLocked && input->PushKey(DIK_E)) roll -= p.rollSpeed;
-		if (!rotationLocked && input->PushKey(DIK_Q)) roll += p.rollSpeed;
+		if (!rotationLocked && input->PushAction(PlayerAction::RollRight)) roll -= p.rollSpeed;
+		if (!rotationLocked && input->PushAction(PlayerAction::RollLeft)) roll += p.rollSpeed;
 	}
 
 	// マウス入力による回転（視点・機体回転）
@@ -1074,8 +1386,8 @@ void Player::Move(bool rotationLocked) {
 		
 		if (currentMode_ == PlayerMode::Fighter) {
 			auto input = Input::GetInstance();
-			bool mForward = input->PushKey(DIK_W);
-			bool mBackward = input->PushKey(DIK_S);
+			bool mForward = input->PushAction(PlayerAction::MoveForward);
+			bool mBackward = input->PushAction(PlayerAction::MoveBackward);
 			
 			if (mForward) {
 				currentMaxSpeed *= 3.0f;
@@ -1117,7 +1429,7 @@ void Player::Move(bool rotationLocked) {
 	}
 
 	// 近接攻撃（Vキー）
-	if (p.canMelee && !isMeleeAttacking_ && input->TriggerKey(DIK_V)) {
+	if (p.canMelee && !isMeleeAttacking_ && input->TriggerAction(PlayerAction::Melee)) {
 		isMeleeAttacking_ = true;
 		meleeTimer_ = 30; // 30フレーム持続
 		PlayActionAnimation("Melee"); // アニメーションがあれば再生
@@ -1250,7 +1562,7 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 			float maxTerrainY = -99999.0f;
 			bool foundTerrain = false;
 			for (const auto& tri : triangles) {
-				if (tri.normal.y > 0.15f) {
+				if (std::abs(tri.normal.y) > 0.15f) {
 					float triY = 0.0f;
 					if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], position_.x, position_.z, triY)) {
 						if (triY > maxTerrainY) {
@@ -1307,13 +1619,14 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 					Vector3 pushVector;
 					if (MyMath::IsCollision(playerSphere, tri, pushVector)) {
 						// 地面（上向きの面）との衝突で、裏側に回り込んで下に押し下げられるのを防止
-						if (tri.normal.y > 0.3f) {
+						if (std::abs(tri.normal.y) > 0.3f) {
 							float pushLen = MyMath::Length(pushVector);
 							if (pushLen < 0.05f) pushLen = 0.05f;
-							pushVector = MyMath::Multiply(pushLen, tri.normal);
-							if (pushVector.y < 0.0f) {
-								pushVector.y = -pushVector.y;
+							Vector3 groundNormal = tri.normal;
+							if (groundNormal.y < 0.0f) {
+								groundNormal = MyMath::Multiply(-1.0f, groundNormal);
 							}
+							pushVector = MyMath::Multiply(pushLen, groundNormal);
 						}
 
 						position_.x += pushVector.x;
@@ -1525,5 +1838,6 @@ OBB Player::GetMeleeHitbox() const {
 	obb.center.z += forward.z * 6.0f;
 	return obb;
 }
+
 
 

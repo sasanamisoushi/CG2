@@ -1,6 +1,7 @@
 #include "Obstacle.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
+#include <cmath>
 #include <vector>
 
 void Obstacle::Initialize(const std::string& modelName, const Vector3& position, const Vector3& rotation, const Vector3& scale) {
@@ -126,27 +127,62 @@ void Obstacle::UpdateMeshCollider() {
         return MyMath::Transform(v, worldMatrix);
     };
 
+    // OBJ は左手系へ変換する際に X 座標だけを反転しているため、面の頂点順から
+    // 再計算した法線がモデル法線と逆向きになる場合がある。接触判定用法線を
+    // 頂点法線と同じ半球へ揃え、地表を裏面として扱わないようにする。
+    auto alignNormalToVertexNormals = [&](Triangle& triangle, const VertexData& v0, const VertexData& v1, const VertexData& v2) {
+        Vector3 localNormal = {
+            v0.normal.x + v1.normal.x + v2.normal.x,
+            v0.normal.y + v1.normal.y + v2.normal.y,
+            v0.normal.z + v1.normal.z + v2.normal.z
+        };
+        if (MyMath::Length(localNormal) <= 0.00001f) {
+            return;
+        }
+
+        const float safeScaleX = std::abs(scale_.x) > 0.00001f ? scale_.x : 1.0f;
+        const float safeScaleY = std::abs(scale_.y) > 0.00001f ? scale_.y : 1.0f;
+        const float safeScaleZ = std::abs(scale_.z) > 0.00001f ? scale_.z : 1.0f;
+        localNormal = {
+            localNormal.x / safeScaleX,
+            localNormal.y / safeScaleY,
+            localNormal.z / safeScaleZ
+        };
+        const Vector3 worldVertexNormal = MyMath::Normalize(MyMath::Transform(localNormal, rotMat));
+        if (MyMath::Dot(triangle.normal, worldVertexNormal) < 0.0f) {
+            triangle.normal = MyMath::Multiply(-1.0f, triangle.normal);
+        }
+    };
+
     if (!modelData.indices.empty()) {
         for (size_t i = 0; i < modelData.indices.size(); i += 3) {
+            const VertexData& v0 = modelData.vertices[modelData.indices[i]];
+            const VertexData& v1 = modelData.vertices[modelData.indices[i + 1]];
+            const VertexData& v2 = modelData.vertices[modelData.indices[i + 2]];
             Triangle t;
-            t.p[0] = getTransformedPos(modelData.vertices[modelData.indices[i]].position);
-            t.p[1] = getTransformedPos(modelData.vertices[modelData.indices[i+1]].position);
-            t.p[2] = getTransformedPos(modelData.vertices[modelData.indices[i+2]].position);
-            Vector3 v1 = MyMath::Subtract(t.p[1], t.p[0]);
-            Vector3 v2 = MyMath::Subtract(t.p[2], t.p[0]);
-            t.normal = MyMath::Normalize(MyMath::Cross(v1, v2));
+            t.p[0] = getTransformedPos(v0.position);
+            t.p[1] = getTransformedPos(v1.position);
+            t.p[2] = getTransformedPos(v2.position);
+            Vector3 edge1 = MyMath::Subtract(t.p[1], t.p[0]);
+            Vector3 edge2 = MyMath::Subtract(t.p[2], t.p[0]);
+            t.normal = MyMath::Normalize(MyMath::Cross(edge1, edge2));
+            alignNormalToVertexNormals(t, v0, v1, v2);
             worldTriangles_.push_back(t);
         }
     } else {
         for (size_t i = 0; i < modelData.vertices.size(); i += 3) {
             if (i + 2 >= modelData.vertices.size()) break;
+            const VertexData& vertex0 = modelData.vertices[i];
+            const VertexData& vertex1 = modelData.vertices[i + 1];
+            const VertexData& vertex2 = modelData.vertices[i + 2];
             Triangle t;
-            t.p[0] = getTransformedPos(modelData.vertices[i].position);
-            t.p[1] = getTransformedPos(modelData.vertices[i+1].position);
-            t.p[2] = getTransformedPos(modelData.vertices[i+2].position);
-            Vector3 v1 = MyMath::Subtract(t.p[1], t.p[0]);
-            Vector3 v2 = MyMath::Subtract(t.p[2], t.p[0]);
-            t.normal = MyMath::Normalize(MyMath::Cross(v1, v2));
+            t.p[0] = getTransformedPos(vertex0.position);
+            t.p[1] = getTransformedPos(vertex1.position);
+            t.p[2] = getTransformedPos(vertex2.position);
+            Vector3 edge1 = MyMath::Subtract(t.p[1], t.p[0]);
+            Vector3 edge2 = MyMath::Subtract(t.p[2], t.p[0]);
+            t.normal = MyMath::Normalize(MyMath::Cross(edge1, edge2));
+            alignNormalToVertexNormals(t, vertex0, vertex1, vertex2);
             worldTriangles_.push_back(t);
         }
     }

@@ -1,6 +1,26 @@
-#include "MissileManager.h"
+﻿#include "MissileManager.h"
 #include "Game/enemy/Enemy.h"
 #include "Game/obstacle/Obstacle.h" // 追加
+#include <cmath>
+
+namespace {
+    bool GetTriangleY(const Vector3& p0, const Vector3& p1, const Vector3& p2, float x, float z, float& outY) {
+        const float denom = (p1.z - p2.z) * (p0.x - p2.x) + (p2.x - p1.x) * (p0.z - p2.z);
+        if (std::abs(denom) < 0.00001f) {
+            return false;
+        }
+
+        const float w0 = ((p1.z - p2.z) * (x - p2.x) + (p2.x - p1.x) * (z - p2.z)) / denom;
+        const float w1 = ((p2.z - p0.z) * (x - p2.x) + (p0.x - p2.x) * (z - p2.z)) / denom;
+        const float w2 = 1.0f - w0 - w1;
+        if (w0 < -0.01f || w1 < -0.01f || w2 < -0.01f) {
+            return false;
+        }
+
+        outY = w0 * p0.y + w1 * p1.y + w2 * p2.y;
+        return true;
+    }
+}
 
 void MissileManager::Initialize(ParticleManager* particleManager) {
 	particleManager_ = particleManager;
@@ -11,7 +31,7 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
     for (auto it = missiles_.begin(); it != missiles_.end(); ) {
         Missile *missile = it->get();
 
-        Vector3 mPos = missile->GetPosition();
+        const Vector3 previousPos = missile->GetPosition();
 
         // ==========================================
         // 2. ミサイルの更新（自身が保持するターゲットに向かう）
@@ -21,7 +41,7 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
         // ==========================================
         // 3. 移動後の最新座標で当たり判定
         // ==========================================
-        mPos = missile->GetPosition();
+        Vector3 mPos = missile->GetPosition();
 
         // 3-1. 障害物との当たり判定
         bool hitObstacle = false;
@@ -30,11 +50,11 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
         bulletSphere.radius = missile->GetCollisionRadius();
 
         for (const auto& obstacle : obstacles) {
-            if (obstacle->IsStageBounds()) {
+            if (!obstacle || obstacle->IsStageBounds() || !obstacle->IsCollisionEnabled()) {
                 continue;
             }
 
-            if (obstacle->IsUseMeshCollider()) {
+            OBB obsOBB = obstacle->GetOBB(); if (!MyMath::IsCollision(bulletSphere, obsOBB)) { continue; } if (obstacle->IsUseMeshCollider()) {
                 const std::vector<Triangle>& triangles = obstacle->GetWorldTriangles();
                 Vector3 pushVector;
                 for (const auto& tri : triangles) {
@@ -61,6 +81,46 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                     float maxZ = tri.p[0].z;
                     if (tri.p[1].z > maxZ) maxZ = tri.p[1].z;
                     if (tri.p[2].z > maxZ) maxZ = tri.p[2].z;
+
+                    // 地形を1フレームでまたいでも、移動後の弾が地表より下なら確実に命中扱いにする。
+                    // OBJの面方向には依存せず、弾の下面と直下の地表高度を比較する。
+                    if (std::abs(tri.normal.y) > 0.1f) {
+                        float terrainY = 0.0f;
+                        const bool endInsideXZ =
+                            mPos.x >= minX - 0.01f && mPos.x <= maxX + 0.01f &&
+                            mPos.z >= minZ - 0.01f && mPos.z <= maxZ + 0.01f;
+                        bool touchedGround = false;
+                        if (endInsideXZ &&
+                            GetTriangleY(tri.p[0], tri.p[1], tri.p[2], mPos.x, mPos.z, terrainY) &&
+                            mPos.y - bulletSphere.radius <= terrainY) {
+                            touchedGround = true;
+                        }
+
+                        // 高速移動で終点が別の三角形へ出る場合も、軌跡中央で地表を横切っていないか確認する。
+                        const Vector3 midPos = {
+                            (previousPos.x + mPos.x) * 0.5f,
+                            (previousPos.y + mPos.y) * 0.5f,
+                            (previousPos.z + mPos.z) * 0.5f
+                        };
+                        const bool midInsideXZ =
+                            midPos.x >= minX - 0.01f && midPos.x <= maxX + 0.01f &&
+                            midPos.z >= minZ - 0.01f && midPos.z <= maxZ + 0.01f;
+                        if (!touchedGround && midInsideXZ &&
+                            GetTriangleY(tri.p[0], tri.p[1], tri.p[2], midPos.x, midPos.z, terrainY) &&
+                            midPos.y - bulletSphere.radius <= terrainY &&
+                            previousPos.y + bulletSphere.radius >= terrainY) {
+                            touchedGround = true;
+                        }
+
+                        if (touchedGround) {
+                            missile->ResolveGroundContact(terrainY, bulletSphere.radius + 0.15f);
+                            mPos = missile->GetPosition();
+                            bulletSphere.center = mPos;
+                        }
+
+                        // 上向きの地形面は消滅判定に回さず、上の回避処理で地表をなぞらせる。
+                        continue;
+                    }
 
                     if (bulletSphere.center.x + bulletSphere.radius < minX || bulletSphere.center.x - bulletSphere.radius > maxX ||
                         bulletSphere.center.y + bulletSphere.radius < minY || bulletSphere.center.y - bulletSphere.radius > maxY ||
@@ -135,3 +195,4 @@ void MissileManager::Shoot(const Vector3 &position, const Vector3 &velocity, Mis
 
 	missiles_.push_back(std::move(newMissile));
 }
+

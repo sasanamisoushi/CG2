@@ -1,4 +1,4 @@
-#include "GamePlayScene.h"
+﻿#include "GamePlayScene.h"
 #include "SimulationManager.h"
 #include "MissilePresetManager.h"
 #include "LockOnManager.h"
@@ -70,12 +70,12 @@ bool GamePlayScene::TryConsumeAmmo(MissileType type) {
 void GamePlayScene::UpdateReload() {
 	if (!player_ || player_->IsDead()) return;
 	Input *input = Input::GetInstance();
-	if (!isNormalReloading_ && input->TriggerKey(DIK_F) &&
+	if (!isNormalReloading_ && input->TriggerAction(PlayerAction::ReloadNormal) &&
 		normalAmmoInMagazine_ < kNormalMagazineCapacity && normalAmmoReserve_ > 0) {
 		isNormalReloading_ = true;
 		normalReloadFrame_ = 0;
 	}
-	if (!isHomingReloading_ && input->TriggerKey(DIK_G) &&
+	if (!isHomingReloading_ && input->TriggerAction(PlayerAction::ReloadHoming) &&
 		homingAmmoInMagazine_ < kHomingMagazineCapacity && homingAmmoReserve_ > 0) {
 		isHomingReloading_ = true;
 		homingReloadFrame_ = 0;
@@ -137,7 +137,6 @@ void GamePlayScene::UpdateAmmoPickups() {
 	}
 }
 
-
 void GamePlayScene::Initialize() {
 
 	//鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｫ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・｡鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｷ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ
@@ -170,9 +169,11 @@ void GamePlayScene::Initialize() {
 	missileLockOnReticleSprite_->SetAnchorPoint({ 0.5f, 0.5f });
 
 	TextureManager::GetInstance()->LoadTexture("resources/multi_lock_marker.png");
-	multiLockMarkerSprite_ = std::make_unique<Sprite>();
-	multiLockMarkerSprite_->Initialize(SpriteCommon::GetInstance(), "resources/multi_lock_marker.png");
-	multiLockMarkerSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+	for (auto& markerSprite : multiLockMarkerSprites_) {
+		markerSprite = std::make_unique<Sprite>();
+		markerSprite->Initialize(SpriteCommon::GetInstance(), "resources/multi_lock_marker.png");
+		markerSprite->SetAnchorPoint({ 0.5f, 0.5f });
+	}
 
 	TextureManager::GetInstance()->LoadTexture("resources/white1x1.png");
 	spGaugeBackgroundSprite_ = std::make_unique<Sprite>();
@@ -181,6 +182,12 @@ void GamePlayScene::Initialize() {
 	spGaugeFillSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	spGaugeCostMarkerSprite_ = std::make_unique<Sprite>();
 	spGaugeCostMarkerSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	songGaugeBackgroundSprite_ = std::make_unique<Sprite>();
+	songGaugeBackgroundSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	songGaugeFillSprite_ = std::make_unique<Sprite>();
+	songGaugeFillSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	songGaugeStateSprite_ = std::make_unique<Sprite>();
+	songGaugeStateSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 
 	const char *hudTexturePaths[] = {
 		"resources/hud_panel_frame.png",
@@ -242,6 +249,9 @@ void GamePlayScene::Initialize() {
 	spGauge_ = 100.0f;
 	isSpecialAttackActive_ = false;
 	specialAttackFrame_ = 0;
+	songGauge_ = 100.0f;
+	isSongActive_ = false;
+	songFrame_ = 0;
 	normalAmmoInMagazine_ = kNormalMagazineCapacity;
 	normalAmmoReserve_ = 90;
 	homingAmmoInMagazine_ = kHomingMagazineCapacity;
@@ -771,24 +781,20 @@ void GamePlayScene::Update() {
 	// =========================================================
 	// 鬩幢ｽ｢隴取得・ｽ・ｸ陷ｷ・ｶ・取坩ﾎ碑ｭ主・讓溘・蜿悶渚繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢隴乗・・ｽ・ｼ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ繝ｻ・ｶ郢晢ｽｻ繝ｻ・｣鬯ｮ・ｫ陷肴ｺｽ・ｧ竏壹・繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
 	// =========================================================
-	try {
-		// 鬮｣逧ｮ逕･繝ｻ・･郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE "scene.json" 鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｴ鬮ｫ・ｴ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬮ｫ・ｴ鬲・ｼ夲ｽｽ・ｽ繝ｻ・･鬮ｫ・ｴ陟托ｽｱ繝ｻ繝ｻ繝ｻ陜｣・､繝ｻ・ｹ隴擾ｽｶ郢晢ｽｻ驍ｵ・ｺ髢ｾ・･繝ｻ・ｹ隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩搾ｽｵ繝ｻ・ｺ髯ｷ・ｷ繝ｻ・ｶ郢晢ｽｻ郢晢ｽｻ
-		auto currentTime = std::filesystem::last_write_time("resources/scene.json");
-
-		// 鬩幢ｽ｢繝ｻ・ｧ驛｢・ｧ郢晢ｽｻ繝ｻ・ｼ繝ｻ・ｰ鬯ｮ・ｫ繝ｻ・ｪ髯句ｸ吶・繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｯ・ｶ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｴ鬲・ｼ夲ｽｽ・ｽ繝ｻ・･鬮ｫ・ｴ陟托ｽｱ繝ｻ繝ｻ繝ｻ髢ｧ・ｲ繝ｻ・ｹ繝ｻ・ｧ鬩怜遜・ｽ・ｫ郢晢ｽｻ郢ｧ螂・ｽｽ・ｭ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｰ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ鬯ｲ繝ｻ・ｼ螟ｲ・ｽ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ髫ｰ魃会ｽｽ・ｪlender鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮｣蛹・ｽｽ・ｳ鬯ｯ繝ｻ・､・ｧ繝ｻ・ｶ隶呵ｶ｣・ｽ・ｸ繝ｻ・ｺ髯懶ｽ｣繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ髫ｴ蜿門ｾ励・・ｽ繝ｻ・ｭ髯区ｻゑｽｽ・･郢晢ｽｻ郢晢ｽｻ繝ｻ・ｹ繝ｻ・ｧ髯溷供・ｨ・ｯ髯橸ｽｺ鬩幢ｽ｢繝ｻ・ｧ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｼ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE
-		if (currentTime > lastJsonWriteTime_) {
-			ReloadSceneJson();
-
-			// 鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｣鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴取得・ｽ・ｳ繝ｻ・ｨ驍ｵ・ｺ髢ｧ・ｲ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ鬯ｯ蛟｡・｢謇假ｽｽ・｡陷･・ｲ繝ｻ・ｹ繝ｻ・ｧ髯晢ｽｲ繝ｻ・ｨ髫ｨ・ｳ霑｢證ｦ・ｽ・ｹ繝ｻ・ｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
-			OutputDebugStringA("Hot Reloaded: scene.json 鬩幢ｽ｢繝ｻ・ｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬯ｮ・ｫ繝ｻ・ｱ郢晢ｽｻ繝ｻ・ｭ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬯ｮ・ｴ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｿ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ驕ｶ謫ｾ・ｽ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ髫ｨ・ｳ郢晢ｽｻ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ\n");
-		}
-	} catch (...) {
-		// 繝ｻ貊難ｽｧ・ｫ繝ｻ・ｺ郢晢ｽｻ陞ｻ繝ｻ・ｹ譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｮ・ｫ髴域鱒繝ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽBlender鬩搾ｽｵ繝ｻ・ｺ髯溷供・ｾ貉厄ｽｨ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・｡鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｸ鬩搾ｽｵ繝ｻ・ｺ髯晢｣ｰ髮懶ｽ｣繝ｻ・ｽ繝ｻ・ｾ郢晢ｽｻ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ鬮ｦ・ｮ陷ｷ・ｶ・つ陜｣・､繝ｻ・ｸ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｴ陝・｢・つ鬮｣蛹・ｽｽ・ｳ郢晢ｽｻ繝ｻ・ｭ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｫ・ｰ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｰ鬩幢ｽ｢隴弱・・ｽ・ｺ闖ｴ・ｩ隲橸ｽｺ・ゑｽｧ髫ｰ螟ｲ・ｽ・ｵ郢晢ｽｻ繝ｻ・ｼ髣費ｽｨ陞滂ｽｲ繝ｻ・ｽ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE
-		// C++鬩搾ｽｵ繝ｻ・ｺ髣包ｽｵ隴趣ｽ｢繝ｻ・ｽ髢ｾ・･繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・｢鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬩搾ｽｵ繝ｻ・ｺ鬯ｮ・ｦ繝ｻ・ｪ髫ｨ蛟･繝ｻ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｨ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｩ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴趣ｽ｢繝ｻ・ｼ郢晢ｽｻ繝ｻ・ｸ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｨ鬩搾ｽｵ繝ｻ・ｺ髯溷供・ｨ・ｯ隴鯉ｽｺ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隴擾ｽｶ髯橸ｽｺ鬩幢ｽ｢繝ｻ・ｧ驕ｶ荳橸｣ｰ莉ｰﾂ驍ｵ・ｲ髢ｼ蝎・catch鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｫ・ｰ繝ｻ・ｰ郢晢ｽｻ繝ｻ・｡鬩幢ｽ｢繝ｻ・ｧ鬩怜遜・ｽ・ｫ髫ｨ繝ｻ・ｽ・ｽ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｶ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ
+	static uint32_t jsonCheckFrameCounter = 0;
+	if (++jsonCheckFrameCounter % 30 == 0) {
+		try {
+			auto currentTime = std::filesystem::last_write_time("resources/scene.json");
+			if (currentTime > lastJsonWriteTime_) {
+				ReloadSceneJson();
+				OutputDebugStringA("Hot Reloaded: scene.json\n");
+			}
+		} catch (...) {}
 	}
 
 	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
 	const bool canUseMouseInput = !IsImGuiMouseCaptureActive();
+	const bool canUsePlayerInput = canUseKeyboardInput && canUseMouseInput;
 
 	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
@@ -892,11 +898,14 @@ void GamePlayScene::Update() {
 	const bool isSimulation = IsSimulationMode();
 	const bool isFullFlowPreview = !isSimulation || uiManager_->simulationPlaybackMode_ == 1;
 	const bool isSelectedOnlyPreview = isSimulation && uiManager_->simulationPlaybackMode_ == 0;
+	// 移動キーは設定パネル上にマウスがあっても受け付ける。
+	// マウス捕捉まで必須にすると、UI を表示しているだけで Player::Update が
+	// 呼ばれず、W/S などのキーボード移動まで停止してしまう。
 	const bool updateSelectedPlayer = shouldUpdateGame && canUseKeyboardInput && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 0);
 	const bool updateSelectedMissiles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1);
 	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 3);
-	const bool allowMouseMissileFire = shouldUpdateGame && canUseMouseInput && (!isSimulation || isFullFlowPreview);
+	const bool allowWeaponInput = shouldUpdateGame && canUsePlayerInput && (!isSimulation || isFullFlowPreview);
 	const bool allowLockOnBehavior = !isGameOver_ && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1 || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
 	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
@@ -916,14 +925,14 @@ void GamePlayScene::Update() {
 	}
 	wasAnimationEditor = isAnimationEditor;
 
-	if (shouldUpdateGame && canUseKeyboardInput && !isSpecialAttackActive_) {
+	if (shouldUpdateGame && canUsePlayerInput && !isSpecialAttackActive_) {
 		UpdateReload();
 	}
 
 	// C鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧSP鬩幢ｽ｢繝ｻ・ｧ驛｢譎｢・ｽ・ｻ0%鬮ｮ雜｣・ｽ・ｸ鬯ｩ蟶吶・繝ｻ・ｽ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｻ鬩搾ｽｵ繝ｻ・ｺ髯ｷ莨夲ｽｽ・ｱ繝ｻ縺､ﾂ驛｢譎｢・ｽ・ｻ鬯ｩ遨ゑｽｼ諛ｶ・ｽ・ｸ隴乗・・ｽ・ｿ繝ｻ・｣鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｯ・ｨ繝ｻ・ｾ郢晢ｽｻ繝ｻ・｣鬮ｯ譏ｴ繝ｻ郢晢ｽｻ郢晢ｽｻ繝ｻ・ｿ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｮ郢晢ｽｻ繝ｻ・ｺ鬮ｫ・ｰ陜｣莉ｰﾂ鬩幢ｽ｢繝ｻ・ｧ髯懶ｽ｣繝ｻ・､髯具ｽｹ繝ｻ・ｱ鬮ｯ・ｷ陝雜｣・ｽ・ｼ隰夲ｽｫ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
-	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
+	if (!isGameOver_ && shouldUpdateGame && canUsePlayerInput &&
 		!isSpecialAttackActive_ && spGauge_ >= kSpecialAttackCost &&
-		Input::GetInstance()->TriggerKey(DIK_C)) {
+		Input::GetInstance()->TriggerAction(PlayerAction::SpecialAttack)) {
 		spGauge_ -= kSpecialAttackCost;
 		isSpecialAttackActive_ = true;
 		specialAttackFrame_ = 0;
@@ -933,9 +942,9 @@ void GamePlayScene::Update() {
 	}
 
 	// V鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｭ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｧ鬮ｮ蟇ゅ・繝ｻ・ｾ陟募ｨｯ繝ｻ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｹ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ繝ｻ荳ｻ繝ｻ郢晢ｽｻ髯具ｽｹ繝ｻ・ｻ繝ｻ蜿門旭繝ｻ・ｹ隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｳ鬩幢ｽ｢隴弱・・ｱ蝣､・ｸ・ｺ陷･・ｲ繝ｻ・ｹ繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｲ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｼ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｸ100%鬮ｮ雜｣・ｽ・ｸ鬯ｩ蟶吶・繝ｻ・ｽ繝ｻ・ｲ郢晢ｽｻ繝ｻ・ｻ驛｢譎｢・ｽ・ｻ髯晢ｽｲ繝ｻ・ｨ郢晢ｽｻ陝ｶ謨鳴陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｺ鬮ｯ・ｷ陝雜｣・ｽ・ｼ隰夲ｽｫ郢晢ｽｻ鬩幢ｽ｢繝ｻ・ｧ髣包ｽｵ隰ｨ魑ｴﾂ驛｢譎｢・ｽ・ｻ
-	if (!isGameOver_ && shouldUpdateGame && canUseKeyboardInput &&
+	if (!isGameOver_ && shouldUpdateGame && canUsePlayerInput &&
 		!isSongActive_ && songGauge_ >= 100.0f &&
-		Input::GetInstance()->TriggerKey(DIK_V)) {
+		Input::GetInstance()->TriggerAction(PlayerAction::Song)) {
 		songGauge_ = 0.0f;
 		isSongActive_ = true;
 		songFrame_ = 0;
@@ -1484,10 +1493,10 @@ void GamePlayScene::Update() {
 	// ==========================================
 	// 鬩幢ｽ｢隴弱・・ｽ・ｺ陋滂ｽ･繝ｻ・ｰ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・､鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｫ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｮ鬯ｨ・ｾ陷茨ｽｷ繝ｻ・ｽ繝ｻ・ｺ鬮ｯ譏ｴ繝ｻ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬯ｨ・ｾ郢晢ｽｻ郢晢ｽｻ
 	// ==========================================
-	if (allowMouseMissileFire && player_ && !isGameOver_ && !isSpecialAttackActive_) {
+	if (allowWeaponInput && player_ && !isGameOver_ && !isSpecialAttackActive_) {
 		Input *input = Input::GetInstance();
 		// 鬮ｯ譎｢・ｽ・ｾ郢晢ｽｻ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬯ｯ・ｨ繝ｻ・ｾ髮九・竏槭・・ｿ繝ｻ・･鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｦ鬮ｴ雜｣・ｽ・｣髯ｷ・ｷ繝ｻ・ｶ驕ｯ・ｶ繝ｻ・ｲ鬮ｯ・ｷ郢晢ｽｻ繝ｻ・ｽ繝ｻ・ｺ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ驛｢譎｢・ｽ・ｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ鬮ｯ譎｢・ｽ・ｶ郢晢ｽｻ繝ｻ・ｸ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ
-		if (input->TriggerMouseButton(0)) {
+		if (input->TriggerMouseButton(0) || input->TriggerAction(PlayerAction::NormalFire)) {
 			Enemy* aimTarget = nullptr;
 			if (lockedEnemy_ && lockOnManager_->IsLockedEnemyAlive()) {
 				aimTarget = lockedEnemy_;
@@ -1498,13 +1507,13 @@ void GamePlayScene::Update() {
 		}
 
 		// 鬮ｯ・ｷ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｳ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｯ鬩幢ｽ｢隴趣ｽ｢繝ｻ・ｽ繝ｻ・ｪ鬩幢ｽ｢隴擾ｽｴ郢晢ｽｻ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽ驛｢譎｢・ｽ・ｻ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢繝ｻ・ｧ鬮ｮ蛹ｺ・ｩ・ｸ繝ｻ・ｽ繝ｻ・ｼ鬮ｴ蝓溷繭・つ繝ｻ・ｳ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｪ鬩搾ｽｵ繝ｻ・ｺ髯滓坩・ｯ莨夲ｽｽ・ｽ髣・ｽｽ繝ｻ・ｬ繝ｻ・ｨ郢晢ｽｻ繝ｻ・ｵ鬩搾ｽｵ繝ｻ・ｺ郢晢ｽｻ繝ｻ・ｸ鬮ｫ・ｴ陷ｴ繝ｻ・ｽ・ｽ繝ｻ・ｲ鬩搾ｽｵ繝ｻ・ｺ髯滓坩・ｯ莨夲ｽｽ・ｽ霑｢證ｦ・ｽ・ｹ隴取得・ｽ・ｹ繝ｻ・｢郢晢ｽｻ繝ｻ・ｿ郢晢ｽｻ繝ｻ・ｽE鬩幢ｽ｢隴弱・・ｽ・ｺ闖ｴ・ｩ繝ｻ・ｦ鬩幢ｽ｢繝ｻ・ｧ郢晢ｽｻ繝ｻ・ｰ鬮ｯ貊捺ｱ壹・・ｽ繝ｻ・ｾ
-		if (input->TriggerMouseButton(1)) {
+		if (input->TriggerMouseButton(1) || input->TriggerAction(PlayerAction::HomingFire)) {
 			lockOnManager_->BeginMultiLock();
 		}
-		if (isMultiLockCharging_ && input->PushMouseButton(1)) {
+		if (isMultiLockCharging_ && (input->PushMouseButton(1) || input->PushAction(PlayerAction::HomingFire))) {
 			lockOnManager_->UpdateMultiLock(activeCamera);
 		}
-		if (isMultiLockCharging_ && !input->PushMouseButton(1)) {
+		if (isMultiLockCharging_ && !input->PushMouseButton(1) && !input->PushAction(PlayerAction::HomingFire)) {
 			lockOnManager_->FireMultiLockMissiles();
 		}
 	} else if (isMultiLockCharging_) {
@@ -1916,12 +1925,13 @@ void GamePlayScene::DrawOverlay() {
 	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
 	const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
 	const float statusPanelX = 20.0f;
-	const float statusPanelY = screenHeight - 145.0f;
+	// 左下は機体の生存・必殺技・歌をまとめた戦闘ステータスパネルにする。
+	const float statusPanelY = screenHeight - 180.0f;
 	const float ammoPanelX = screenWidth - 420.0f;
 	const float ammoPanelY = screenHeight - 170.0f;
 	if (hudPanelSprite_) {
 		hudPanelSprite_->SetPosition({ statusPanelX, statusPanelY });
-		hudPanelSprite_->SetSize({ 390.0f, 125.0f });
+		hudPanelSprite_->SetSize({ 390.0f, 160.0f });
 		hudPanelSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.92f });
 		hudPanelSprite_->Update();
 		hudPanelSprite_->Draw();
@@ -2047,21 +2057,117 @@ void GamePlayScene::DrawOverlay() {
 		spGaugeCostMarkerSprite_->Draw();
 	}
 
+	// 歌ゲージは、蓄積中は撃破で得た残量、発動中は15秒の残り時間を表示する。
+	// これにより、歌発動の瞬間に空になって「効果時間が分からない」状態を避ける。
+	const float songGaugeY = statusPanelY + 122.0f;
+	// 状態表示用の余白を右に残し、READY / LIVE がパネルの外へ出ないようにする。
+	const float songGaugeWidth = gaugeWidth - 40.0f;
+	constexpr int kSongDurationFrames = 900;
+	const float songRatio = isSongActive_
+		? std::clamp(1.0f - static_cast<float>(songFrame_) / static_cast<float>(kSongDurationFrames), 0.0f, 1.0f)
+		: std::clamp(songGauge_ / 100.0f, 0.0f, 1.0f);
+	if (songGaugeBackgroundSprite_ && songGaugeFillSprite_ && songGaugeStateSprite_) {
+		songGaugeBackgroundSprite_->SetPosition({ gaugeX - 2.0f, songGaugeY - 2.0f });
+		songGaugeBackgroundSprite_->SetSize({ songGaugeWidth + 4.0f, gaugeHeight + 4.0f });
+		songGaugeBackgroundSprite_->SetColor({ 0.06f, 0.02f, 0.12f, 0.94f });
+		songGaugeBackgroundSprite_->Update();
+		songGaugeBackgroundSprite_->Draw();
+
+		const float songPulse = isSongActive_ ? 0.72f + 0.28f * std::sin(static_cast<float>(songFrame_) * 0.24f) : 1.0f;
+		songGaugeFillSprite_->SetPosition({ gaugeX, songGaugeY });
+		songGaugeFillSprite_->SetSize({ songGaugeWidth * songRatio, gaugeHeight });
+		songGaugeFillSprite_->SetColor(isSongActive_
+			? Vector4{ 1.0f, 0.16f, 0.76f, songPulse }
+			: (songGauge_ >= 100.0f
+				? Vector4{ 0.42f, 1.0f, 0.30f, 1.0f }
+				: Vector4{ 0.08f, 0.85f, 0.92f, 1.0f }));
+		songGaugeFillSprite_->Update();
+		songGaugeFillSprite_->Draw();
+
+		// 右端の発光インジケータは READY / LIVE / CHARGE の状態を一目で区別させる。
+		songGaugeStateSprite_->SetPosition({ gaugeX + songGaugeWidth + 6.0f, songGaugeY + 2.0f });
+		songGaugeStateSprite_->SetSize({ 14.0f, 14.0f });
+		songGaugeStateSprite_->SetColor(isSongActive_
+			? Vector4{ 1.0f, 0.22f, 0.78f, songPulse }
+			: (songGauge_ >= 100.0f
+				? Vector4{ 0.42f, 1.0f, 0.30f, 1.0f }
+				: Vector4{ 0.10f, 0.55f, 0.72f, 0.9f }));
+		songGaugeStateSprite_->Update();
+		songGaugeStateSprite_->Draw();
+	}
+
+#ifdef ENABLE_IMGUI
+	// ImGuiの座標はアプリ全体、Spriteの座標はGame View内部なので、
+	// Game Viewの矩形へ変換してHUDの外へ文字がずれないようにする。
+	float gameViewMinX = 0.0f;
+	float gameViewMinY = 0.0f;
+	float gameViewMaxX = screenWidth;
+	float gameViewMaxY = screenHeight;
+	if (ImGui::GetCurrentContext() &&
+		FlyCamera::GetGameViewBounds(gameViewMinX, gameViewMinY, gameViewMaxX, gameViewMaxY)) {
+		ImDrawList *hudText = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
+		const float viewScaleX = (gameViewMaxX - gameViewMinX) / (std::max)(screenWidth, 1.0f);
+		const float viewScaleY = (gameViewMaxY - gameViewMinY) / (std::max)(screenHeight, 1.0f);
+		auto toGameView = [=](float x, float y) {
+			return ImVec2(gameViewMinX + x * viewScaleX, gameViewMinY + y * viewScaleY);
+		};
+		const ImU32 songTextColor = isSongActive_
+			? IM_COL32(255, 95, 215, 255)
+			: (songGauge_ >= 100.0f ? IM_COL32(125, 255, 125, 255) : IM_COL32(105, 225, 240, 255));
+		hudText->AddText(toGameView(statusPanelX + 30.0f, songGaugeY + 1.0f), songTextColor, "SONG");
+		const char *songState = isSongActive_ ? "LIVE" : (songGauge_ >= 100.0f ? "READY" : "CHG");
+		hudText->AddText(toGameView(gaugeX + songGaugeWidth + 26.0f, songGaugeY + 1.0f), songTextColor, songState);
+	}
+#endif
+
 	DrawRadar();
 
 	bool isJammed = lockOnManager_->IsPlayerJammed(activeCamera);
 
-	if (isMultiLockCharging_ && !multiLockTargets_.empty()) {
-		// 発射する誘導弾の数分（multiLockTargets_ の全要素）、ロックオンマーカーを個別に全表示！
-		const int totalCount = static_cast<int>(multiLockTargets_.size());
-		for (int i = 0; i < totalCount; ++i) {
-			Enemy *target = multiLockTargets_[i];
-			DrawIndividualMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprite_.get(), isJammed, i + 1, totalCount);
+	// 黄色のターゲットマーカー (単体ロックオン / エイムアシスト時)
+	if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
+		if (!overlayTarget->IsDead()) {
+			const bool isFighterLockDanger = lockedEnemy_ && lockOnManager_->IsFighterLockDanger();
+			DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed, isFighterLockDanger);
 		}
-	} else if (Enemy *overlayTarget = lockedEnemy_ ? lockedEnemy_ : aimAssistEnemy_) {
-		DrawLockOnOverlaySprite(overlayTarget, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), isJammed);
 	} else {
 		DrawAimCursorOverlaySprite(aimCursorSprite_.get(), isJammed);
+	}
+
+	// 赤色のターゲットマーカー：誘導弾操作中 (右クリック長押しマルチロック中) または 飛行中ミサイルが存在する時のみ表示
+	std::vector<Enemy*> redMarkerTargets;
+	if (isMultiLockCharging_) {
+		for (Enemy* target : multiLockTargets_) {
+			if (target && !target->IsDead()) {
+				redMarkerTargets.push_back(target);
+			}
+		}
+		if (!redMarkerTargets.empty()) {
+			const int targetCount = static_cast<int>(redMarkerTargets.size());
+			const int displayCount = (std::min)(targetCount, static_cast<int>(multiLockMarkerSprites_.size()));
+			for (int i = 0; i < displayCount; ++i) {
+				Enemy *target = redMarkerTargets[i];
+				DrawIndividualMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprites_[static_cast<size_t>(i)].get(), isJammed, i + 1, displayCount);
+			}
+		}
+	} else if (missileManager_) {
+		for (const auto& missile : missileManager_->GetMissiles()) {
+			if (missile && !missile->IsDead()) {
+				Enemy* t = missile->GetTarget();
+				if (t && !t->IsDead()) {
+					if (std::find(redMarkerTargets.begin(), redMarkerTargets.end(), t) == redMarkerTargets.end()) {
+						redMarkerTargets.push_back(t);
+					}
+				}
+			}
+		}
+		if (!redMarkerTargets.empty()) {
+			const int totalCount = (std::min)(static_cast<int>(redMarkerTargets.size()), static_cast<int>(multiLockMarkerSprites_.size()));
+			for (int i = 0; i < totalCount; ++i) {
+				Enemy *target = redMarkerTargets[i];
+				DrawIndividualMissileLockOnOverlaySprite(target, activeCamera->GetViewProjectionMatrix(), multiLockMarkerSprites_[static_cast<size_t>(i)].get(), isJammed, i + 1, totalCount);
+			}
+		}
 	}
 }
 
@@ -2142,3 +2248,18 @@ void GamePlayScene::DrawRadar() {
 		blip->Draw();
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-#include "EnemyBulletManager.h"
+﻿#include "EnemyBulletManager.h"
 #include "3D/Object3dCommon.h"
 #include "Game/Player/Player.h"
 #include "Game/obstacle/Obstacle.h" // 追加
@@ -283,4 +283,5 @@ void EnemyBulletManager::ShootConfigured(const Vector3 &position, const Vector3 
         }
     }
 }
+
 

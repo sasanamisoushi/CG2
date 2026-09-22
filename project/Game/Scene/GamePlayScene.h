@@ -96,10 +96,14 @@ private:
 	std::unique_ptr<Sprite> aimCursorSprite_;
 	std::unique_ptr<Sprite> lockOnReticleSprite_;
 	std::unique_ptr<Sprite> missileLockOnReticleSprite_;
-	std::unique_ptr<Sprite> multiLockMarkerSprite_;
+	static constexpr size_t kMaxMultiLockMarkers = 12;
+	std::array<std::unique_ptr<Sprite>, kMaxMultiLockMarkers> multiLockMarkerSprites_;
 	std::unique_ptr<Sprite> spGaugeBackgroundSprite_;
 	std::unique_ptr<Sprite> spGaugeFillSprite_;
 	std::unique_ptr<Sprite> spGaugeCostMarkerSprite_;
+	std::unique_ptr<Sprite> songGaugeBackgroundSprite_;
+	std::unique_ptr<Sprite> songGaugeFillSprite_;
+	std::unique_ptr<Sprite> songGaugeStateSprite_;
 	std::unique_ptr<Sprite> hudPanelSprite_;
 	std::unique_ptr<Sprite> hudAmmoPanelSprite_;
 	std::unique_ptr<Sprite> hpGaugeBackgroundSprite_;
@@ -181,7 +185,8 @@ private:
 	Vector2 boxSelectStartPos_ = {0.0f, 0.0f};
 	Vector2 boxSelectEndPos_ = {0.0f, 0.0f};
 
-	bool isEditorPreviewPlaying_ = true;
+	// 起動直後は編集モードで停止し、ツールバーの「再生」からゲームを開始する。
+	bool isEditorPreviewPlaying_ = false;
 	bool isCinematicLockOnCameraEnabled_ = false;
 	bool isCinematicLockOnCameraInitialized_ = false;
 	Vector3 cinematicLockOnCameraPosition_ = { 0.0f, 0.0f, 0.0f };
@@ -269,6 +274,8 @@ private:
 	std::vector<Enemy*> multiLockTargets_;
 	bool isMultiLockCharging_ = false;
 	int multiLockChargeFrames_ = 0;
+	// シーンを開く操作に使ったクリックを、初弾として扱わない。
+	bool isMissileInputArmed_ = false;
 
 	// 必殺技（SPを50%消費して一定時間、通常攻撃を連射）
 	float spGauge_ = 100.0f;

@@ -8,6 +8,8 @@
 #include "LockOnManager.h"
 #include "engine/Utility/StageValidation.h"
 #include "engine/Camera/FlyCamera.h"
+#include "engine/Input/Input.h"
+#include "engine/Scene/SceneManager.h"
 #include "engine/math/MyMath.h"
 #include "externals/json.hpp"
 #include <Windows.h>
@@ -302,6 +304,42 @@ GamePlayUIManager::GamePlayUIManager(GamePlayScene* scene) : scene_(scene) {
 void GamePlayUIManager::Initialize() {
 }
 
+void GamePlayUIManager::DrawEditorToolbar() {
+#ifdef ENABLE_IMGUI
+	if (!ImGui::BeginMainMenuBar()) {
+		return;
+	}
+
+	if (ImGui::Button("再生")) {
+		// 毎回、編集時の初期配置に戻してからゲームループを開始する。
+		scene_->ResetEditorPreview();
+		scene_->isEditorPreviewPlaying_ = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("編集に戻す")) {
+		scene_->ResetEditorPreview();
+	}
+
+	ImGui::SameLine();
+	ImGui::TextDisabled("|");
+	ImGui::SameLine();
+
+	static int selectedSceneIndex = 1;
+	const char *sceneLabels[] = { "タイトル", "ゲーム", "シミュレーション" };
+	const char *sceneNames[] = { "TITLE", "GAMEPLAY", "SIMULATION" };
+	ImGui::SetNextItemWidth(130.0f);
+	ImGui::Combo("##切替先シーン", &selectedSceneIndex, sceneLabels, IM_ARRAYSIZE(sceneLabels));
+	ImGui::SameLine();
+	if (ImGui::Button("シーン切替")) {
+		SceneManager::GetInstance()->ChangeScene(sceneNames[selectedSceneIndex]);
+	}
+
+	ImGui::SameLine();
+	ImGui::TextDisabled(scene_->isEditorPreviewPlaying_ ? "再生中" : "編集モード（停止中）");
+	ImGui::EndMainMenuBar();
+#endif
+}
+
 void GamePlayUIManager::UpdateUI() {
     if (!scene_) return;
 #define enemyEventManager_ scene_->enemyEventManager_
@@ -449,6 +487,7 @@ void GamePlayUIManager::UpdateUI() {
 			simulationManager_->DrawSimulationScreenUI();
 			return;
 		}
+		DrawEditorToolbar();
 
 		ImGui::Begin("Simulation");
 		ImGui::Text("シミュレーション設定");
@@ -628,11 +667,33 @@ void GamePlayUIManager::UpdateUI() {
 		// --- オリジナルUI（今まで出していたImGui関連） ---
 		//開発用UIの処理
 		}
-		//ウィンドウのサイズを設定
-		ImGui::SetNextWindowSize(ImVec2(500.0f, 400.0f), ImGuiCond_Once);
+		// 設定一覧と設定内容は、見本のように独立したドック枠として表示する。
+		const char *engineSettingsCategories[] = {
+			"表示・エフェクト",
+			"カメラ",
+			"敵・障害物",
+			"敵撃破パーティクル",
+			"レベルエディタ",
+			"操作設定",
+		};
 
-		//ウィンドウの作成
-		ImGui::Begin("演習");
+		ImGui::SetNextWindowSize(ImVec2(200.0f, 620.0f), ImGuiCond_Once);
+		ImGui::Begin("設定一覧");
+		ImGui::Separator();
+		for (int categoryIndex = 0; categoryIndex < IM_ARRAYSIZE(engineSettingsCategories); ++categoryIndex) {
+			const bool isSelected = currentEngineSettingsTarget_ == categoryIndex;
+			if (ImGui::Selectable(engineSettingsCategories[categoryIndex], isSelected, 0, ImVec2(0.0f, 32.0f))) {
+				currentEngineSettingsTarget_ = categoryIndex;
+			}
+		}
+		ImGui::End();
+
+		ImGui::SetNextWindowSize(ImVec2(500.0f, 620.0f), ImGuiCond_Once);
+		ImGui::Begin("設定内容");
+		ImGui::Text("%s の設定", engineSettingsCategories[currentEngineSettingsTarget_]);
+		ImGui::Separator();
+
+		if (currentEngineSettingsTarget_ == 0) {
 
 		ImGui::Text("表示設定");
 		ImGui::Checkbox("スカイボックスを表示", &showSkybox);
@@ -827,9 +888,9 @@ void GamePlayUIManager::UpdateUI() {
 			}
 		}
 
-		ImGui::End();
+		}
 
-		ImGui::Begin("Camera Settings");
+		if (currentEngineSettingsTarget_ == 1) {
 
 		// =====================================================
 		if (isDebugCameraActive_) {
@@ -904,11 +965,9 @@ void GamePlayUIManager::UpdateUI() {
 			}
 		}
 
-		ImGui::End();
+		}
 
-		ImGui::Separator();
-
-		ImGui::Begin("敵 & 障害物");
+		if (currentEngineSettingsTarget_ == 2) {
 		ImGui::Text("=== ターゲット配置 ===");
 		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
 		ImGui::Text("Tab: lock target / X: unlock");
@@ -973,9 +1032,9 @@ void GamePlayUIManager::UpdateUI() {
 		if (obstacles_.empty()) {
 			ImGui::Text("現在、障害物は存在しません。");
 		}
-		ImGui::End();
+		}
 
-		ImGui::Begin("敵撃破パーティクル設定");
+		if (currentEngineSettingsTarget_ == 3) {
 		if (explosionManager_) {
 			auto& config = explosionManager_->GetConfig();
 			ImGui::DragInt("発生数", &config.count, 1, 0, 1000);
@@ -997,7 +1056,7 @@ void GamePlayUIManager::UpdateUI() {
 				explosionManager_->LoadFromJson("resources/explosionConfig.json");
 			}
 		}
-		ImGui::End();
+		}
 
 #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
 		const StageValidation::Report &stageValidationReport = StageValidation::GetLastReport();
@@ -1015,7 +1074,7 @@ void GamePlayUIManager::UpdateUI() {
 		}
 #endif
 
-		ImGui::Begin("Level Editor Tools"); // 新しいウィンドウを作る場合
+		if (currentEngineSettingsTarget_ == 4) {
 
 #if defined(ENABLE_IMGUI) && defined(CG2_ENABLE_STAGE_VALIDATION)
 		ImGui::Text("レベル検査表示");
@@ -1054,6 +1113,66 @@ void GamePlayUIManager::UpdateUI() {
 			isEditorPreviewPlaying_ ? "再生中" : "停止中");
 
 		ImGui::TextWrapped("リセットでscene.jsonを読み直して初期状態に戻し、停止状態にします。再生で敵機ルートなどのゲーム更新が進み、ストップでその場に止まります。");
+
+		}
+
+		if (currentEngineSettingsTarget_ == 5) {
+			Input *input = Input::GetInstance();
+			ImGui::Text("プレイヤー操作設定");
+			ImGui::TextDisabled("キー変更を押してから、割り当てたいキーを押してください。");
+			ImGui::TextColored(
+				input->IsControllerConnected() ? ImVec4(0.25f, 1.0f, 0.45f, 1.0f) : ImVec4(1.0f, 0.70f, 0.25f, 1.0f),
+				"コントローラー: %s (XInput Player 1)", input->IsControllerConnected() ? "接続済み" : "未接続");
+			if (ImGui::Button("初期設定に戻す")) {
+				input->ResetPlayerActionBindings();
+				input->SavePlayerActionBindings();
+			}
+			ImGui::SameLine();
+			ImGui::TextDisabled("変更は次回起動時も維持されます。");
+			ImGui::Separator();
+
+			static int waitingForKeyboardAction = -1;
+			for (size_t actionIndex = 0; actionIndex < Input::GetPlayerActionCount(); ++actionIndex) {
+				const PlayerAction action = static_cast<PlayerAction>(actionIndex);
+				const PlayerActionBinding &binding = input->GetActionBinding(action);
+				ImGui::PushID(static_cast<int>(actionIndex));
+				ImGui::Text("%s", Input::GetPlayerActionName(action));
+				ImGui::SameLine(155.0f);
+				if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
+					ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーを押してください");
+					for (int keyNumber = 1; keyNumber < 256; ++keyNumber) {
+						if (!input->TriggerKey(static_cast<BYTE>(keyNumber))) continue;
+						if (keyNumber != DIK_ESCAPE) {
+							input->SetKeyboardBinding(action, static_cast<BYTE>(keyNumber));
+							input->SavePlayerActionBindings();
+						}
+						waitingForKeyboardAction = -1;
+						break;
+					}
+				} else {
+					const std::string keyLabel = Input::GetKeyboardKeyName(binding.keyboardKey);
+					ImGui::Text("キー: %s", keyLabel.c_str());
+					ImGui::SameLine();
+					if (ImGui::SmallButton("変更")) waitingForKeyboardAction = static_cast<int>(actionIndex);
+				}
+
+				ImGui::SameLine(320.0f);
+				ImGui::SetNextItemWidth(155.0f);
+				if (ImGui::BeginCombo("##controller", Input::GetControllerInputName(binding.controllerInput))) {
+					for (size_t controllerIndex = 0; controllerIndex < Input::GetControllerInputCount(); ++controllerIndex) {
+						const ControllerInput controllerInput = static_cast<ControllerInput>(controllerIndex);
+						const bool selected = controllerInput == binding.controllerInput;
+						if (ImGui::Selectable(Input::GetControllerInputName(controllerInput), selected)) {
+							input->SetControllerBinding(action, controllerInput);
+							input->SavePlayerActionBindings();
+						}
+						if (selected) ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
+				ImGui::PopID();
+			}
+		}
 
 		ImGui::End();
 	}

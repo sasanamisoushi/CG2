@@ -14,11 +14,12 @@ class LockOnManager {
 public:
 	LockOnManager(GamePlayScene* scene);
 	void UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame);
-	Enemy *FindLockOnTarget(Camera *activeCamera) const;
+	Enemy *FindLockOnTarget(Camera *activeCamera);
 	bool IsLockedEnemyAlive() const;
-	Enemy *FindAimAssistTarget(Camera *activeCamera) const;
+	Enemy *FindAimAssistTarget(Camera *activeCamera);
 	bool IsPlayerJammed(Camera *activeCamera) const;
 	Enemy *FindMultiLockTarget(Camera *activeCamera) const;
+	bool IsFighterLockDanger() const { return isFighterLockDanger_; }
 	void BeginMultiLock();
 	void PruneMultiLockTargets();
 	void UpdateMultiLock(Camera *activeCamera);
@@ -26,5 +27,12 @@ public:
 	void CancelMultiLock();
 
 private:
+	bool ShouldKeepCurrentLock(Camera *activeCamera, bool &outTooClose);
+	bool IsFighterReacquireBlocked(const Enemy *enemy) const;
+	void ReleaseCurrentLock(bool preventImmediateReacquire);
+
 	GamePlayScene* scene_;
+	Enemy *fighterRecentlyReleasedEnemy_ = nullptr;
+	int fighterReacquireCooldownFrames_ = 0;
+	bool isFighterLockDanger_ = false;
 };

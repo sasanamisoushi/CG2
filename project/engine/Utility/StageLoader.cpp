@@ -394,6 +394,8 @@ bool StageLoader::LoadSceneJson(
 				if (modelName.find("StageBounds") != std::string::npos) {
 					newObstacle->SetStageBounds(true);
 				}
+				// プレイヤー／敵の更新より前から地形三角形を使えるよう、生成直後に構築する。
+				newObstacle->Update();
 				obstacles.push_back(std::move(newObstacle));
 				continue;
 			}

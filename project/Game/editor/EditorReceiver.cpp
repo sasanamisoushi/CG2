@@ -359,6 +359,36 @@ bool EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 					std::string modelName = ResolveObstacleModelName(objData);
 					auto newObstacle = std::make_unique<Obstacle>();
 					newObstacle->Initialize(modelName, position, rotation, scale);
+
+					// 通常の StageLoader と同じコライダー設定をライブ更新でも適用する。
+					if (objData.contains("useMeshCollider") && objData["useMeshCollider"].is_boolean()) {
+						newObstacle->SetUseMeshCollider(objData["useMeshCollider"].get<bool>());
+					}
+					if (objData.contains("isCollisionEnabled") && objData["isCollisionEnabled"].is_boolean()) {
+						newObstacle->SetCollisionEnabled(objData["isCollisionEnabled"].get<bool>());
+					}
+					if (objData.contains("collisionOffset") && objData["collisionOffset"].is_array()) {
+						const auto &arr = objData["collisionOffset"];
+						if (arr.size() == 3) {
+							newObstacle->SetCollisionOffset({ arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>() });
+						}
+					}
+					if (objData.contains("collisionScale") && objData["collisionScale"].is_array()) {
+						const auto &arr = objData["collisionScale"];
+						if (arr.size() == 3) {
+							newObstacle->SetCollisionScale({ arr[0].get<float>(), arr[1].get<float>(), arr[2].get<float>() });
+						}
+					}
+
+					const std::string objectName = GetObjectBaseName(objData);
+					if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
+						newObstacle->SetUseMeshCollider(true);
+					}
+					if (modelName.find("StageBounds") != std::string::npos) {
+						newObstacle->SetStageBounds(true);
+					}
+					// このフレームから接地判定できるようワールド三角形を即時生成する。
+					newObstacle->Update();
 					obstacles.push_back(std::move(newObstacle));
 				}
 				// 互換性用（Blenderで種類を設定し忘れた時のための予備）
@@ -370,6 +400,11 @@ bool EditorReceiver::Update(Player *player, std::list<std::unique_ptr<Enemy>> &e
 
 					auto newObstacle = std::make_unique<Obstacle>();
 					newObstacle->Initialize(modelName, position, rotation, scale);
+					const std::string objectName = GetObjectBaseName(objData);
+					if (objectName.find("Terrain") != std::string::npos || objectName.find("terrain") != std::string::npos) {
+						newObstacle->SetUseMeshCollider(true);
+					}
+					newObstacle->Update();
 					obstacles.push_back(std::move(newObstacle));
 				}
 			}

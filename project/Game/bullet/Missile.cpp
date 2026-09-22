@@ -206,3 +206,24 @@ void Missile::Draw() {
 void Missile::OnCollision() {
 	isDead_ = true;
 }
+
+void Missile::ResolveGroundContact(float terrainY, float clearance) {
+	if (isDead_) {
+		return;
+	}
+
+	const float minimumY = terrainY + (std::max)(clearance, collisionRadius_ + 0.05f);
+	if (position_.y < minimumY) {
+		position_.y = minimumY;
+	}
+
+	// 誘導が再び地面へ向いても次フレームで潜らないよう、速度を保ったまま
+	// 下降成分を小さな上昇成分へ置き換える。
+	if (velocity_.y < 0.05f) {
+		const float speed = (std::max)(0.01f, Length(velocity_));
+		velocity_.y = 0.05f;
+		velocity_ = Scale(NormalizeOr(velocity_, { 0.0f, 1.0f, 0.0f }), speed);
+	}
+
+	UpdateModel(nullptr);
+}

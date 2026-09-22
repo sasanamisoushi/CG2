@@ -600,8 +600,24 @@ void SimulationManager::DrawSimulationScreenUI() {
 	DrawSimulationSaveControls();
 
 	ImGui::Separator();
-	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ", "アニメーション編集" };
-	ImGui::Combo("カテゴリ", &scene_->uiManager_->currentSimulationTarget_, categories, IM_ARRAYSIZE(categories));
+	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ", "アニメーション編集", "操作設定" };
+
+	// 既存の設定を、左の一覧から選択して右側で編集するレイアウトにする。
+	// カテゴリごとの実際の操作処理は下の既存コードをそのまま使用する。
+	ImGui::BeginChild("設定一覧", ImVec2(170.0f, 0.0f), true);
+	ImGui::TextDisabled("設定一覧");
+	ImGui::Separator();
+	for (int categoryIndex = 0; categoryIndex < IM_ARRAYSIZE(categories); ++categoryIndex) {
+		const bool isSelected = scene_->uiManager_->currentSimulationTarget_ == categoryIndex;
+		if (ImGui::Selectable(categories[categoryIndex], isSelected, 0, ImVec2(0.0f, 32.0f))) {
+			scene_->uiManager_->currentSimulationTarget_ = categoryIndex;
+		}
+	}
+	ImGui::EndChild();
+
+	ImGui::SameLine();
+	ImGui::BeginChild("設定内容", ImVec2(0.0f, 0.0f), true);
+	ImGui::Text("%s の設定", categories[scene_->uiManager_->currentSimulationTarget_]);
 	ImGui::Separator();
 
 	if (scene_->uiManager_->currentSimulationTarget_ == 0) {
@@ -777,8 +793,71 @@ void SimulationManager::DrawSimulationScreenUI() {
 		}
 	} else if (scene_->uiManager_->currentSimulationTarget_ == 5) {
 		DrawAnimationEditorUI();
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 6) {
+		Input *input = Input::GetInstance();
+		ImGui::Text("プレイヤー操作設定");
+		ImGui::TextDisabled("各行のキー変更を押してからキーボードのキーを押してください。設定は resources/input_bindings.cfg に保存されます。");
+		ImGui::TextColored(
+			input->IsControllerConnected() ? ImVec4(0.25f, 1.0f, 0.45f, 1.0f) : ImVec4(1.0f, 0.70f, 0.25f, 1.0f),
+			"コントローラー: %s (XInput Player 1)", input->IsControllerConnected() ? "接続済み" : "未接続");
+		if (ImGui::Button("初期設定に戻す")) {
+			input->ResetPlayerActionBindings();
+			input->SavePlayerActionBindings();
+		}
+		ImGui::SameLine();
+		ImGui::TextDisabled("キーボードとコントローラーは同時に使用できます。");
+		ImGui::Separator();
+
+		static int waitingForKeyboardAction = -1;
+		for (size_t actionIndex = 0; actionIndex < Input::GetPlayerActionCount(); ++actionIndex) {
+			const PlayerAction action = static_cast<PlayerAction>(actionIndex);
+			const PlayerActionBinding &binding = input->GetActionBinding(action);
+			ImGui::PushID(static_cast<int>(actionIndex));
+			ImGui::AlignTextToFramePadding();
+			ImGui::Text("%s", Input::GetPlayerActionName(action));
+			ImGui::SameLine(175.0f);
+			if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
+				ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーを押してください (Esc: キャンセル)");
+				for (int keyNumber = 1; keyNumber < 256; ++keyNumber) {
+					if (!input->TriggerKey(static_cast<BYTE>(keyNumber))) {
+						continue;
+					}
+					if (keyNumber != DIK_ESCAPE) {
+						input->SetKeyboardBinding(action, static_cast<BYTE>(keyNumber));
+						input->SavePlayerActionBindings();
+					}
+					waitingForKeyboardAction = -1;
+					break;
+				}
+			} else {
+				const std::string keyLabel = Input::GetKeyboardKeyName(binding.keyboardKey);
+				ImGui::Text("キー: %s", keyLabel.c_str());
+				ImGui::SameLine();
+				if (ImGui::Button("キー変更")) {
+					waitingForKeyboardAction = static_cast<int>(actionIndex);
+				}
+			}
+
+			ImGui::SameLine(360.0f);
+			ImGui::SetNextItemWidth(145.0f);
+			const char *controllerLabel = Input::GetControllerInputName(binding.controllerInput);
+			if (ImGui::BeginCombo("##controller", controllerLabel)) {
+				for (size_t controllerIndex = 0; controllerIndex < Input::GetControllerInputCount(); ++controllerIndex) {
+					const ControllerInput controllerInput = static_cast<ControllerInput>(controllerIndex);
+					const bool selected = controllerInput == binding.controllerInput;
+					if (ImGui::Selectable(Input::GetControllerInputName(controllerInput), selected)) {
+						input->SetControllerBinding(action, controllerInput);
+						input->SavePlayerActionBindings();
+					}
+					if (selected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::PopID();
+		}
 	}
 
+	ImGui::EndChild();
 	ImGui::End();
 #endif
 }

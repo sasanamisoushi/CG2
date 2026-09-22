@@ -20,10 +20,13 @@ public:
 	void DrawGameplayActionControls();
 
 private:
+	void DrawEditorToolbar();
+
 	GamePlayScene* scene_ = nullptr;
 
 	bool showSimulationWindow_ = false;
 	int currentSimulationTarget_ = 0;
+	int currentEngineSettingsTarget_ = 0;
 	std::string simulationSaveMessage_;
 	char simulationActionName_[64] = "Action1";
 	std::vector<std::string> simulationActionNames_;

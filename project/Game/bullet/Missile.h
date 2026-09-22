@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
 #include "engine/Camera/Camera.h"
@@ -44,8 +44,12 @@ public:
     // 当たった時に呼ばれる関数
     void OnCollision();
 
+    // 地表へ潜り込んだ場合、地面すれすれまで戻して上向きに軌道補正する
+    void ResolveGroundContact(float terrainY, float clearance);
+
     // 自分の座標を外に教えるゲッター
     Vector3 GetPosition() const { return position_; }
+    Enemy* GetTarget() const { return target_; }
     float GetCollisionRadius() const { return collisionRadius_; }
 
 private:
@@ -73,4 +77,5 @@ private:
     static const int kHomingLifeTime = 240;
     bool isDead_ = false;
 };
+
 

@@ -1,16 +1,70 @@
 #pragma once
 #include <Windows.h>
 #include<wrl.h>
+#include <array>
+#include <cstdint>
+#include <string>
 
 #include <cassert>
 #define DIRECTINPUT_VERSION    0x0800//DirectInputのバージョン指定
 #include <dinput.h>
+#include <Xinput.h>
 #include"WinApp.h"
 
 
 
 #pragma comment(lib,"dinput8.lib")
 #pragma comment(lib,"dxguid.lib")
+#pragma comment(lib, "xinput9_1_0.lib")
+
+// プレイヤー操作はキーボードとコントローラーで同じアクションへ集約する。
+// 画面上の設定変更も、ここで定義したバインドを直接更新する。
+enum class PlayerAction : uint8_t {
+	MoveForward,
+	MoveBackward,
+	MoveUp,
+	MoveDown,
+	TurnLeft,
+	TurnRight,
+	PitchUp,
+	PitchDown,
+	RollLeft,
+	RollRight,
+	Guard,
+	TransformFighter,
+	TransformGerwalk,
+	TransformBattroid,
+	DodgeLeft,
+	DodgeRight,
+	Melee,
+	NormalFire,
+	HomingFire,
+	LockToggle,
+	LockRelease,
+	ReloadNormal,
+	ReloadHoming,
+	SpecialAttack,
+	Song,
+	Count,
+};
+
+enum class ControllerInput : uint8_t {
+	None,
+	A, B, X, Y,
+	LeftBumper, RightBumper,
+	Back, Start,
+	LeftThumb, RightThumb,
+	DPadUp, DPadDown, DPadLeft, DPadRight,
+	LeftTrigger, RightTrigger,
+	LeftStickUp, LeftStickDown, LeftStickLeft, LeftStickRight,
+	RightStickUp, RightStickDown, RightStickLeft, RightStickRight,
+	Count,
+};
+
+struct PlayerActionBinding {
+	BYTE keyboardKey = 0;
+	ControllerInput controllerInput = ControllerInput::None;
+};
 
 class Input {
 public:
@@ -32,6 +86,22 @@ public:
 	bool PushKey(BYTE keyNumber);
 
 	bool TriggerKey(BYTE keyNumber);
+
+	// プレイヤー用のアクション入力。キーボードとXInputコントローラーのどちらでも反応する。
+	bool PushAction(PlayerAction action) const;
+	bool TriggerAction(PlayerAction action) const;
+	const PlayerActionBinding& GetActionBinding(PlayerAction action) const;
+	void SetKeyboardBinding(PlayerAction action, BYTE key);
+	void SetControllerBinding(PlayerAction action, ControllerInput input);
+	void ResetPlayerActionBindings();
+	void SavePlayerActionBindings() const;
+	bool IsControllerConnected() const { return isControllerConnected_; }
+
+	static constexpr size_t GetPlayerActionCount() { return static_cast<size_t>(PlayerAction::Count); }
+	static constexpr size_t GetControllerInputCount() { return static_cast<size_t>(ControllerInput::Count); }
+	static const char* GetPlayerActionName(PlayerAction action);
+	static const char* GetControllerInputName(ControllerInput input);
+	static std::string GetKeyboardKeyName(BYTE key);
 
 	// ===========================
 	// マウス入力 ゲッター
@@ -70,6 +140,14 @@ private:
 
 	//前回の全キーの状態
 	BYTE keyPre[256] = {};
+
+	std::array<PlayerActionBinding, static_cast<size_t>(PlayerAction::Count)> playerActionBindings_{};
+	XINPUT_STATE controllerState_{};
+	XINPUT_STATE controllerStatePre_{};
+	bool isControllerConnected_ = false;
+
+	bool IsControllerInputPressed(ControllerInput input, bool previousState) const;
+	void LoadPlayerActionBindings();
 
 	//WindowsAPI
 	WinApp *winApp_ = nullptr;

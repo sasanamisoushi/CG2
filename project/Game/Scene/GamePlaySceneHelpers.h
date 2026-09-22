@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "engine/Debug/ImGuiManager.h"
 #include <externals/imgui/imgui.h>
 #include "engine/math/MyMath.h"
@@ -323,7 +323,7 @@ namespace {
 		return maxX > minX && maxY > minY;
 	}
 
-	void DrawLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* lockOnReticleSprite_, bool isJammed = false) {
+	void DrawLockOnOverlaySprite(const Enemy *target, const Matrix4x4 &viewProjectionMatrix, Sprite* lockOnReticleSprite_, bool isJammed = false, bool isFighterLockDanger = false) {
 		if (!target) {
 			return;
 		}
@@ -379,7 +379,9 @@ namespace {
 		if (lockOnReticleSprite_) {
 			lockOnReticleSprite_->SetPosition(center);
 			lockOnReticleSprite_->SetSize({ reticleSize * aspectScaleX, reticleSize });
-			lockOnReticleSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+			lockOnReticleSprite_->SetColor(isFighterLockDanger
+				? Vector4{ 1.0f, 0.18f, 0.12f, 1.0f }
+				: Vector4{ 1.0f, 1.0f, 1.0f, 1.0f });
 			lockOnReticleSprite_->Update();
 			lockOnReticleSprite_->Draw();
 		}
@@ -416,11 +418,11 @@ namespace {
 		const float width = maxX - minX;
 		const float height = maxY - minY;
 		Vector3 screenPosition = MyMath::WorldToScreen(worldPosition, viewProjectionMatrix, width, height);
-		if (screenPosition.z < 0.0f || screenPosition.z > 1.0f ||
-			screenPosition.x < 0.0f || screenPosition.x > width ||
-			screenPosition.y < 0.0f || screenPosition.y > height) {
+		if (screenPosition.z < 0.0f) {
 			return;
 		}
+		screenPosition.x = std::clamp(screenPosition.x, 20.0f, width - 20.0f);
+		screenPosition.y = std::clamp(screenPosition.y, 20.0f, height - 20.0f);
 
 		const float winAppWidth = static_cast<float>(WinApp::GetClientWidth());
 		const float winAppHeight = static_cast<float>(WinApp::GetClientHeight());
@@ -440,23 +442,15 @@ namespace {
 			globalTimeAngle += 0.025f;
 
 			// 近くの敵や同一敵への重複時も各弾が視認できるよう、全弾数(totalLockCount)と弾インデックス(lockIndex)に応じたオフセットを計算
-			float offsetDistance = (totalLockCount > 1) ? std::clamp(24.0f + collisionRadius * 6.0f, 20.0f, 45.0f) : 0.0f;
-			float angle = (3.14159265f * 2.0f / (totalLockCount > 0 ? totalLockCount : 1)) * (lockIndex - 1) + globalTimeAngle;
+			int effectiveTotal = (std::max)(totalLockCount, 1);
+			float offsetDistance = (totalLockCount > 1) ? std::clamp(28.0f + collisionRadius * 6.0f, 24.0f, 48.0f) : 0.0f;
+			float angle = (3.14159265f * 2.0f / static_cast<float>(effectiveTotal)) * static_cast<float>(lockIndex - 1) + globalTimeAngle;
 
 			float finalX = spriteX + std::cos(angle) * offsetDistance;
 			float finalY = spriteY + std::sin(angle) * offsetDistance;
 
-			// 発射弾数・ロック順に応じたカラーリング
-			Vector4 color = { 1.0f, 0.8f, 0.1f, 1.0f };
-			if (lockIndex == 1) {
-				color = { 0.2f, 1.0f, 0.4f, 1.0f }; // 1発目: 緑
-			} else if (lockIndex == 2) {
-				color = { 1.0f, 0.9f, 0.2f, 1.0f }; // 2発目: 黄
-			} else if (lockIndex == 3) {
-				color = { 1.0f, 0.5f, 0.1f, 1.0f }; // 3発目: オレンジ
-			} else if (lockIndex >= 4) {
-				color = { 1.0f, 0.2f, 0.2f, 1.0f }; // 4発目以降: 赤
-			}
+			// 誘導弾のターゲットマーカーはすべて統一して鮮やかな赤色にする
+			Vector4 color = { 1.0f, 0.15f, 0.15f, 1.0f };
 
 			missileLockOnReticleSprite_->SetColor(color);
 			missileLockOnReticleSprite_->SetPosition({ finalX, finalY });
@@ -500,3 +494,7 @@ namespace {
 		}
 	}
 }
+
+
+
+

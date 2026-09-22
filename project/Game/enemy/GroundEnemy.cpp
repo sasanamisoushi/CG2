@@ -113,7 +113,8 @@ void GroundEnemy::Initialize(const Vector3 &position) {
 
     isDead_ = false;
     hp_ = kGroundEnemyMaxHp;
-    isChasingPlayer_ = true; // ロックオン待ちを解除し、最初からアクティブ状態で自律行動
+    // 地形への接地は維持したまま、ロックオンされていなくても自律的に追跡・攻撃する。
+    isChasingPlayer_ = true;
 
     // 近接攻撃判定用ブロックの初期化
     meleeBox_ = std::make_unique<Object3d>();
@@ -177,7 +178,7 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
             float maxTerrainY = -99999.0f;
             bool foundTerrain = false;
             for (const auto& tri : triangles) {
-                if (tri.normal.y > 0.2f) {
+                if (std::abs(tri.normal.y) > 0.2f) {
                     float triY = 0.0f;
                     if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], position_.x, position_.z, triY)) {
                         if (triY > maxTerrainY) {
@@ -188,7 +189,7 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
                 }
             }
 
-            const float footOffset = scale_.y;
+            const float footOffset = GetFootOffset();
             if (foundTerrain && position_.y < maxTerrainY + footOffset) {
                 position_.y = maxTerrainY + footOffset;
                 if (velocityY_ < 0.0f) {
@@ -201,20 +202,21 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
             for (const auto& tri : triangles) {
                 Vector3 pushVector;
                 if (MyMath::IsCollision(enemySphere, tri, pushVector)) {
-                    if (tri.normal.y > 0.3f) {
+                    if (std::abs(tri.normal.y) > 0.3f) {
                         float pushLen = MyMath::Length(pushVector);
                         if (pushLen < 0.05f) pushLen = 0.05f;
-                        pushVector = MyMath::Multiply(pushLen, tri.normal);
-                        if (pushVector.y < 0.0f) {
-                            pushVector.y = -pushVector.y;
+                        Vector3 groundNormal = tri.normal;
+                        if (groundNormal.y < 0.0f) {
+                            groundNormal = MyMath::Multiply(-1.0f, groundNormal);
                         }
+                        pushVector = MyMath::Multiply(pushLen, groundNormal);
                     }
                     position_.x += pushVector.x;
                     position_.y += pushVector.y;
                     position_.z += pushVector.z;
                     enemySphere.center = position_;
 
-                    if (tri.normal.y > 0.3f) {
+                    if (std::abs(tri.normal.y) > 0.3f) {
                         hitGroundThisFrame = true;
                     }
                 }
@@ -241,7 +243,14 @@ void GroundEnemy::UpdateGroundMovement(const Vector3 &playerPos, const std::list
         isGrounded_ = false;
     }
 
-    // プレイヤーへの水平方向の旋回・進行（常にアクティブ）
+    // スクリプト等で追跡を停止された場合だけ、Blenderで配置した位置を保つ。
+    if (!isChasingPlayer_) {
+        velocity_.x = 0.0f;
+        velocity_.z = 0.0f;
+        return;
+    }
+
+    // プレイヤーへの水平方向の旋回・進行
 
     Vector3 toPlayerHorizontal = { playerPos.x - position_.x, 0.0f, playerPos.z - position_.z };
     float distHorizontalSq = toPlayerHorizontal.x * toPlayerHorizontal.x + toPlayerHorizontal.z * toPlayerHorizontal.z;
@@ -469,7 +478,7 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
         if (obs->IsUseMeshCollider()) {
             const auto& triangles = obs->GetWorldTriangles();
             for (const auto& tri : triangles) {
-                if (tri.normal.y > 0.1f) {
+                if (std::abs(tri.normal.y) > 0.1f) {
                     float triY = 0.0f;
                     if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], position_.x, position_.z, triY)) {
                         if (triY > maxGroundY) {
@@ -495,7 +504,7 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
                 if (!obs || obs->IsStageBounds() || !obs->IsCollisionEnabled()) continue;
                 if (obs->IsUseMeshCollider()) {
                     for (const auto& tri : obs->GetWorldTriangles()) {
-                        if (tri.normal.y > 0.1f) {
+                        if (std::abs(tri.normal.y) > 0.1f) {
                             float triY = 0.0f;
                             if (GetTriangleY(tri.p[0], tri.p[1], tri.p[2], sampleX, sampleZ, triY)) {
                                 if (triY > maxGroundY) {
@@ -511,8 +520,8 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
         }
     }
 
-    const float footOffset = scale_.y * 0.5f;
-    if (foundGround && maxGroundY > -50.0f) {
+    const float footOffset = GetFootOffset();
+    if (foundGround) {
         position_.y = maxGroundY + footOffset;
     } else {
         // 地表のデフォルト標高（Y = 0.0f）に安全着地
@@ -522,6 +531,19 @@ void GroundEnemy::SnapToGround(const std::list<std::unique_ptr<Obstacle>> &obsta
     velocityY_ = 0.0f;
     isGrounded_ = true;
     UpdateModel();
+}
+
+float GroundEnemy::GetFootOffset() const {
+    if (!object_ || !object_->GetModel()) {
+        return scale_.y;
+    }
+
+    // Object3d の原点は足元とは限らない。モデルの最下端が地面の高さになる分だけ
+    // 原点を持ち上げることで、地形の傾斜上にも確実に立たせる。
+    const Vector3 center = object_->GetModel()->GetBoundsCenter();
+    const Vector3 halfExtents = object_->GetModel()->GetHalfExtents();
+    const float localBottomY = center.y - halfExtents.y;
+    return (std::max)(0.0f, -localBottomY * std::abs(scale_.y));
 }
 
 void GroundEnemy::UpdateFlightPathMovement() {

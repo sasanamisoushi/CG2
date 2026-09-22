@@ -9,6 +9,8 @@
 #include <string>
 #include <list>
 #include <map>
+#include <array>
+#include <vector>
 
 class Obstacle;
 
@@ -137,8 +139,28 @@ public:
 
 private:
     void ApplyBattroidProceduralWalk();
+    void ApplyGuardPose(float blendWeight);
+    void InitializeTransformPlayerModel();
+    void UpdateTransformPlayerModel();
+    bool IsTransformPlayerModel() const;
+
+    struct TransformPlayerPose {
+        Vector3 translate;
+        Vector3 scale;
+        Quaternion rotate;
+    };
+
+    struct TransformPlayerPart {
+        std::string name;
+        std::unique_ptr<Object3d> object;
+        std::array<TransformPlayerPose, 3> poses;
+    };
 
 	std::unique_ptr<Object3d> object_;
+	TransformPlayerPart transformCore_;
+	std::vector<TransformPlayerPart> transformParts_;
+	PlayerMode transformFromMode_ = PlayerMode::Fighter;
+	float transformModeBlend_ = 1.0f;
 	std::unique_ptr<Object3d> guardBarrier_;
 	std::unique_ptr<Object3d> guardBarrierRing_;
 	std::string modelName_;
@@ -169,6 +191,7 @@ private:
     bool isGuarding_ = false;
     float guardBarrierPulse_ = 0.0f;
     float guardScale_ = 0.0f;
+    float guardPoseWeight_ = 0.0f;
     
     bool isMeleeAttacking_ = false;
     int meleeTimer_ = 0;

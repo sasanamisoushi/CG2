@@ -23,6 +23,7 @@ public:
 
 private:
     void UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager);
+    float GetFootOffset() const;
 
     // 重力とジャンプ
     float velocityY_ = 0.0f;
