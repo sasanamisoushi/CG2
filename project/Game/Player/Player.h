@@ -13,6 +13,8 @@
 #include <vector>
 
 class Obstacle;
+class PlayerMovementController;
+class PlayerActionController;
 
 enum class PlayerMode {
     Fighter,  // 高速飛行
@@ -138,6 +140,8 @@ public:
     void StopActionAnimation();
 
 private:
+    friend class PlayerMovementController;
+    friend class PlayerActionController;
     void ApplyBattroidProceduralWalk();
     void ApplyGuardPose(float blendWeight);
     void InitializeTransformPlayerModel();

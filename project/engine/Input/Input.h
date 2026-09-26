@@ -61,9 +61,23 @@ enum class ControllerInput : uint8_t {
 	Count,
 };
 
+// 操作設定から割り当て可能なマウス入力。
+// マウス移動はカメラ操作用に別途使用しているため、ここでは明示的なボタンとホイールだけを扱う。
+enum class MouseInput : uint8_t {
+	None,
+	LeftButton,
+	RightButton,
+	MiddleButton,
+	Button4,
+	WheelUp,
+	WheelDown,
+	Count,
+};
+
 struct PlayerActionBinding {
 	BYTE keyboardKey = 0;
 	ControllerInput controllerInput = ControllerInput::None;
+	MouseInput mouseInput = MouseInput::None;
 };
 
 class Input {
@@ -87,20 +101,23 @@ public:
 
 	bool TriggerKey(BYTE keyNumber);
 
-	// プレイヤー用のアクション入力。キーボードとXInputコントローラーのどちらでも反応する。
+	// プレイヤー用のアクション入力。キーボード、XInputコントローラー、マウスのいずれでも反応する。
 	bool PushAction(PlayerAction action) const;
 	bool TriggerAction(PlayerAction action) const;
 	const PlayerActionBinding& GetActionBinding(PlayerAction action) const;
 	void SetKeyboardBinding(PlayerAction action, BYTE key);
 	void SetControllerBinding(PlayerAction action, ControllerInput input);
+	void SetMouseBinding(PlayerAction action, MouseInput input);
 	void ResetPlayerActionBindings();
 	void SavePlayerActionBindings() const;
 	bool IsControllerConnected() const { return isControllerConnected_; }
 
 	static constexpr size_t GetPlayerActionCount() { return static_cast<size_t>(PlayerAction::Count); }
 	static constexpr size_t GetControllerInputCount() { return static_cast<size_t>(ControllerInput::Count); }
+	static constexpr size_t GetMouseInputCount() { return static_cast<size_t>(MouseInput::Count); }
 	static const char* GetPlayerActionName(PlayerAction action);
 	static const char* GetControllerInputName(ControllerInput input);
+	static const char* GetMouseInputName(MouseInput input);
 	static std::string GetKeyboardKeyName(BYTE key);
 
 	// ===========================
@@ -147,6 +164,7 @@ private:
 	bool isControllerConnected_ = false;
 
 	bool IsControllerInputPressed(ControllerInput input, bool previousState) const;
+	bool IsMouseInputPressed(MouseInput input, bool previousState) const;
 	void LoadPlayerActionBindings();
 
 	//WindowsAPI

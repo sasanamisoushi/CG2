@@ -197,13 +197,13 @@ def build_scene_data(scene):
         elif obj.type == "MESH" and obj.name in model_filenames:
             obj_data["model"] = model_filenames[obj.name]
 
-        et = getattr(obj, "enemy_type", "VF3")
-        if not et or et == "None" or et == "NONE":
-            et = "VF3"
-        obj_data["enemy_type"] = et
-        obj_data["enemy"] = {"type": et}
-
         if obj_data.get("category") == "ENEMY" or obj_data.get("game_obj_type") == "ENEMY":
+            et = getattr(obj, "enemy_type", "")
+            if not et or et == "None" or et == "NONE":
+                et = "VF1"
+            obj_data["enemy_type"] = et
+            obj_data["enemy"] = {"type": et}
+
             path_id = getattr(obj, "enemy_path_id", "None")
             if path_id and path_id != "None":
                 obj_data["path_id"] = path_id

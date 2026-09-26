@@ -16,6 +16,15 @@ class SimulationManager {
 public:
 	SimulationManager(GamePlayScene* scene);
 	bool SaveCurrentSimulationLayoutToSceneJson(const std::string &filePath);
+	// ゲーム内レベルエディタで作成した敵を、Blender と共通の scene.json 形式で保存する。
+	bool AddEnemySpawnToSceneJson(
+		const std::string &filePath,
+		const std::string &name,
+		const std::string &enemyType,
+		const Vector3 &position,
+		const Vector3 &rotation);
+	// scene.json 内の敵オブジェクトの並びを入れ替え、初期スポーン順を変更する。
+	bool MoveEnemySpawnInSceneJson(const std::string &filePath, size_t sourceIndex, size_t targetIndex);
 	void RefreshSimulationActionNames();
 	bool SaveNamedSimulationAction(const std::string &filePath, const std::string &actionName);
 	bool ApplySimulationAction(const std::string &filePath, const std::string &actionName);

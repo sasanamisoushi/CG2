@@ -1,4 +1,5 @@
 #include "Enemy.h"
+#include "EnemyActionController.h"
 #include "3D/Object3dCommon.h"
 #include "3D/Primitive.h"
 #include "engine/Math/MyMath.h"
@@ -310,31 +311,15 @@ OBB Enemy::GetOBB() const {
 
 // 当たった時の処理
 void Enemy::OnCollision() {
-    isDead_ = true;
+    EnemyActionController{}.Destroy(*this);
 }
 
 void Enemy::TakeDamage(int damage) {
-    if (isDead_ || damage <= 0) {
-        return;
-    }
-
-    StartChasingPlayer();
-    hp_ -= damage;
-    if (hp_ <= 0) {
-        hp_ = 0;
-        OnCollision();
-    }
+    EnemyActionController{}.TakeDamage(*this, damage);
 }
 
 void Enemy::StartChasingPlayer() {
-    if (isDead_) {
-        return;
-    }
-
-    isChasingPlayer_ = true;
-    state_ = EnemyState::Approach;
-    currentSpeed_ = (currentSpeed_ > 0.0f) ? currentSpeed_ : kEnemyCruiseSpeed;
-    velocity_ = Scale(forward_, currentSpeed_);
+    EnemyActionController{}.StartChasing(*this);
 }
 
 void Enemy::SetRotation(const Vector3 &rotation) {

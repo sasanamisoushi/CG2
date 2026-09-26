@@ -28,6 +28,12 @@ private:
 	int currentSimulationTarget_ = 0;
 	int currentEngineSettingsTarget_ = 0;
 	std::string simulationSaveMessage_;
+	char blenderEnemyName_[64] = "Enemy";
+	int blenderEnemyTypeIndex_ = 0;
+	float blenderEnemyPosition_[3] = { 0.0f, 3.0f, 50.0f };
+	float blenderEnemyRotationDegrees_[3] = { 0.0f, 0.0f, 0.0f };
+	bool enemyMousePlacementEnabled_ = false;
+	float enemyMousePlacementHeight_ = 3.0f;
 	char simulationActionName_[64] = "Action1";
 	std::vector<std::string> simulationActionNames_;
 	int selectedSimulationActionIndex_ = 0;

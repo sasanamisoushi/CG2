@@ -1,10 +1,11 @@
 ﻿#pragma once
 #include "Enemy.h"
-#include <array>
 
 // ボス敵を表すクラス
 class Boss : public Enemy {
 public:
+    static constexpr int kMaxHP = 60;
+
     Boss() = default;
     ~Boss() override = default;
 
@@ -24,5 +25,4 @@ private:
 
     int actionTimer_ = 0;
     int summonRequests_ = 0;
-    std::array<std::unique_ptr<Object3d>, 6> hullParts_;
 };

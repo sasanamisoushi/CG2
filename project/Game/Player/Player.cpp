@@ -1,4 +1,6 @@
 ﻿#include "Player.h"
+#include "PlayerMovementController.h"
+#include "PlayerActionController.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -1197,27 +1199,36 @@ void Player::SetRotation(const Vector3 &eulerRotation) {
 }
 
 void Player::OnCollision() {
-	isDead_ = true;
-	if (object_) {
-		object_.reset();
-	}
-	transformParts_.clear();
-	transformCore_ = {};
-	if (boosterEffect_) {
-		boosterEffect_.reset();
-	}
+	PlayerActionController{}.Destroy(*this);
 }
 
 void Player::TakeDamage(int damage) {
-	if (isDead_ || isSpecialAttackActive_ || IsDodging() || IsGuarding()) return;
-	hp_ -= damage;
-	if (hp_ <= 0) {
-		hp_ = 0;
-		OnCollision();
-	}
+	PlayerActionController{}.TakeDamage(*this, damage);
 }
 
 void Player::Move(bool rotationLocked) {
+	PlayerMovementController{}.Update(*this, rotationLocked);
+}
+
+void PlayerMovementController::Update(Player& player, bool rotationLocked) const {
+	auto& currentMode_ = player.currentMode_;
+	auto& modeParams_ = player.modeParams_;
+	auto& isGuarding_ = player.isGuarding_;
+	auto& isBattroidWalking_ = player.isBattroidWalking_;
+	auto& battroidWalkTime_ = player.battroidWalkTime_;
+	auto& dodgeCooldownTimer_ = player.dodgeCooldownTimer_;
+	auto& dodgeTimer_ = player.dodgeTimer_;
+	auto& dodgeDirection_ = player.dodgeDirection_;
+	auto& cameraPitch_ = player.cameraPitch_;
+	auto& quaternion_ = player.quaternion_;
+	auto& isSongActive_ = player.isSongActive_;
+	auto& velocity_ = player.velocity_;
+	auto& position_ = player.position_;
+	auto& isMeleeAttacking_ = player.isMeleeAttacking_;
+	auto& meleeTimer_ = player.meleeTimer_;
+	const auto ChangeMode = [&player](PlayerMode mode) { player.ChangeMode(mode); };
+	const auto GetForwardVector = [&player]() { return player.GetForwardVector(); };
+	const auto PlayActionAnimation = [&player](const std::string& actionName) { player.PlayActionAnimation(actionName); };
 	auto input = Input::GetInstance();
 
     if (input->TriggerAction(PlayerAction::TransformFighter)) ChangeMode(PlayerMode::Fighter);
@@ -1246,10 +1257,10 @@ void Player::Move(bool rotationLocked) {
 	// 回避はファイター形態専用。TriggerKeyなので1入力につき1回だけ回転する。
 	if (currentMode_ == PlayerMode::Fighter && dodgeCooldownTimer_ <= 0 && dodgeTimer_ <= 0) {
 		if (input->TriggerAction(PlayerAction::DodgeLeft)) {
-			dodgeTimer_ = kDodgeDurationFrames;
+			dodgeTimer_ = Player::kDodgeDurationFrames;
 			dodgeDirection_ = -1.0f;
 		} else if (input->TriggerAction(PlayerAction::DodgeRight)) {
-			dodgeTimer_ = kDodgeDurationFrames;
+			dodgeTimer_ = Player::kDodgeDurationFrames;
 			dodgeDirection_ = 1.0f;
 		}
 	}
@@ -1454,7 +1465,7 @@ void Player::Move(bool rotationLocked) {
 	} else if (dodgeTimer_ > 0) {
 		dodgeTimer_--;
 		if (dodgeTimer_ <= 0) {
-			dodgeCooldownTimer_ = kDodgeCooldownFrames;
+			dodgeCooldownTimer_ = Player::kDodgeCooldownFrames;
 		}
 	} else if (dodgeCooldownTimer_ > 0) {
 		--dodgeCooldownTimer_;
@@ -1482,20 +1493,12 @@ void Player::UpdateLockOnRotation(const Vector3& targetPos) {
 }
 
 void Player::SetSpecialAttackActive(bool active) {
-	if (active && !isSpecialAttackActive_) {
-		const Vector3 currentCameraForward = LengthSq(lastCameraDirection_) > 0.0001f
-			? NormalizeOrZero(lastCameraDirection_)
-			: NormalizeOrZero(GetForwardVector());
-		specialAttackCameraYaw_ = std::atan2(currentCameraForward.x, currentCameraForward.z);
-		specialAttackCameraPitch_ = CameraPitchFromForward(currentCameraForward);
-	}
-	isSpecialAttackActive_ = active;
+	PlayerActionController{}.SetSpecialAttackActive(*this, active);
 }
 
 void Player::SetSongActive(bool active) {
-	isSongActive_ = active;
+	PlayerActionController{}.SetSongActive(*this, active);
 }
-
 
 void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacles) {
 	OBB playerOBB = GetOBB();

@@ -1,6 +1,7 @@
 import bpy
 import threading
 import json
+import socket
 import urllib.request
 import urllib.parse
 from mathutils import Vector
@@ -23,7 +24,13 @@ class OllamaWorker(threading.Thread):
                 "model": self.model_name,
                 "prompt": self.prompt_text,
                 "format": "json",
-                "stream": False
+                # The API returns no bytes until a non-streaming generation has
+                # completed.  Keeping the model loaded avoids paying its startup
+                # cost on every click, which otherwise frequently exceeds a short
+                # socket timeout.
+                "stream": False,
+                "keep_alive": "10m",
+                "options": {"temperature": 0}
             }
             req = urllib.request.Request(
                 self.url,
@@ -43,6 +50,13 @@ class OllamaWorker(threading.Thread):
                 # Fallback parser if Ollama returns malformed json
                 self.result_data = operators._parse_gemini_json_text(response_text)
                 
+        except (socket.timeout, TimeoutError):
+            self.error_message = (
+                f"{self.timeout}秒待ってもOllamaから応答がありません。"
+                "モデルの初回読み込み中、または処理が重い可能性があります。"
+                "Ollamaが起動していることと、設定したモデル名が ollama list にあることを確認し、"
+                "必要なら待ち時間を長くしてください。"
+            )
         except urllib.error.URLError as e:
             self.error_message = f"Ollamaに接続できません。Ollamaが起動しているか確認してください。({e.reason})"
         except Exception as e:
@@ -63,7 +77,14 @@ class MYADDON_OT_ai_generate_enemy_plan_async(bpy.types.Operator):
             if self._worker and not self._worker.is_alive():
                 context.window_manager.event_timer_remove(self._timer)
                 if self._worker.error_message:
-                    self.report({'ERROR'}, f"Ollama Error: {self._worker.error_message}")
+                    if getattr(context.scene, "myaddon_ai_enemy_ollama_fallback", True):
+                        self.report(
+                            {'WARNING'},
+                            f"Ollama Error: {self._worker.error_message} 内蔵AIで生成します。"
+                        )
+                        self.apply_builtin_fallback(context)
+                    else:
+                        self.report({'ERROR'}, f"Ollama Error: {self._worker.error_message}")
                 else:
                     self.report({'INFO'}, "AIが戦略を考案しました。配置を行います...")
                     self.apply_result(context, self._worker.result_data)
@@ -108,7 +129,7 @@ class MYADDON_OT_ai_generate_enemy_plan_async(bpy.types.Operator):
         if prompt:
             prompt_text += f"[USER] {prompt}\n"
             
-        timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 25)))
+        timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 120)))
         self._worker = OllamaWorker(ollama_model, prompt_text, timeout)
         self._worker.start()
         
@@ -129,6 +150,16 @@ class MYADDON_OT_ai_generate_enemy_plan_async(bpy.types.Operator):
         scene.myaddon_ai_enemy_provider = 'BUILTIN'
         bpy.ops.myaddon.myaddon_ot_ai_generate_enemy_plan()
         scene.myaddon_ai_enemy_provider = 'OLLAMA'
+
+    def apply_builtin_fallback(self, context):
+        """Keep generating when the optional local LLM is unavailable."""
+        scene = context.scene
+        previous_provider = scene.myaddon_ai_enemy_provider
+        try:
+            scene.myaddon_ai_enemy_provider = 'BUILTIN'
+            bpy.ops.myaddon.myaddon_ot_ai_generate_enemy_plan()
+        finally:
+            scene.myaddon_ai_enemy_provider = previous_provider
 
 
 class MYADDON_OT_ai_generate_level_obstacles_async(bpy.types.Operator):
@@ -171,7 +202,7 @@ class MYADDON_OT_ai_generate_level_obstacles_async(bpy.types.Operator):
         if prompt:
             prompt_text += f"[USER] {prompt}\n"
             
-        timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 25)))
+        timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 120)))
         self._worker = OllamaWorker(ollama_model, prompt_text, timeout)
         self._worker.start()
         

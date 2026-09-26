@@ -2,6 +2,8 @@ import json
 import math
 import os
 import random
+import shutil
+import socket
 import subprocess
 import urllib.error
 import urllib.parse
@@ -363,6 +365,7 @@ def _parse_ai_enemy_prompt(prompt_text):
         "amplitude_multiplier": 1.0,
         "opener": None,
         "keep_formation": False,
+        "formation_spacing_multiplier": 1.0,
         "respect_bounds": True,
         "edge_margin": 2.0,
         "enemy_type": None,
@@ -384,6 +387,9 @@ def _parse_ai_enemy_prompt(prompt_text):
     if _prompt_has(normalized, "群れ", "隊列", "編隊", "フォーメーション", "まとま", "崩さ", "一団", "formation", "swarm"):
         motion["keep_formation"] = True
         motion["opener"] = "ALL"
+    if _prompt_has(normalized, "間隔", "離れ", "離し", "広げ", "spacing", "spread", "separate"):
+        motion["keep_formation"] = True
+        motion["formation_spacing_multiplier"] = 2.0
     if _prompt_has(normalized, "外に出ない", "外へ出ない", "はみ出", "出ない", "収め", "範囲内", "inside", "bounds"):
         motion["respect_bounds"] = True
     if _prompt_has(normalized, "ぎりぎり", "ギリギリ", "端沿い", "外周", "境界", "edge", "border"):
@@ -433,6 +439,11 @@ def _parse_ai_enemy_prompt(prompt_text):
         motion["speed_multiplier"] = 1.6
     elif _prompt_has(normalized, "遅", "ゆっくり", "緩やか", "slow"):
         motion["speed_multiplier"] = 0.5
+
+    if _prompt_has(normalized, "大き", "広く", "広い", "wide", "large", "big"):
+        motion["amplitude_multiplier"] = max(motion["amplitude_multiplier"], 1.8)
+    elif _prompt_has(normalized, "短い", "小さ", "狭く", "compact", "small"):
+        motion["amplitude_multiplier"] = min(motion["amplitude_multiplier"], 0.55)
         
     import re
     path_match = re.search(r'(path_\w+)', normalized)
@@ -470,7 +481,8 @@ def _build_ai_formation_offsets(count, extents, motion):
     rows = max(1, math.ceil(count / columns))
     max_spacing_x = (extents.x * 0.60) / max(1, columns - 1)
     max_spacing_y = (extents.y * 0.60) / max(1, rows - 1)
-    spacing = min(2.0, max_spacing_x, max_spacing_y)
+    preferred_spacing = 4.0 if motion.get("formation_spacing_multiplier", 1.0) > 1.0 else 2.0
+    spacing = min(preferred_spacing, max_spacing_x, max_spacing_y)
     spacing = max(0.65, spacing)
 
     offsets = []
@@ -1162,6 +1174,43 @@ def _request_gemini_enemy_plan(context, scene, count, seed, history_msgs, wave_d
     except Exception as exc:
         print(f"Gemini Enemy Plan error: {exc}")
         return None
+
+
+def _request_ollama_enemy_plan(scene, count, seed, history_msgs, wave_delay, center, extents, player):
+    """Request a complete enemy-path plan from the configured local Ollama model."""
+    model = str(getattr(scene, "myaddon_ai_ollama_model", "llama3")).strip() or "llama3"
+    prompt = _build_gemini_enemy_prompt(count, seed, history_msgs, wave_delay, center, extents, player)
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "format": _ai_enemy_plan_schema(),
+        "stream": False,
+        "keep_alive": "10m",
+        "options": {"temperature": 0, "num_predict": 1200},
+    }
+    request = urllib.request.Request(
+        "http://127.0.0.1:11434/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    timeout = max(5, int(getattr(scene, "myaddon_ai_enemy_ollama_timeout", 120)))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            response_data = json.loads(response.read().decode("utf-8"))
+    except (socket.timeout, TimeoutError) as exc:
+        raise RuntimeError(f"Ollamaが{timeout}秒以内に応答しませんでした") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Ollamaへ接続できません: {exc.reason}") from exc
+
+    response_text = response_data.get("response", "")
+    if not response_text.strip():
+        raise RuntimeError("Ollamaから空の応答が返されました")
+    plan_data = _parse_gemini_json_text(response_text)
+    if not isinstance(plan_data, dict) or not isinstance(plan_data.get("enemies"), list):
+        raise RuntimeError("Ollamaの応答が敵プラン形式ではありません")
+    return plan_data
+
 def _ai_level_plan_schema():
     return {
         "type": "OBJECT",
@@ -1301,9 +1350,12 @@ def _create_ai_enemy_objects_from_blueprints(scene, collection, blueprints, moti
         if 0 <= trigger_index < len(generated_enemies):
             trigger_name = generated_enemies[trigger_index].name
         elif trigger_index == -1:
-            ui_trigger_target = getattr(scene, "myaddon_ai_enemy_trigger_target", None)
-            if ui_trigger_target:
-                trigger_name = ui_trigger_target.name
+            ui_trigger_targets = get_ai_enemy_trigger_target_names(scene)
+            trigger_names = [
+                name for name in sorted(ui_trigger_targets)
+                if bpy.data.objects.get(name) is not None
+            ]
+            trigger_name = ", ".join(trigger_names)
 
         enemy_name = f"AIEnemy_{index + 1:02d}"
         enemy_obj = _create_ai_enemy_spawn(
@@ -1382,16 +1434,15 @@ def _build_object_data(obj, model_filenames=None):
     elif obj.type == 'MESH' and model_filenames and obj.name in model_filenames:
         obj_data["model"] = model_filenames[obj.name]
 
-    # 敵タイプの出力（enemy_type / enemy.type の両方を100%保証）
-    et = getattr(obj, "enemy_type", "VF3")
-    if not et or et == "None" or et == "NONE":
-        et = "VF3"
-    obj_data["enemy_type"] = et
-    obj_data["enemy"] = {
-        "type": et,
-    }
-
     if obj_data.get("category") == 'ENEMY' or obj_data.get("game_obj_type") == 'ENEMY':
+        # 敵だけに敵タイプを出力する。非敵へVF3を既定出力してしまうと、
+        # 次回読み込み時に本来の種類を見分けにくくなる。
+        et = getattr(obj, "enemy_type", "")
+        if not et or et == "None" or et == "NONE":
+            et = "VF1"
+        obj_data["enemy_type"] = et
+        obj_data["enemy"] = {"type": et}
+
         path_id = getattr(obj, "enemy_path_id", "None")
         if path_id and path_id != "None":
             obj_data["path_id"] = path_id
@@ -1474,6 +1525,17 @@ def _export_scene_to_path(scene, filepath, model_filenames=None):
                         json.dump(data, file, ensure_ascii=False, indent=4)
     except Exception as e:
         print(f"Dual export sync notice: {e}")
+
+    # The executable can be launched directly from generated/outputs, where it
+    # resolves resources/scene.json next to itself.  Keep that runtime copy in
+    # sync so Scene Export takes effect without requiring a separate rebuild.
+    workspace_root = os.path.abspath(os.path.join(os.path.dirname(filepath), "..", ".."))
+    for configuration in ("Development", "Debug", "Release"):
+        runtime_resources = os.path.join(
+            workspace_root, "generated", "outputs", configuration, "resources"
+        )
+        if os.path.isdir(runtime_resources):
+            shutil.copy2(filepath, os.path.join(runtime_resources, "scene.json"))
 
 
 def _export_obj_with_current_selection(filepath):
@@ -2604,6 +2666,62 @@ class MYADDON_OT_assign_selected_reinforcement_trigger(bpy.types.Operator):
         return {'FINISHED'}
 
 
+def _select_ai_enemy_trigger_targets(context, target_names):
+    """Select trigger enemies after the UI button operation has completed."""
+    targets = [
+        context.scene.objects[name]
+        for name in sorted(target_names)
+        if name in context.scene.objects
+        and getattr(context.scene.objects[name], "game_obj_type", "NONE") == "ENEMY"
+    ]
+    if not targets:
+        return
+
+    for obj in list(context.selected_objects):
+        obj.select_set(False)
+    for target in targets:
+        target.select_set(True)
+    context.view_layer.objects.active = targets[-1]
+
+
+def get_ai_enemy_trigger_target_names(scene):
+    """Read the trigger targets from stable StringProperty storage."""
+    try:
+        target_names = json.loads(getattr(scene, "myaddon_ai_enemy_trigger_target", "[]"))
+    except (TypeError, json.JSONDecodeError):
+        return set()
+    return {str(name) for name in target_names} if isinstance(target_names, list) else set()
+
+
+def set_ai_enemy_trigger_target_names(scene, target_names):
+    """Store target names without Blender's dynamic EnumProperty callbacks."""
+    scene.myaddon_ai_enemy_trigger_target = json.dumps(sorted(target_names))
+
+
+class MYADDON_OT_toggle_ai_enemy_trigger_target(bpy.types.Operator):
+    """Toggle one enemy in the AI reinforcement trigger selection."""
+    bl_idname = "myaddon.toggle_ai_enemy_trigger_target"
+    bl_label = "出現条件の敵を切り替え"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    target_name: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        target = context.scene.objects.get(self.target_name)
+        if target is None or getattr(target, "game_obj_type", "NONE") != "ENEMY":
+            self.report({'WARNING'}, "選択対象の敵が見つかりません")
+            return {'CANCELLED'}
+
+        target_names = get_ai_enemy_trigger_target_names(context.scene)
+        if target.name in target_names:
+            target_names.remove(target.name)
+        else:
+            target_names.add(target.name)
+        set_ai_enemy_trigger_target_names(context.scene, target_names)
+        _select_ai_enemy_trigger_targets(context, target_names)
+        return {'FINISHED'}
+
+
 class MYADDON_OT_create_stage_bounds(bpy.types.Operator):
     bl_idname = "myaddon.myaddon_ot_create_stage_bounds"
     bl_label = "Xe[W͈͂zu"
@@ -2886,7 +3004,36 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
         layout = self.layout
         layout.prop(self, "motion_prompt")
         layout.prop(self, "seed")
-        layout.label(text="LLM有効時はこの位置・プロンプトで1体分のみ再生成します", icon='INFO')
+        layout.label(text="選択した全パスを1グループとして再生成します", icon='INFO')
+
+    @staticmethod
+    def _write_world_path(path_obj, world_points, loop, speed, handle_type):
+        """Store world-space AI points in a curve's local coordinate system."""
+        if path_obj.type != 'CURVE' or not world_points:
+            return False
+
+        local_matrix = path_obj.matrix_world.inverted_safe()
+        local_points = [local_matrix @ Vector(point) for point in world_points]
+        curve = path_obj.data
+        spline = curve.splines[0] if curve.splines else curve.splines.new('BEZIER')
+        if len(spline.bezier_points) < len(local_points):
+            spline.bezier_points.add(len(local_points) - len(spline.bezier_points))
+        elif len(spline.bezier_points) > len(local_points):
+            curve.splines.remove(spline)
+            spline = curve.splines.new('BEZIER')
+            spline.bezier_points.add(len(local_points) - 1)
+
+        # VECTOR keeps every Bézier segment inside its control-point span.  This
+        # prevents automatic handles from bulging outside the stage bounds.
+        safe_handle_type = 'VECTOR' if handle_type == 'AUTO' else handle_type
+        spline.use_cyclic_u = loop
+        for point, local_point in zip(spline.bezier_points, local_points):
+            point.co = local_point
+            point.handle_left_type = safe_handle_type
+            point.handle_right_type = safe_handle_type
+        path_obj.enemy_path_loop = loop
+        path_obj.enemy_path_speed = speed
+        return True
 
     def execute(self, context):
         scene = context.scene
@@ -2922,9 +3069,7 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
             
         rng = random.Random(self.seed)
         wave_delay = max(0, int(getattr(scene, "myaddon_ai_enemy_wave_delay", 90)))
-        
-        gemini_used = False
-        updated_count = 0
+        path_entries = []
         for path_obj in selected_paths:
             path_id = getattr(path_obj, "enemy_path_id", path_obj.name)
             spawn = None
@@ -2936,69 +3081,106 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
                     break
             
             if not spawn:
-                spawn = path_obj.location.copy()
+                spawn = path_obj.matrix_world.translation.copy()
+            path_entries.append({"path_obj": path_obj, "spawn": spawn, "side": side})
 
-            if _is_prompt_complex(self.motion_prompt):
-                try:
-                    # Construct a temporary history with just this path's prompt
-                    class DummyMsg:
-                        def __init__(self, content):
-                            self.content = content
-                            self.role = "USER"
-                            self.seed = 1
-                    temp_history = [DummyMsg(f"IMPORTANT: Partial regeneration. Enemy count must be exactly 1. Current spawn point is {{'x': {spawn.x}, 'y': {spawn.y}, 'z': {spawn.z}}}, but you MAY move the spawn location if the designer's request explicitly asks for it. Ignore global rules. {self.motion_prompt}")]
-                    
-                    plan_data = _request_gemini_enemy_plan(
-                        context,
-                        scene,
-                        1,
-                        self.seed,
-                        temp_history,
-                        wave_delay,
-                        center,
-                        extents,
-                        player,
+        ollama_blueprints = None
+        ollama_used = False
+        if getattr(scene, "myaddon_ai_enemy_provider", "OLLAMA") == 'OLLAMA':
+            try:
+                edit_prompt = self.motion_prompt.strip() or (
+                    "Improve these selected routes while keeping them inside the stage bounds."
+                )
+                formation_center = sum((entry["spawn"] for entry in path_entries), Vector()) / len(path_entries)
+                stage_radius_limit = max(1.25, min(extents.x - 1.0, extents.y - 1.0))
+                wants_large_route = _prompt_has(
+                    edit_prompt.casefold(), "大き", "広く", "広い", "wide", "large", "big"
+                )
+                wants_compact_route = _prompt_has(
+                    edit_prompt.casefold(), "短い", "小さ", "狭く", "compact", "small"
+                )
+                wants_wide_spacing = _prompt_has(
+                    edit_prompt.casefold(), "間隔", "離れ", "離し", "広げ", "spacing", "spread", "separate"
+                )
+                if wants_large_route:
+                    radius_instruction = (
+                        f"Make the route large: its radius MUST be between {stage_radius_limit * 0.60:.2f} "
+                        f"and {stage_radius_limit * 0.85:.2f}."
                     )
-                    blueprints = _sanitize_enemy_plan_data(plan_data, 1, center, extents, player)
-                    if blueprints:
-                        points = blueprints[0]["path"]
-                        loop = blueprints[0]["loop"]
-                        speed = blueprints[0]["speed"]
-                        handle_type = blueprints[0]["handle_type"]
-                        gemini_used = True
-                    else:
-                        points = []
-                        loop = False
-                        speed = 0.05
-                        handle_type = 'AUTO'
-                except Exception as exc:
-                    self.report({'ERROR'}, f"Gemini再生成に失敗しました: {exc}")
-                    continue
+                elif wants_compact_route:
+                    radius_instruction = (
+                        f"Make the route compact: its radius MUST be between 1.00 and {stage_radius_limit * 0.35:.2f}."
+                    )
+                else:
+                    radius_instruction = (
+                        f"Use a medium route radius between {stage_radius_limit * 0.35:.2f} "
+                        f"and {stage_radius_limit * 0.55:.2f}."
+                    )
+                spacing_instruction = (
+                    "Keep a wide, clearly visible separation between every unit while preserving the formation."
+                    if wants_wide_spacing else
+                    "Preserve each unit's current formation offset."
+                )
+                selected_spawn_data = [
+                    {"index": index, "spawn": {"x": entry["spawn"].x, "y": entry["spawn"].y, "z": entry["spawn"].z}}
+                    for index, entry in enumerate(path_entries)
+                ]
+
+                class DummyMsg:
+                    def __init__(self, content):
+                        self.content = content
+                        self.role = "USER"
+                        self.seed = 1
+
+                group_prompt = (
+                    f"IMPORTANT: Regenerate exactly {len(path_entries)} selected paths as one coordinated group. "
+                    "Return exactly that many enemies in the same order as the selected paths. "
+                    f"Keep these current spawn positions: {json.dumps(selected_spawn_data)}. "
+                    f"User request: {edit_prompt}. "
+                    "When the request mentions a formation, squad, circle, orbit, or one lap, preserve the relative "
+                    "offsets between every unit and make all paths use the same loop direction. "
+                    f"For a circular route, use a shared center near ({formation_center.x:.2f}, {formation_center.y:.2f}, {formation_center.z:.2f}) "
+                    f"{radius_instruction} {spacing_instruction} Use 6 to 8 evenly spaced path points. "
+                    "Never use a long crossing segment or place a point outside the field bounds."
+                )
+                plan_data = _request_ollama_enemy_plan(
+                    scene, len(path_entries), self.seed, [DummyMsg(group_prompt)], wave_delay,
+                    center, extents, player,
+                )
+                ollama_blueprints = _sanitize_enemy_plan_data(plan_data, len(path_entries), center, extents, player)
+                if len(ollama_blueprints) != len(path_entries):
+                    raise RuntimeError("Ollamaが選択したパス数と同じ数の有効なルートを返しませんでした")
+                for blueprint, entry in zip(ollama_blueprints, path_entries):
+                    blueprint["spawn"] = entry["spawn"]
+                    blueprint["path"][0] = entry["spawn"]
+                    if motion.get("pattern") == "ORBIT":
+                        blueprint["loop"] = True
+                    blueprint["handle_type"] = 'VECTOR'
+                ollama_used = True
+            except Exception as exc:
+                self.report({'WARNING'}, f"Ollama再生成に失敗したため内蔵AIで再生成します: {exc}")
+                ollama_blueprints = None
+
+        formation_offsets = _build_ai_formation_offsets(len(path_entries), extents, motion)
+        updated_count = 0
+        for index, entry in enumerate(path_entries):
+            path_obj = entry["path_obj"]
+            if ollama_blueprints is not None:
+                blueprint = ollama_blueprints[index]
+                points = blueprint["path"]
+                loop = blueprint["loop"]
+                speed = blueprint["speed"]
+                handle_type = blueprint["handle_type"]
             else:
-                points = _build_ai_enemy_points(style, motion, spawn, player, center, extents, side, 0, rng, __import__('mathutils').Vector((0,0,0)))
+                points = _build_ai_enemy_points(
+                    style, motion, entry["spawn"], player, center, extents, entry["side"], index, rng,
+                    formation_offsets[index],
+                )
                 loop = motion["loop"] if motion.get("loop") is not None else style == 'PATROL'
                 speed = 0.050 * speed_mult
-                handle_type = 'VECTOR' if motion.get("pattern") == "EDGE_ORBIT" and motion.get("respect_bounds") else 'AUTO'
+                handle_type = 'VECTOR'
 
-            if path_obj.type == 'CURVE' and points:
-                curve = path_obj.data
-                spline = curve.splines[0] if curve.splines else curve.splines.new('BEZIER')
-                if len(spline.bezier_points) < len(points):
-                    spline.bezier_points.add(len(points) - len(spline.bezier_points))
-                elif len(spline.bezier_points) > len(points):
-                    curve.splines.remove(spline)
-                    spline = curve.splines.new('BEZIER')
-                    spline.bezier_points.add(len(points) - 1)
-                
-                spline.use_cyclic_u = loop
-                
-                for point, co in zip(spline.bezier_points, points):
-                    point.co = co
-                    point.handle_left_type = handle_type
-                    point.handle_right_type = handle_type
-                
-                path_obj.enemy_path_loop = loop
-                path_obj.enemy_path_speed = speed
+            if self._write_world_path(path_obj, points, loop, speed, handle_type):
                 path_obj["myaddon_ai_motion_prompt"] = self.motion_prompt
                 updated_count += 1
                 
@@ -3012,8 +3194,8 @@ class MYADDON_OT_ai_edit_selected_enemy_path(bpy.types.Operator):
 
             msg_ai = scene.myaddon_ai_enemy_chat_history.add()
             msg_ai.role = "AI"
-            if gemini_used:
-                msg_ai.content = f"{updated_count}個のパスを再生成しました (Gemini最適化済)"
+            if ollama_used:
+                msg_ai.content = f"{updated_count}個のパスを再生成しました (Ollama最適化済)"
                 msg_ai.gemini_ratio = 100
             else:
                 msg_ai.content = f"{updated_count}個のパスを再生成しました (内蔵AI)"
@@ -3148,6 +3330,7 @@ classes = (
     MYADDON_OT_create_enemy_path,
     MYADDON_OT_assign_selected_enemy_path,
     MYADDON_OT_assign_selected_reinforcement_trigger,
+    MYADDON_OT_toggle_ai_enemy_trigger_target,
     MYADDON_OT_create_stage_bounds,
     MYADDON_OT_create_spawn_point,
     MYADDON_OT_snap_all_enemies_to_ground,

@@ -129,6 +129,9 @@
     <ClCompile Include="Game\Scene\GamePlayScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+	<ClCompile Include="Game\Scene\AmmoManager.cpp">
+	  <Filter>ソース ファイル</Filter>
+	</ClCompile>
 	<ClCompile Include="Game\Scene\LoadingScene.cpp">
 	  <Filter>ソース ファイル</Filter>
 	</ClCompile>
@@ -201,6 +204,9 @@
     <ClCompile Include="Game\Player\Player.cpp">
       <Filter>Game\Player</Filter>
     </ClCompile>
+    <ClCompile Include="Game\Player\PlayerActionController.cpp">
+      <Filter>Game\Player</Filter>
+    </ClCompile>
     <ClCompile Include="Game\Player\BoosterEffect.cpp">
       <Filter>Game\Player</Filter>
     </ClCompile>
@@ -213,6 +219,9 @@
     <ClCompile Include="Game\enemy\Enemy.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
+	<ClCompile Include="Game\enemy\EnemyActionController.cpp">
+	  <Filter>ソース ファイル</Filter>
+	</ClCompile>
     <ClCompile Include="Game\enemy\Boss.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
@@ -317,6 +326,9 @@
     <ClInclude Include="Game\Scene\GamePlayScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+	<ClInclude Include="Game\Scene\AmmoManager.h">
+	  <Filter>ヘッダー ファイル</Filter>
+	</ClInclude>
 	<ClInclude Include="Game\Scene\LoadingScene.h">
 	  <Filter>ヘッダー ファイル</Filter>
 	</ClInclude>
@@ -392,6 +404,12 @@
     <ClInclude Include="Game\Player\Player.h">
       <Filter>Game\Player</Filter>
     </ClInclude>
+    <ClInclude Include="Game\Player\PlayerMovementController.h">
+      <Filter>Game\Player</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Player\PlayerActionController.h">
+      <Filter>Game\Player</Filter>
+    </ClInclude>
     <ClInclude Include="Game\Player\BoosterEffect.h">
       <Filter>Game\Player</Filter>
     </ClInclude>
@@ -404,6 +422,9 @@
     <ClInclude Include="Game\enemy\Enemy.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+	<ClInclude Include="Game\enemy\EnemyActionController.h">
+	  <Filter>ヘッダー ファイル</Filter>
+	</ClInclude>
     <ClInclude Include="Game\enemy\Boss.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>

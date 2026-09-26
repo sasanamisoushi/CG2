@@ -80,6 +80,25 @@ std::unordered_map<std::string, EnemyFlightPath> LoadFlightPaths(const json &roo
 	return paths;
 }
 
+std::vector<std::string> SplitReinforcementTriggers(const std::string &text) {
+	std::vector<std::string> result;
+	size_t start = 0;
+	while (start < text.size()) {
+		const size_t end = text.find(',', start);
+		std::string name = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+		const size_t first = name.find_first_not_of(" \t");
+		if (first != std::string::npos) {
+			const size_t last = name.find_last_not_of(" \t");
+			result.push_back(name.substr(first, last - first + 1));
+		}
+		if (end == std::string::npos) {
+			break;
+		}
+		start = end + 1;
+	}
+	return result;
+}
+
 EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position, const Vector3 &rotation, const std::unordered_map<std::string, EnemyFlightPath> &paths) {
 	EnemySpawnData spawnData;
 	spawnData.name = objData.value("name", "UnknownEnemy");
@@ -129,6 +148,8 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 		const auto &reinforcement = objData["reinforcement"];
 		parseInitialSpawnFlag(reinforcement);
 		spawnData.reinforcementTriggerName = reinforcement.value("trigger", "");
+		spawnData.reinforcementTriggerNames = SplitReinforcementTriggers(spawnData.reinforcementTriggerName);
+		spawnData.remainingReinforcementTriggers = spawnData.reinforcementTriggerNames;
 		spawnData.reinforcementDelayFrames = reinforcement.value("delay", 0);
 		if (spawnData.reinforcementDelayFrames < 0) {
 			spawnData.reinforcementDelayFrames = 0;
@@ -140,8 +161,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	} else if (hasExplicitInitialSpawnSetting) {
 		spawnData.isInitialSpawn = explicitInitialSpawnValue;
 	} else {
-		// ボス以外のすべての配置敵は、デフォルトで最初から全員（7体）出現させる
-		spawnData.isInitialSpawn = true;
+		spawnData.isInitialSpawn = !spawnData.HasReinforcementTrigger();
 	}
 
 	return spawnData;

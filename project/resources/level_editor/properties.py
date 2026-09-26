@@ -1,5 +1,6 @@
 import bpy
 
+
 class MYADDON_PropertyGroup_AIChatMessage(bpy.types.PropertyGroup):
     role: bpy.props.StringProperty(name="Role", default="USER")
     content: bpy.props.StringProperty(name="Content", default="")
@@ -55,8 +56,8 @@ def register():
     )
     bpy.types.Scene.myaddon_ai_enemy_trigger_target = bpy.props.StringProperty(
         name="倒されたら出現",
-        description="このターゲット（複数可、カンマ区切り）が倒された時に生成した敵を出撃させます",
-        default=""
+        description="倒されたら出現するために倒す必要がある敵の一覧です",
+        default="[]",
     )
     bpy.types.WindowManager.myaddon_ai_enemy_ollama_api_key = bpy.props.StringProperty(
         name="Gemini APIキー",
@@ -78,9 +79,10 @@ def register():
     )
     bpy.types.Scene.myaddon_ai_enemy_ollama_timeout = bpy.props.IntProperty(
         name="待ち時間(秒)",
-        default=25,
+        description="Ollamaが応答を返すまでの待ち時間。初回のモデル読み込みを考慮して長めにしています",
+        default=120,
         min=5,
-        max=120,
+        max=600,
     )
     bpy.types.Scene.myaddon_ai_enemy_ollama_fallback = bpy.props.BoolProperty(
         name="失敗時は内蔵AIで生成",
@@ -119,9 +121,10 @@ def register():
     )
     bpy.types.Scene.myaddon_ai_enemy_ollama_timeout = bpy.props.IntProperty(
         name="待ち時間(秒)",
-        default=25,
+        description="Ollamaが応答を返すまでの待ち時間。初回のモデル読み込みを考慮して長めにしています",
+        default=120,
         min=5,
-        max=120,
+        max=600,
     )
     bpy.types.Scene.myaddon_ai_enemy_ollama_fallback = bpy.props.BoolProperty(
         name="失敗時は内蔵AIで生成",
@@ -136,6 +139,12 @@ def register():
         name="前回のAI生成を削除",
         default=True,
     )
+
+    # Blender saves Scene properties in .blend files.  Upgrade the former
+    # 25-second default so existing level files also receive the safer value.
+    for scene in bpy.data.scenes:
+        if scene.myaddon_ai_enemy_ollama_timeout == 25:
+            scene.myaddon_ai_enemy_ollama_timeout = 120
     
     # --- AI Level Generator Properties ---
     bpy.types.Scene.myaddon_ai_level_prompt = bpy.props.StringProperty(

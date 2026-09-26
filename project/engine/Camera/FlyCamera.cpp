@@ -17,7 +17,7 @@ bool FlyCamera::sPendingRightDown_ = false;
 bool FlyCamera::sPendingMiddleDown_ = false;
 
 FlyCamera::FlyCamera() {
-	// 蛻晄悄迥ｶ諷九・蜴溽せ縲∵ｭ｣髱｢蜷代″
+
     SetTranslate({ 0.0f, 0.0f, 0.0f });
 }
 
@@ -79,14 +79,14 @@ void FlyCamera::Update() {
     auto* input = Input::GetInstance();
 
     // ==========================================
-    // 1. 蝗櫁ｻ｢縺ｮ險育ｮ・
-    //    繧ｭ繝ｼ繝懊・繝・(遏｢蜊ｰ繧ｭ繝ｼ/Q/E) + 繝槭え繧ｹ蜿ｳ繝峨Λ繝・げ
+
+
     // ==========================================
     float pitch = 0.0f;
     float yaw = 0.0f;
     float roll = 0.0f;
 
-    // --- 繧ｭ繝ｼ繝懊・繝牙屓霆｢ ---
+
     if (canUseKeyboard_) {
         if (input->PushKey(DIK_UP))    pitch -= rotateSpeed_;
         if (input->PushKey(DIK_DOWN))  pitch += rotateSpeed_;
@@ -97,8 +97,9 @@ void FlyCamera::Update() {
         if (input->PushKey(DIK_E))     roll  += rotateSpeed_;
     }
 
-    bool isShiftDown = input->PushKey(DIK_LSHIFT) || input->PushKey(DIK_RSHIFT);
-    if (sPendingRightDown_ || (sPendingMiddleDown_ && !isShiftDown)) {
+    // 右ドラッグは視点回転、中ドラッグはパンに固定する。
+    // 以前は中ドラッグも回転として扱われ、エディタの説明と挙動が一致していなかった。
+    if (sPendingRightDown_) {
         yaw += sPendingMouseDeltaX_ * mouseSensitivity_;
         pitch += sPendingMouseDeltaY_ * mouseSensitivity_;
     }
@@ -114,9 +115,9 @@ void FlyCamera::Update() {
 
     // ==========================================
     // 2. 遘ｻ蜍輔・險育ｮ・
-    //    WASD + 繧ｹ繧ｯ繝ｭ繝ｼ繝ｫ繝帙う繝ｼ繝ｫ (蜑榊ｾ・ + 荳ｭ繝峨Λ繝・げ (繝代Φ)
+
     // ==========================================
-    // 繧ｫ繝｡繝ｩ縺ｮ蜷代″繧定ｨ育ｮ暦ｼ亥屓霆｢蠕鯉ｼ・
+
     Vector3 localRight   = MyMath::RotateVector({ 1.0f, 0.0f, 0.0f }, quaternion_);
     Vector3 localUp      = MyMath::RotateVector({ 0.0f, 1.0f, 0.0f }, quaternion_);
     Vector3 localForward = MyMath::RotateVector({ 0.0f, 0.0f, 1.0f }, quaternion_);
@@ -141,9 +142,9 @@ void FlyCamera::Update() {
     }
 
     // ==========================================
-    // --- 繧ｹ繧ｯ繝ｭ繝ｼ繝ｫ繝帙う繝ｼ繝ｫ: 繧ｫ繝｡繝ｩ蜑榊ｾ檎ｧｻ蜍・---
+
     // ==========================================
-    // ImGui縺ｮ繝帙う繝ｼ繝ｫ讖溯・繧剃ｽｿ縺・
+
     float wheel = sPendingMouseWheel_;
     if (wheel != 0.0f) {
         float scrollStep = wheel * scrollSpeed_;
@@ -153,10 +154,10 @@ void FlyCamera::Update() {
     }
 
     // ==========================================
-     // --- 荳ｭ繧ｯ繝ｪ繝・け繝峨Λ繝・げ: 繝代Φ・井ｸ贋ｸ句ｷｦ蜿ｳ蟷ｳ陦檎ｧｻ蜍包ｼ・--
+
      // ==========================================
-     //ImGui縺ｮ繝峨Λ繝・げ讖溯・繧剃ｽｿ縺・
-    if (sPendingMiddleDown_ && isShiftDown) {
+
+    if (sPendingMiddleDown_) {
         float deltaX = sPendingMouseDeltaX_;
         float deltaY = sPendingMouseDeltaY_;
 
@@ -176,7 +177,7 @@ void FlyCamera::Update() {
     sPendingMouseWheel_ = 0.0f;
 
     // ==========================================
-    // 3. 隕ｪ繧ｯ繝ｩ繧ｹ縺ｮUpdate繧貞他繧薙〒陦悟・繧呈峩譁ｰ
+
     // ==========================================
     this->SetQuaternion(quaternion_);
     Camera::Update();

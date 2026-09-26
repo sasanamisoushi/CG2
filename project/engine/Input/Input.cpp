@@ -1,5 +1,6 @@
 #include "Input.h"
 #include <fstream>
+#include <sstream>
 
 namespace {
 	constexpr SHORT kControllerStickDeadZone = 12000;
@@ -121,7 +122,8 @@ bool Input::TriggerKey(BYTE keyNumber) {
 bool Input::PushAction(PlayerAction action) const {
 	const PlayerActionBinding &binding = GetActionBinding(action);
 	return (binding.keyboardKey != 0 && key[binding.keyboardKey] != 0) ||
-		IsControllerInputPressed(binding.controllerInput, false);
+		IsControllerInputPressed(binding.controllerInput, false) ||
+		IsMouseInputPressed(binding.mouseInput, false);
 }
 
 bool Input::TriggerAction(PlayerAction action) const {
@@ -130,7 +132,9 @@ bool Input::TriggerAction(PlayerAction action) const {
 		keyPre[binding.keyboardKey] == 0 && key[binding.keyboardKey] != 0;
 	return keyboardTriggered ||
 		(IsControllerInputPressed(binding.controllerInput, false) &&
-			!IsControllerInputPressed(binding.controllerInput, true));
+			!IsControllerInputPressed(binding.controllerInput, true)) ||
+		(IsMouseInputPressed(binding.mouseInput, false) &&
+			!IsMouseInputPressed(binding.mouseInput, true));
 }
 
 const PlayerActionBinding& Input::GetActionBinding(PlayerAction action) const {
@@ -145,12 +149,17 @@ void Input::SetControllerBinding(PlayerAction action, ControllerInput input) {
 	playerActionBindings_[ToIndex(action)].controllerInput = input;
 }
 
+void Input::SetMouseBinding(PlayerAction action, MouseInput input) {
+	playerActionBindings_[ToIndex(action)].mouseInput = input;
+}
+
 void Input::ResetPlayerActionBindings() {
 	for (PlayerActionBinding &binding : playerActionBindings_) {
 		binding = {};
 	}
-	auto bind = [this](PlayerAction action, BYTE keyNumber, ControllerInput controllerInput) {
-		playerActionBindings_[ToIndex(action)] = { keyNumber, controllerInput };
+	auto bind = [this](PlayerAction action, BYTE keyNumber, ControllerInput controllerInput,
+		MouseInput mouseInput = MouseInput::None) {
+		playerActionBindings_[ToIndex(action)] = { keyNumber, controllerInput, mouseInput };
 	};
 	bind(PlayerAction::MoveForward, DIK_W, ControllerInput::LeftStickUp);
 	bind(PlayerAction::MoveBackward, DIK_S, ControllerInput::LeftStickDown);
@@ -169,8 +178,8 @@ void Input::ResetPlayerActionBindings() {
 	bind(PlayerAction::DodgeLeft, DIK_A, ControllerInput::DPadLeft);
 	bind(PlayerAction::DodgeRight, DIK_D, ControllerInput::DPadRight);
 	bind(PlayerAction::Melee, DIK_V, ControllerInput::Y);
-	bind(PlayerAction::NormalFire, 0, ControllerInput::RightTrigger);
-	bind(PlayerAction::HomingFire, 0, ControllerInput::LeftTrigger);
+	bind(PlayerAction::NormalFire, 0, ControllerInput::RightTrigger, MouseInput::LeftButton);
+	bind(PlayerAction::HomingFire, 0, ControllerInput::LeftTrigger, MouseInput::RightButton);
 	bind(PlayerAction::LockToggle, DIK_TAB, ControllerInput::RightThumb);
 	bind(PlayerAction::LockRelease, DIK_X, ControllerInput::LeftThumb);
 	bind(PlayerAction::ReloadNormal, DIK_F, ControllerInput::None);
@@ -187,7 +196,8 @@ void Input::SavePlayerActionBindings() const {
 	for (size_t index = 0; index < playerActionBindings_.size(); ++index) {
 		const PlayerActionBinding &binding = playerActionBindings_[index];
 		output << index << ' ' << static_cast<int>(binding.keyboardKey) << ' '
-			<< static_cast<int>(binding.controllerInput) << '\n';
+			<< static_cast<int>(binding.controllerInput) << ' '
+			<< static_cast<int>(binding.mouseInput) << '\n';
 	}
 }
 
@@ -196,18 +206,31 @@ void Input::LoadPlayerActionBindings() {
 	if (!input.is_open()) {
 		return;
 	}
-	int actionIndex = 0;
-	int keyNumber = 0;
-	int controllerInput = 0;
-	while (input >> actionIndex >> keyNumber >> controllerInput) {
-		if (actionIndex < 0 || actionIndex >= static_cast<int>(PlayerAction::Count) ||
-			keyNumber < 0 || keyNumber > 255 ||
-			controllerInput < 0 || controllerInput >= static_cast<int>(ControllerInput::Count)) {
+	std::string line;
+	while (std::getline(input, line)) {
+		std::istringstream lineStream(line);
+		int actionIndex = 0;
+		int keyNumber = 0;
+		int controllerInput = 0;
+		int mouseInput = 0;
+		if (!(lineStream >> actionIndex >> keyNumber >> controllerInput)) {
 			continue;
 		}
-		playerActionBindings_[static_cast<size_t>(actionIndex)] = {
-			static_cast<BYTE>(keyNumber), static_cast<ControllerInput>(controllerInput)
-		};
+		// 旧形式 (アクション / キー / コントローラー) の設定も読み込める。
+		// 旧形式の場合は、初期設定のマウス割り当てを残す。
+		const bool hasMouseBinding = static_cast<bool>(lineStream >> mouseInput);
+		if (actionIndex < 0 || actionIndex >= static_cast<int>(PlayerAction::Count) ||
+			keyNumber < 0 || keyNumber > 255 ||
+			controllerInput < 0 || controllerInput >= static_cast<int>(ControllerInput::Count) ||
+			(hasMouseBinding && (mouseInput < 0 || mouseInput >= static_cast<int>(MouseInput::Count)))) {
+			continue;
+		}
+		PlayerActionBinding &binding = playerActionBindings_[static_cast<size_t>(actionIndex)];
+		binding.keyboardKey = static_cast<BYTE>(keyNumber);
+		binding.controllerInput = static_cast<ControllerInput>(controllerInput);
+		if (hasMouseBinding) {
+			binding.mouseInput = static_cast<MouseInput>(mouseInput);
+		}
 	}
 }
 
@@ -245,6 +268,22 @@ bool Input::IsControllerInputPressed(ControllerInput input, bool previousState) 
 	}
 }
 
+bool Input::IsMouseInputPressed(MouseInput input, bool previousState) const {
+	if (input == MouseInput::None) {
+		return false;
+	}
+	const DIMOUSESTATE &state = previousState ? mouseStatePre_ : mouseState_;
+	switch (input) {
+	case MouseInput::LeftButton: return (state.rgbButtons[0] & 0x80) != 0;
+	case MouseInput::RightButton: return (state.rgbButtons[1] & 0x80) != 0;
+	case MouseInput::MiddleButton: return (state.rgbButtons[2] & 0x80) != 0;
+	case MouseInput::Button4: return (state.rgbButtons[3] & 0x80) != 0;
+	case MouseInput::WheelUp: return state.lZ > 0;
+	case MouseInput::WheelDown: return state.lZ < 0;
+	default: return false;
+	}
+}
+
 const char* Input::GetPlayerActionName(PlayerAction action) {
 	static constexpr const char *names[] = {
 		"前進 / 加速", "後退 / 減速", "上昇", "下降", "左旋回", "右旋回",
@@ -263,6 +302,14 @@ const char* Input::GetControllerInputName(ControllerInput input) {
 		"十字↑", "十字↓", "十字←", "十字→", "LT", "RT",
 		"Lスティック↑", "Lスティック↓", "Lスティック←", "Lスティック→",
 		"Rスティック↑", "Rスティック↓", "Rスティック←", "Rスティック→"
+	};
+	const size_t index = static_cast<size_t>(input);
+	return index < std::size(names) ? names[index] : "なし";
+}
+
+const char* Input::GetMouseInputName(MouseInput input) {
+	static constexpr const char *names[] = {
+		"なし", "左クリック", "右クリック", "中クリック", "サイドボタン", "ホイール↑", "ホイール↓"
 	};
 	const size_t index = static_cast<size_t>(input);
 	return index < std::size(names) ? names[index] : "なし";

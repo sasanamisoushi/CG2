@@ -74,9 +74,9 @@ void Game::Initialize() {
 	//マネージャーにファクトリーをセット
 	SceneManager::GetInstance()->SetSceneFactory(sceneFactory_.get());
 
-	// 起動直後はゲームを進めない編集用のゲームシーンを開く。
-	// シミュレーション実行時だけは従来どおり専用シーンを使用する。
-	SceneManager::GetInstance()->ChangeScene(ShouldStartSimulationScene() ? "SIMULATION" : "GAMEPLAY");
+	// 通常起動はタイトル画面から開始する。シミュレーション専用起動だけは
+	// 従来どおり専用シーンを直接開く。
+	SceneManager::GetInstance()->ChangeScene(ShouldStartSimulationScene() ? "SIMULATION" : "TITLE");
 
 	// ノイズ画像を2種類とも読み込んでおく
 	TextureManager::GetInstance()->LoadTexture("resources/noise0.png");

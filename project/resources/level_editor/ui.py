@@ -223,13 +223,38 @@ class OBJECT_PT_ai_tools(bpy.types.Panel):
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_base_type", text="敵のタイプ")
         ai_box.prop(context.scene, "myaddon_ai_enemy_base_path_id", text="飛行パスID")
-        row = ai_box.row(align=True)
-        row.prop(context.scene, "myaddon_ai_enemy_trigger_target", text="倒されたら出現")
-        row.operator(
-            operators.MYADDON_OT_assign_selected_reinforcement_trigger.bl_idname,
-            text="",
-            icon='EYEDROPPER'
+        ai_box.label(text="倒されたら出現（クリックで選択／解除）", icon='RESTRICT_SELECT_OFF')
+        trigger_targets = operators.get_ai_enemy_trigger_target_names(context.scene)
+        trigger_buttons = ai_box.grid_flow(columns=2, even_columns=True, even_rows=True, align=True)
+        enemies = sorted(
+            (obj for obj in context.scene.objects if getattr(obj, "game_obj_type", "NONE") == 'ENEMY'),
+            key=lambda obj: obj.name.casefold(),
         )
+        if enemies:
+            for enemy in enemies:
+                is_selected = enemy.name in trigger_targets
+                button = trigger_buttons.operator(
+                    operators.MYADDON_OT_toggle_ai_enemy_trigger_target.bl_idname,
+                    text=enemy.name,
+                    icon='CHECKMARK' if is_selected else 'OBJECT_DATA',
+                    depress=is_selected,
+                )
+                button.target_name = enemy.name
+        else:
+            ai_box.label(text="配置済みの敵がありません", icon='INFO')
+
+        trigger_box = ai_box.box()
+        if trigger_targets:
+            trigger_box.label(
+                text=f"出現条件：{len(trigger_targets)}体を選択中（全員倒すと出現）",
+                icon='CHECKMARK',
+            )
+            target_grid = trigger_box.grid_flow(columns=2, even_columns=True, even_rows=True, align=True)
+            for target_name in sorted(trigger_targets):
+                target_grid.label(text=target_name, icon='OBJECT_DATA')
+        else:
+            trigger_box.label(text="出現条件：なし（最初から出現）", icon='INFO')
+            trigger_box.label(text="上の項目でチェックした敵が、ここに一覧表示されます")
         
         ai_box.prop(context.scene, "myaddon_ai_enemy_prompt", text="コンセプト")
         

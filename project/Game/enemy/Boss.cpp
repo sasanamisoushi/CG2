@@ -1,4 +1,5 @@
 #include "Boss.h"
+#include "3D/ModelManager.h"
 #include "3D/Object3dCommon.h"
 #include "Game/enemy/EnemyBulletManager.h"
 #include <cmath>
@@ -10,17 +11,21 @@ Vector3 ScaleVector(const Vector3 &v, float s) { return { v.x * s, v.y * s, v.z 
 
 void Boss::Initialize(const Vector3 &position) {
     Enemy::Initialize(position);
+
+    // 通常敵の箱モデルではなく、ボス専用の巨大戦艦モデルを使う。
+    constexpr char kBossModel[] = "FortressBattleshipBoss.obj";
+    ModelManager *modelManager = ModelManager::GetInstance();
+    if (!modelManager->FindModel(kBossModel)) {
+        modelManager->LoadModel(kBossModel);
+    }
+    object_->SetModel(kBossModel);
+
     SetIsBoss(true);
-    hp_ = 60;
-    SetScale({ 4.0f, 2.0f, 12.0f });
+    hp_ = kMaxHP;
+    // ステージ内で全体を確認できるよう、巨大戦艦モデルを戦闘用の大きさに縮小する。
+    SetScale({ 0.40f, 0.40f, 0.40f });
     actionTimer_ = 0;
     summonRequests_ = 0;
-
-    for (auto &part : hullParts_) {
-        part = std::make_unique<Object3d>();
-        part->Initialize(Object3dCommon::GetInstance());
-        part->SetModel("BossHull");
-    }
     UpdateModel();
 }
 
@@ -64,27 +69,8 @@ int Boss::ConsumeSummonRequests() {
 
 void Boss::UpdateModel() {
     Enemy::UpdateModel();
-    const std::array<Vector3, 6> offsets = {{
-        { -6.0f, 0.0f, 1.0f }, { 6.0f, 0.0f, 1.0f },
-        { -9.0f, -0.5f, -2.0f }, { 9.0f, -0.5f, -2.0f },
-        { 0.0f, 3.0f, -2.0f }, { 0.0f, -2.0f, 7.0f }
-    }};
-    const std::array<Vector3, 6> scales = {{
-        { 5.0f, 0.8f, 7.0f }, { 5.0f, 0.8f, 7.0f },
-        { 2.0f, 1.2f, 4.0f }, { 2.0f, 1.2f, 4.0f },
-        { 2.2f, 2.0f, 3.0f }, { 2.5f, 1.5f, 5.0f }
-    }};
-    for (size_t i = 0; i < hullParts_.size(); ++i) {
-        hullParts_[i]->SetTranslate(AddVector(position_, offsets[i]));
-        hullParts_[i]->SetRotate(rotation_);
-        hullParts_[i]->SetScale(scales[i]);
-        hullParts_[i]->Update();
-    }
 }
 
 void Boss::Draw() {
     Enemy::Draw();
-    for (const auto &part : hullParts_) {
-        if (part) part->Draw();
-    }
 }

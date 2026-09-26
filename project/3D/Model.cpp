@@ -293,39 +293,84 @@ ModelData Model::LoadObjFile(const std::string &directoryPath, const std::string
 			normal.x *= -1.0f;
 			normals.push_back(normal);
 		} else if (identifier == "f") {
-			//面は三角形限定
-			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
-				std::string vertexDefinition;
-				s >> vertexDefinition;
-
-				// マップにこの頂点が存在するか確認
-				if (vertexMap.find(vertexDefinition) == vertexMap.end()) {
-					//頂点の要素へのindexは「位置/uv/法線」で格納されているので、分解してIndexを取得する
-					std::istringstream v(vertexDefinition);
-					uint32_t elementIndices[3];
-					for (int32_t element = 0; element < 3; ++element) {
-						std::string index;
-						std::getline(v, index, '/');  //区切りでインデックスを読んでいく
-						elementIndices[element] = std::stoi(index);
+			// OBJの頂点定義は v/vt/vn だけでなく、v//vn や v の形式も許される。
+			// 空のUV欄へ stoi を行うと例外でゲーム全体が停止するため、欠けた要素は既定値で補う。
+			auto resolveIndex = [](const std::string &text, size_t count, size_t &outIndex) {
+				if (text.empty() || count == 0) {
+					return false;
+				}
+				try {
+					const int index = std::stoi(text);
+					if (index > 0 && static_cast<size_t>(index) <= count) {
+						outIndex = static_cast<size_t>(index - 1);
+						return true;
 					}
+					if (index < 0 && static_cast<size_t>(-index) <= count) {
+						outIndex = count - static_cast<size_t>(-index);
+						return true;
+					}
+				} catch (const std::exception &) {
+				}
+				return false;
+			};
 
-					//要素へのindexから、実際の要素の値を取得して頂点を構築する
-					Vector4 position = positions[elementIndices[0] - 1];
-					Vector2 texcord = texcoords[elementIndices[1] - 1];
-					Vector3 normal = normals[elementIndices[2] - 1];
-					VertexData vertex;
-					vertex.position = position;
-					vertex.texcoord = { texcord.x, texcord.y, 0.0f, 0.0f };
-					vertex.normal = { normal.x, normal.y, normal.z, 0.0f };
-					vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
-					
-					// マップに登録し、頂点配列に追加
-					vertexMap[vertexDefinition] = (uint32_t)modelData.vertices.size();
-					modelData.vertices.push_back(vertex);
+			auto getVertexIndex = [&](const std::string &vertexDefinition, uint32_t &outIndex) {
+				auto existing = vertexMap.find(vertexDefinition);
+				if (existing != vertexMap.end()) {
+					outIndex = existing->second;
+					return true;
 				}
 
-				// インデックス配列に追加
-				modelData.indices.push_back(vertexMap[vertexDefinition]);
+				std::string elements[3];
+				std::istringstream definitionStream(vertexDefinition);
+				for (std::string &element : elements) {
+					std::getline(definitionStream, element, '/');
+				}
+
+				size_t positionIndex = 0;
+				if (!resolveIndex(elements[0], positions.size(), positionIndex)) {
+					return false;
+				}
+
+				Vector2 texcoord = { 0.0f, 0.0f };
+				size_t texcoordIndex = 0;
+				if (resolveIndex(elements[1], texcoords.size(), texcoordIndex)) {
+					texcoord = texcoords[texcoordIndex];
+				}
+
+				Vector3 normal = { 0.0f, 1.0f, 0.0f };
+				size_t normalIndex = 0;
+				if (resolveIndex(elements[2], normals.size(), normalIndex)) {
+					normal = normals[normalIndex];
+				}
+
+				VertexData vertex;
+				vertex.position = positions[positionIndex];
+				vertex.texcoord = { texcoord.x, texcoord.y, 0.0f, 0.0f };
+				vertex.normal = { normal.x, normal.y, normal.z, 0.0f };
+				vertex.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				outIndex = static_cast<uint32_t>(modelData.vertices.size());
+				vertexMap[vertexDefinition] = outIndex;
+				modelData.vertices.push_back(vertex);
+				return true;
+			};
+
+			std::vector<std::string> faceVertices;
+			for (std::string vertexDefinition; s >> vertexDefinition;) {
+				faceVertices.push_back(vertexDefinition);
+			}
+			if (faceVertices.size() < 3) {
+				continue;
+			}
+
+			// 三角形以外の面も扇形に分割する。
+			for (size_t vertex = 2; vertex < faceVertices.size(); ++vertex) {
+				uint32_t indices[3] = {};
+				if (getVertexIndex(faceVertices[0], indices[0]) &&
+					getVertexIndex(faceVertices[vertex - 1], indices[1]) &&
+					getVertexIndex(faceVertices[vertex], indices[2])) {
+					modelData.indices.insert(modelData.indices.end(), std::begin(indices), std::end(indices));
+				}
 			}
 		} else if (identifier == "mtllib") {
 			//matrialTemplateLidraryファイルの名前を取得する

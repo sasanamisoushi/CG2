@@ -26,6 +26,7 @@
 #include "LevelManager.h"
 #include "GamePlayUIManager.h"
 #include "EnvironmentRenderer.h"
+#include "AmmoManager.h"
 #include <memory>
 #include <vector>
 #include <list>
@@ -69,7 +70,11 @@ private:
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
 	void DrawOverlay();
 	void DrawRadar();
+	void DrawBossIntroCutIn(float screenWidth, float screenHeight);
 	void SetDebugCameraActive(bool isActive);
+	void ResetDebugCameraToPlayer();
+	void ResetDebugCameraToStageOverview();
+	void TryPlaceEnemyAtGameViewMouse();
 	void ReloadSceneJson();
 	void ResetEditorPreview();
 	MissileTuning MakeMissileTuning(MissileType type) const;
@@ -82,7 +87,6 @@ private:
 	bool HasPendingEnemySpawns() const;
 	bool TryConsumeAmmo(MissileType type);
 	void UpdateReload();
-	void SpawnAmmoPickup(const Vector3 &position);
 	void UpdateAmmoPickups();
 	void UpdateCinematicLockOnCamera();
 	Mode mode_ = Mode::Gameplay;
@@ -108,6 +112,10 @@ private:
 	std::unique_ptr<Sprite> hudAmmoPanelSprite_;
 	std::unique_ptr<Sprite> hpGaugeBackgroundSprite_;
 	std::unique_ptr<Sprite> hpGaugeFillSprite_;
+	std::unique_ptr<Sprite> bossHpGaugeBackgroundSprite_;
+	std::unique_ptr<Sprite> bossHpGaugeFillSprite_;
+	std::unique_ptr<Sprite> bossCutInBandSprite_;
+	std::unique_ptr<Sprite> bossCutInPanelSprite_;
 	std::unique_ptr<Sprite> hudHpLabelSprite_;
 	std::unique_ptr<Sprite> hudAmmoLabelSprite_;
 	std::unique_ptr<Sprite> hudSpLabelSprite_;
@@ -237,6 +245,8 @@ private:
 	EnemyEventManager enemyEventManager_;
 	Enemy *lockedEnemy_ = nullptr;
 	bool bossSpawned_ = false;
+	int bossIntroTimer_ = 0;
+	Vector3 bossIntroPlayerPosition_ = { 0.0f, 0.0f, 0.0f };
 
 
 	// 障害物
@@ -267,6 +277,7 @@ private:
 	std::unique_ptr<LevelManager> levelManager_;
 	std::unique_ptr<EnvironmentRenderer> environmentRenderer_;
 	std::unique_ptr<GamePlayUIManager> uiManager_;
+	std::unique_ptr<AmmoManager> ammoManager_;
 
 	// JSONファイルが最後に更新された日時を記録する変数
 	std::filesystem::file_time_type lastJsonWriteTime_;
@@ -287,19 +298,4 @@ private:
 	bool isSongActive_ = false;
 	int songFrame_ = 0;
 
-	struct AmmoPickup {
-		Vector3 basePosition = { 0.0f, 0.0f, 0.0f };
-		std::unique_ptr<Object3d> object;
-		float phase = 0.0f;
-	};
-	std::vector<AmmoPickup> ammoPickups_;
-	int defeatedSmallEnemyCount_ = 0;
-	int normalAmmoInMagazine_ = 30;
-	int normalAmmoReserve_ = 90;
-	int homingAmmoInMagazine_ = 8;
-	int homingAmmoReserve_ = 16;
-	bool isNormalReloading_ = false;
-	bool isHomingReloading_ = false;
-	int normalReloadFrame_ = 0;
-	int homingReloadFrame_ = 0;
 };

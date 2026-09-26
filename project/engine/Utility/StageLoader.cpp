@@ -148,12 +148,12 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 
 	if (spawnData.isBoss) {
 		spawnData.isInitialSpawn = false;
+	} else if (hasExplicitInitialSpawnSetting) {
+		spawnData.isInitialSpawn = explicitInitialSpawnValue;
 	} else {
-		// ボス以外のすべての配置敵は、100%最初から全員（7体）出現させる
-		spawnData.isInitialSpawn = true;
+		// 出現トリガーのある敵は、指定された敵が全て倒された後にのみ出現する。
+		spawnData.isInitialSpawn = !spawnData.HasReinforcementTrigger();
 	}
-
-	return spawnData;
 
 	return spawnData;
 }
@@ -289,25 +289,38 @@ bool StageLoader::LoadSceneJson(
 	if (root.contains("objects") && root["objects"].is_array()) {
 
 		for (auto &objData : root["objects"]) {
+			auto readTransformVector = [](const json &transform, const char *key, const Vector3 &fallback) {
+				if (!transform.is_object() || !transform.contains(key) || !transform[key].is_array() || transform[key].size() < 3) {
+					return fallback;
+				}
+
+				const json &value = transform[key];
+				if (!value[0].is_number() || !value[1].is_number() || !value[2].is_number()) {
+					return fallback;
+				}
+				return Vector3{ value[0].get<float>(), value[1].get<float>(), value[2].get<float>() };
+			};
+
+			const json emptyTransform = json::object();
+			const json &transform = objData.contains("transform") && objData["transform"].is_object()
+				? objData["transform"]
+				: emptyTransform;
 
 			// 1. 位置座標を取得 (BlenderのZをC++のYに、BlenderのYをC++のZに変換)
-			auto &trans = objData["transform"]["translation"];
-			Vector3 position = { trans[0].get<float>(), trans[2].get<float>(), trans[1].get<float>() };
+			const Vector3 blenderPosition = readTransformVector(transform, "translation", { 0.0f, 0.0f, 0.0f });
+			Vector3 position = { blenderPosition.x, blenderPosition.z, blenderPosition.y };
 
-			auto &scaleData = objData["transform"]["scale"];
-			Vector3 scale = { scaleData[0].get<float>(), scaleData[2].get<float>(), scaleData[1].get<float>() };
+			const Vector3 blenderScale = readTransformVector(transform, "scale", { 1.0f, 1.0f, 1.0f });
+			Vector3 scale = { blenderScale.x, blenderScale.z, blenderScale.y };
 
 			// 回転角を取得して度数法からラジアンへ変換 (BlenderのX->X, BlenderのZ->Y, BlenderのY->Z)
-			Vector3 rotation = { 0.0f, 0.0f, 0.0f };
-			if (objData["transform"].contains("rotation")) {
-				auto &rotData = objData["transform"]["rotation"];
-				float toRad = 3.14159265f / 180.0f;
-				rotation = {
-					rotData[0].get<float>() * toRad,
-					rotData[2].get<float>() * toRad,
-					rotData[1].get<float>() * toRad
-				};
-			}
+			const Vector3 blenderRotation = readTransformVector(transform, "rotation", { 0.0f, 0.0f, 0.0f });
+			const float toRad = 3.14159265f / 180.0f;
+			Vector3 rotation = {
+				blenderRotation.x * toRad,
+				blenderRotation.z * toRad,
+				blenderRotation.y * toRad
+			};
 
 			// 2. カテゴリの取得と、未設定時のオブジェクト名による自動救済判別
 			std::string name = objData.value("name", "");

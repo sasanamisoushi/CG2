@@ -9,6 +9,62 @@
 #include "engine/math/MyMath.h"
 
 #include <filesystem>
+#include <Windows.h>
+#include <shellapi.h>
+
+namespace {
+std::filesystem::path FindProjectRoot() {
+	wchar_t modulePath[MAX_PATH] = {};
+	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0) {
+		return {};
+	}
+
+	std::filesystem::path current = std::filesystem::path(modulePath).parent_path();
+	while (!current.empty()) {
+		if (std::filesystem::exists(current / "project" / "CG2.sln") &&
+			std::filesystem::exists(current / "tools" / "package_release.ps1")) {
+			return current;
+		}
+		const std::filesystem::path parent = current.parent_path();
+		if (parent == current) {
+			break;
+		}
+		current = parent;
+	}
+	return {};
+}
+
+bool LaunchExecutablePackageCreation(bool skipBuild) {
+	const std::filesystem::path projectRoot = FindProjectRoot();
+	if (projectRoot.empty()) {
+		return false;
+	}
+
+	const std::filesystem::path scriptPath = projectRoot / "tools" / "package_release.ps1";
+	std::wstring parameters = L"-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath.wstring() +
+		L"\" -Configuration Release";
+	if (skipBuild) {
+		parameters += L" -SkipBuild";
+	}
+
+	const HINSTANCE result = ShellExecuteW(
+		nullptr, L"open", L"powershell.exe", parameters.c_str(), projectRoot.c_str(), SW_SHOWNORMAL);
+	return reinterpret_cast<intptr_t>(result) > 32;
+}
+
+bool IsCurrentExecutableReleaseBuild() {
+	wchar_t modulePath[MAX_PATH] = {};
+	if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0) {
+		return false;
+	}
+	const std::filesystem::path projectRoot = FindProjectRoot();
+	if (projectRoot.empty()) {
+		return false;
+	}
+	const std::filesystem::path releaseExe = projectRoot / "generated" / "outputs" / "Release" / "CG2.exe";
+	return std::filesystem::path(modulePath).lexically_normal() == releaseExe.lexically_normal();
+}
+}
 
 SimulationManager::SimulationManager(GamePlayScene* scene) : scene_(scene) {
 	RefreshActionAnimationsList();
@@ -122,6 +178,15 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 		++savedCount;
 	}
 
+	// 増援・ボスなど、現在は未出現の敵もエディタで動かした位置を保存する。
+	for (size_t spawnPointIndex = 0;
+		spawnPointIndex < scene_->enemySpawns_.size() && spawnPointIndex < enemyObjectIndices.size();
+		++spawnPointIndex) {
+		const EnemySpawnData &spawn = scene_->enemySpawns_[spawnPointIndex];
+		WriteSceneTransform(objects[enemyObjectIndices[spawnPointIndex]], spawn.position, &spawn.rotation, nullptr);
+		++savedCount;
+	}
+
 	std::ofstream ofs(filePath, std::ios::trunc);
 	if (!ofs.is_open()) {
 		scene_->uiManager_->simulationSaveMessage_ = "scene.json を書き込めませんでした";
@@ -139,6 +204,120 @@ bool SimulationManager::SaveCurrentSimulationLayoutToSceneJson(const std::string
 
 	scene_->uiManager_->simulationSaveMessage_ = "現在の配置を scene.json に保存しました。実ゲームにも反映されます";
 	OutputDebugStringA(("[SimulationSave] Saved " + std::to_string(savedCount) + " transforms.\n").c_str());
+	return true;
+}
+
+bool SimulationManager::AddEnemySpawnToSceneJson(
+	const std::string &filePath,
+	const std::string &name,
+	const std::string &enemyType,
+	const Vector3 &position,
+	const Vector3 &rotation) {
+	json root;
+	{
+		std::ifstream ifs(filePath);
+		if (!ifs.is_open()) {
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json が見つからないため敵を追加できませんでした";
+			return false;
+		}
+
+		try {
+			ifs >> root;
+		} catch (const std::exception &) {
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json の読み込みに失敗したため敵を追加できませんでした";
+			return false;
+		}
+	}
+
+	if (!root.contains("objects") || !root["objects"].is_array()) {
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json に objects がないため敵を追加できませんでした";
+		return false;
+	}
+
+	json &objects = root["objects"];
+	json newEnemy;
+	newEnemy["type"] = "MESH";
+	newEnemy["name"] = MakeUniqueSceneObjectName(objects, name.empty() ? "Enemy" : name);
+	newEnemy["category"] = "ENEMY";
+	newEnemy["enemy"] = {
+		{ "type", enemyType.empty() ? "VF1" : enemyType },
+		{ "is_initial_spawn", true },
+	};
+	newEnemy["vertices_count"] = 0;
+	const Vector3 defaultScale = { 1.0f, 1.0f, 1.0f };
+	WriteSceneTransform(newEnemy, position, &rotation, &defaultScale);
+	objects.push_back(std::move(newEnemy));
+
+	std::ofstream ofs(filePath, std::ios::trunc);
+	if (!ofs.is_open()) {
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json を書き込めませんでした";
+		return false;
+	}
+
+	ofs << root.dump(4);
+	ofs.close();
+
+	try {
+		scene_->lastJsonWriteTime_ = std::filesystem::last_write_time(filePath);
+	} catch (...) {
+	}
+
+	// ファイル保存だけでなく、ゲーム中のプレビューにも即時反映する。
+	scene_->ReloadSceneJson();
+	scene_->uiManager_->simulationSaveMessage_ = "敵配置を scene.json に保存し、プレビューへ反映しました";
+	return true;
+}
+
+bool SimulationManager::MoveEnemySpawnInSceneJson(const std::string &filePath, size_t sourceIndex, size_t targetIndex) {
+	json root;
+	{
+		std::ifstream ifs(filePath);
+		if (!ifs.is_open()) {
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json が見つからないためスポーン順を変更できませんでした";
+			return false;
+		}
+
+		try {
+			ifs >> root;
+		} catch (const std::exception &) {
+			scene_->uiManager_->simulationSaveMessage_ = "scene.json の読み込みに失敗したためスポーン順を変更できませんでした";
+			return false;
+		}
+	}
+
+	if (!root.contains("objects") || !root["objects"].is_array()) {
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json に objects がないためスポーン順を変更できませんでした";
+		return false;
+	}
+
+	json &objects = root["objects"];
+	std::vector<size_t> enemyObjectIndices;
+	for (size_t objectIndex = 0; objectIndex < objects.size(); ++objectIndex) {
+		if (IsSceneEnemyObject(objects[objectIndex])) {
+			enemyObjectIndices.push_back(objectIndex);
+		}
+	}
+
+	if (sourceIndex >= enemyObjectIndices.size() || targetIndex >= enemyObjectIndices.size() || sourceIndex == targetIndex) {
+		return false;
+	}
+
+	std::swap(objects[enemyObjectIndices[sourceIndex]], objects[enemyObjectIndices[targetIndex]]);
+	std::ofstream ofs(filePath, std::ios::trunc);
+	if (!ofs.is_open()) {
+		scene_->uiManager_->simulationSaveMessage_ = "scene.json を書き込めませんでした";
+		return false;
+	}
+	ofs << root.dump(4);
+	ofs.close();
+
+	try {
+		scene_->lastJsonWriteTime_ = std::filesystem::last_write_time(filePath);
+	} catch (...) {
+	}
+
+	scene_->ReloadSceneJson();
+	scene_->uiManager_->simulationSaveMessage_ = "敵の初期スポーン順を変更し、プレビューへ反映しました";
 	return true;
 }
 
@@ -600,7 +779,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 	DrawSimulationSaveControls();
 
 	ImGui::Separator();
-	const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ", "アニメーション編集", "操作設定" };
+		const char *categories[] = { "プレイヤー", "ミサイル", "敵 & イベント", "パーティクル", "カメラ", "アニメーション編集", "操作設定", "実行ファイル生成" };
 
 	// 既存の設定を、左の一覧から選択して右側で編集するレイアウトにする。
 	// カテゴリごとの実際の操作処理は下の既存コードをそのまま使用する。
@@ -774,6 +953,9 @@ void SimulationManager::DrawSimulationScreenUI() {
 			float panSpeed = scene_->debugFlyCamera_->GetPanSpeed();
 			if (ImGui::DragFloat("移動速度 (WASD)##fly", &moveSpeed, 0.01f, 0.01f, 20.0f)) scene_->debugFlyCamera_->SetMoveSpeed(moveSpeed);
 			if (ImGui::DragFloat("回転感度 (マウス右)##fly", &sensitivity, 0.0001f, 0.0001f, 0.05f, "%.4f")) scene_->debugFlyCamera_->SetMouseSensitivity(sensitivity);
+			if (ImGui::Button("ステージ全体を表示")) {
+				scene_->ResetDebugCameraToStageOverview();
+			}
 		scene_->debugFlyCamera_->SetRotateSpeed(rotateSpeed);
 
 			Vector3 flyPos = scene_->debugFlyCamera_->GetTranslate();
@@ -796,7 +978,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 	} else if (scene_->uiManager_->currentSimulationTarget_ == 6) {
 		Input *input = Input::GetInstance();
 		ImGui::Text("プレイヤー操作設定");
-		ImGui::TextDisabled("各行のキー変更を押してからキーボードのキーを押してください。設定は resources/input_bindings.cfg に保存されます。");
+		ImGui::TextDisabled("変更を押した後、キーボードまたはマウスボタンを押して割り当てます。設定は resources/input_bindings.cfg に保存されます。");
 		ImGui::TextColored(
 			input->IsControllerConnected() ? ImVec4(0.25f, 1.0f, 0.45f, 1.0f) : ImVec4(1.0f, 0.70f, 0.25f, 1.0f),
 			"コントローラー: %s (XInput Player 1)", input->IsControllerConnected() ? "接続済み" : "未接続");
@@ -805,10 +987,11 @@ void SimulationManager::DrawSimulationScreenUI() {
 			input->SavePlayerActionBindings();
 		}
 		ImGui::SameLine();
-		ImGui::TextDisabled("キーボードとコントローラーは同時に使用できます。");
+		ImGui::TextDisabled("キーボード・コントローラー・マウスは同時に使用できます。");
 		ImGui::Separator();
 
 		static int waitingForKeyboardAction = -1;
+		static bool ignoreMouseCaptureUntilReleased = false;
 		for (size_t actionIndex = 0; actionIndex < Input::GetPlayerActionCount(); ++actionIndex) {
 			const PlayerAction action = static_cast<PlayerAction>(actionIndex);
 			const PlayerActionBinding &binding = input->GetActionBinding(action);
@@ -817,7 +1000,7 @@ void SimulationManager::DrawSimulationScreenUI() {
 			ImGui::Text("%s", Input::GetPlayerActionName(action));
 			ImGui::SameLine(175.0f);
 			if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
-				ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーを押してください (Esc: キャンセル)");
+				ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーまたはマウスを押してください (Esc: キャンセル)");
 				for (int keyNumber = 1; keyNumber < 256; ++keyNumber) {
 					if (!input->TriggerKey(static_cast<BYTE>(keyNumber))) {
 						continue;
@@ -829,12 +1012,42 @@ void SimulationManager::DrawSimulationScreenUI() {
 					waitingForKeyboardAction = -1;
 					break;
 				}
+
+				const bool mouseReleased = !input->PushMouseButton(0) && !input->PushMouseButton(1) &&
+					!input->PushMouseButton(2) && !input->PushMouseButton(3);
+				if (ignoreMouseCaptureUntilReleased && mouseReleased) {
+					ignoreMouseCaptureUntilReleased = false;
+				}
+				if (waitingForKeyboardAction == static_cast<int>(actionIndex) && !ignoreMouseCaptureUntilReleased) {
+					for (int button = 0; button < 4; ++button) {
+						if (!input->TriggerMouseButton(button)) {
+							continue;
+						}
+						input->SetMouseBinding(action, static_cast<MouseInput>(static_cast<int>(MouseInput::LeftButton) + button));
+						input->SavePlayerActionBindings();
+						waitingForKeyboardAction = -1;
+						break;
+					}
+					if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
+						if (input->GetMouseWheel() > 0) {
+							input->SetMouseBinding(action, MouseInput::WheelUp);
+							input->SavePlayerActionBindings();
+							waitingForKeyboardAction = -1;
+						} else if (input->GetMouseWheel() < 0) {
+							input->SetMouseBinding(action, MouseInput::WheelDown);
+							input->SavePlayerActionBindings();
+							waitingForKeyboardAction = -1;
+						}
+					}
+				}
 			} else {
 				const std::string keyLabel = Input::GetKeyboardKeyName(binding.keyboardKey);
 				ImGui::Text("キー: %s", keyLabel.c_str());
 				ImGui::SameLine();
 				if (ImGui::Button("キー変更")) {
 					waitingForKeyboardAction = static_cast<int>(actionIndex);
+					// 「キー変更」を押した左クリックを、直後に割り当ててしまわないようにする。
+					ignoreMouseCaptureUntilReleased = true;
 				}
 			}
 
@@ -853,7 +1066,52 @@ void SimulationManager::DrawSimulationScreenUI() {
 				}
 				ImGui::EndCombo();
 			}
+
+			ImGui::TextDisabled("マウス:");
+			ImGui::SameLine(360.0f);
+			ImGui::SetNextItemWidth(145.0f);
+			const char *mouseLabel = Input::GetMouseInputName(binding.mouseInput);
+			if (ImGui::BeginCombo("##mouse", mouseLabel)) {
+				for (size_t mouseIndex = 0; mouseIndex < Input::GetMouseInputCount(); ++mouseIndex) {
+					const MouseInput mouseInput = static_cast<MouseInput>(mouseIndex);
+					const bool selected = mouseInput == binding.mouseInput;
+					if (ImGui::Selectable(Input::GetMouseInputName(mouseInput), selected)) {
+						input->SetMouseBinding(action, mouseInput);
+						input->SavePlayerActionBindings();
+					}
+					if (selected) ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
 			ImGui::PopID();
+		}
+	} else if (scene_->uiManager_->currentSimulationTarget_ == 7) {
+		static std::string packageMessage;
+		const bool projectFound = !FindProjectRoot().empty();
+		const bool runningRelease = IsCurrentExecutableReleaseBuild();
+		ImGui::Text("実行ファイル生成");
+		ImGui::TextWrapped("Release版の CG2.exe、実行用DLL、resources をまとめ、配布用ZIPを作成します。");
+		ImGui::Separator();
+		if (!projectFound) {
+			ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "プロジェクトフォルダー内から起動した場合のみ使用できます。");
+		} else {
+			if (runningRelease) {
+				ImGui::TextDisabled("現在Release版を実行中のため、実行ファイルを上書きするビルドはできません。");
+				if (ImGui::Button("現在のRelease版をZIP作成")) {
+					packageMessage = LaunchExecutablePackageCreation(true)
+						? "PowerShellでZIP作成を開始しました。完了後、generated/packages を確認してください。"
+						: "ZIP作成を開始できませんでした。";
+				}
+			} else if (ImGui::Button("ReleaseビルドしてZIP作成")) {
+				packageMessage = LaunchExecutablePackageCreation(false)
+					? "PowerShellでReleaseビルドとZIP作成を開始しました。完了後、generated/packages を確認してください。"
+					: "実行ファイル生成を開始できませんでした。";
+			}
+			ImGui::TextDisabled("出力先: generated/packages/CG2_Playable-Release.zip");
+		}
+		if (!packageMessage.empty()) {
+			ImGui::Spacing();
+			ImGui::TextWrapped("%s", packageMessage.c_str());
 		}
 	}
 

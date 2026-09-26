@@ -12,6 +12,7 @@ class Obstacle;
 
 
 class EnemyBulletManager;
+class EnemyActionController;
 
 // 敵の行動パターン（状態）を定義
 enum class EnemyState {
@@ -53,6 +54,7 @@ public:
 
     // 死んだかどうかのゲッター
     bool IsDead() const { return isDead_; }
+    int GetHP() const { return hp_; }
 
     // サイズ（スケール）を設定するセッター
     void SetScale(const Vector3 &scale) { scale_ = scale; if (object_) object_->SetScale(scale_); }
@@ -78,8 +80,11 @@ public:
     // ボス判定
     bool IsBoss() const { return isBoss_; }
     void SetIsBoss(bool isBoss) { isBoss_ = isBoss; }
+    bool IsBossMinion() const { return isBossMinion_; }
+    void SetIsBossMinion(bool isBossMinion) { isBossMinion_ = isBossMinion; }
 
 protected:
+	friend class EnemyActionController;
     void UpdateFlightPathAI(const Vector3 &playerPos, EnemyBulletManager *bulletManager);
     void BuildPathVisualizers();
 
@@ -111,6 +116,7 @@ protected:
     // 死んだかどうかのフラグ
     bool isDead_ = false;
     bool isBoss_ = false; // ボスフラグ
+    bool isBossMinion_ = false;
     size_t spawnPointIndex_ = kNoSpawnPoint;
 
     // ルート可視化用

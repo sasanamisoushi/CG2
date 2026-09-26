@@ -277,7 +277,9 @@ namespace {
 	Quaternion MakeLookQuaternion(const Vector3 &forward) {
 		const Vector3 normalizedForward = NormalizeOrVector3(forward, { 0.0f, 0.0f, 1.0f });
 		const float clampedY = std::clamp(normalizedForward.y, -1.0f, 1.0f);
-		const float pitch = -std::asin(clampedY);
+		// このエンジンではローカル +Z が正面かつ、正の pitch は上向きになる。
+		// そのため、見たい方向の Y 成分と同じ符号で pitch を作る。
+		const float pitch = std::asin(clampedY);
 		const float yaw = std::atan2(normalizedForward.x, normalizedForward.z);
 
 		Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
@@ -305,6 +307,12 @@ namespace {
 		}
 
 		const ImGuiIO &io = ImGui::GetIO();
+		// Game View 上の Image は ImGui の項目だが、ゲームへの入力対象でもある。
+		// ここをUI操作扱いにすると、ゲーム画面をクリックしても射撃できなくなる。
+		Vector2 gameViewMousePosition;
+		if (FlyCamera::GetGameViewMousePos(io.MousePos.x, io.MousePos.y, gameViewMousePosition)) {
+			return false;
+		}
 		return io.WantCaptureMouse || ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive();
 #else
 		return false;

@@ -4,6 +4,7 @@
     "BALANCED": {
       "speed": 1.0337961218067542
     },
-    "SWARM": {}
+    "SWARM": {},
+    "PATROL": {}
   }
 }

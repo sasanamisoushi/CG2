@@ -96,6 +96,58 @@ namespace {
 		OutputDebugStringW((L"[OpenBlender] Opened: " + blendPath.wstring() + L"\n").c_str());
 		return true;
 	}
+
+	std::filesystem::path FindProjectRoot() {
+		wchar_t modulePath[MAX_PATH] = {};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0) {
+			return {};
+		}
+
+		std::filesystem::path cursor = std::filesystem::path(modulePath).parent_path();
+		while (!cursor.empty()) {
+			if (std::filesystem::exists(cursor / "project" / "CG2.sln") &&
+				std::filesystem::exists(cursor / "tools" / "package_release.ps1")) {
+				return cursor;
+			}
+			const std::filesystem::path parent = cursor.parent_path();
+			if (parent == cursor) {
+				break;
+			}
+			cursor = parent;
+		}
+		return {};
+	}
+
+	bool CreateExecutablePackage(bool skipBuild) {
+		const std::filesystem::path projectRoot = FindProjectRoot();
+		if (projectRoot.empty()) {
+			return false;
+		}
+
+		const std::filesystem::path scriptPath = projectRoot / "tools" / "package_release.ps1";
+		std::wstring parameters = L"-NoProfile -ExecutionPolicy Bypass -File \"" + scriptPath.wstring() +
+			L"\" -Configuration Release";
+		if (skipBuild) {
+			parameters += L" -SkipBuild";
+		}
+
+		const HINSTANCE result = ShellExecuteW(
+			nullptr, L"open", L"powershell.exe", parameters.c_str(), projectRoot.c_str(), SW_SHOWNORMAL);
+		return reinterpret_cast<intptr_t>(result) > 32;
+	}
+
+	bool IsCurrentExecutableReleaseBuild() {
+		wchar_t modulePath[MAX_PATH] = {};
+		if (GetModuleFileNameW(nullptr, modulePath, MAX_PATH) == 0) {
+			return false;
+		}
+		const std::filesystem::path projectRoot = FindProjectRoot();
+		if (projectRoot.empty()) {
+			return false;
+		}
+		return std::filesystem::path(modulePath).lexically_normal() ==
+			(projectRoot / "generated" / "outputs" / "Release" / "CG2.exe").lexically_normal();
+	}
 }
 #endif
 
@@ -675,6 +727,7 @@ void GamePlayUIManager::UpdateUI() {
 			"敵撃破パーティクル",
 			"レベルエディタ",
 			"操作設定",
+			"実行ファイル生成",
 		};
 
 		ImGui::SetNextWindowSize(ImVec2(200.0f, 620.0f), ImGuiCond_Once);
@@ -896,10 +949,14 @@ void GamePlayUIManager::UpdateUI() {
 		if (isDebugCameraActive_) {
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.3f, 1.0f), "[FREE CAM ACTIVE]");
 			ImGui::Text("WASD: 移動  /  矢印キー: 回転  /  Q,E: ロール");
-			ImGui::Text("Game View上で右ドラッグやWASDを使って確認できます");
+			ImGui::Text("Game View上で右ドラッグ: 回転 / 中ドラッグ: パン / ホイール: 前後移動");
 
 			if (ImGui::Button("自機追従カメラに戻る")) {
 				SetDebugCameraActive(false);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("自機後方にリセット")) {
+				scene_->ResetDebugCameraToPlayer();
 			}
 
 			ImGui::Separator();
@@ -968,28 +1025,96 @@ void GamePlayUIManager::UpdateUI() {
 		}
 
 		if (currentEngineSettingsTarget_ == 2) {
-		ImGui::Text("=== ターゲット配置 ===");
-		ImGui::Text("Lock-on: %s", lockedEnemy_ ? "LOCKED" : "NONE");
-		ImGui::Text("Tab: lock target / X: unlock");
-		ImGui::DragFloat3("出現座標 (X,Y,Z)", newEnemyPos, 1.0f);
+		ImGui::Text("Blender互換の敵配置");
+		ImGui::TextWrapped("ここで追加・編集した敵は Blender と共通の scene.json に保存されます。座標はゲーム座標で入力し、保存時に Blender 座標へ自動変換します。");
+		ImGui::Separator();
 
-		// ボタンを押した瞬間に、新しい敵をリストに追加！
-		if (ImGui::Button("敵を生成する！")) {
-			auto newEnemy = std::make_unique<Enemy>();
-			newEnemy->Initialize({ newEnemyPos[0], newEnemyPos[1], newEnemyPos[2] });
-			enemies_.push_back(std::move(newEnemy));
+		const char* enemyTypes[] = { "VF1", "VF1-1", "VF3", "Jammer", "Boss" };
+		ImGui::InputText("敵の名前", blenderEnemyName_, IM_ARRAYSIZE(blenderEnemyName_));
+		ImGui::Combo("敵タイプ", &blenderEnemyTypeIndex_, enemyTypes, IM_ARRAYSIZE(enemyTypes));
+		ImGui::DragFloat3("配置座標 (Game X,Y,Z)", blenderEnemyPosition_, 0.1f);
+		ImGui::DragFloat3("回転 (度)", blenderEnemyRotationDegrees_, 1.0f);
+		if (ImGui::Checkbox("Game View をクリックして敵を配置", &enemyMousePlacementEnabled_) && enemyMousePlacementEnabled_) {
+			SetDebugCameraActive(true);
+		}
+		if (enemyMousePlacementEnabled_) {
+			ImGui::DragFloat("クリック配置の高さ (Y)", &enemyMousePlacementHeight_, 0.1f, -100.0f, 300.0f);
+			ImGui::TextColored(ImVec4(0.35f, 0.9f, 1.0f, 1.0f), "フリーカメラで見ながら Game View を左クリックすると敵を配置します。");
+		}
+
+		if (ImGui::Button("敵を配置して scene.json に保存")) {
+			const float degreesToRadians = 3.141592654f / 180.0f;
+			const Vector3 position = { blenderEnemyPosition_[0], blenderEnemyPosition_[1], blenderEnemyPosition_[2] };
+			const Vector3 rotation = {
+				blenderEnemyRotationDegrees_[0] * degreesToRadians,
+				blenderEnemyRotationDegrees_[1] * degreesToRadians,
+				blenderEnemyRotationDegrees_[2] * degreesToRadians,
+			};
+			simulationManager_->AddEnemySpawnToSceneJson(
+				"resources/scene.json", blenderEnemyName_, enemyTypes[blenderEnemyTypeIndex_], position, rotation);
+		}
+
+		if (!simulationSaveMessage_.empty()) {
+			ImGui::TextColored(ImVec4(1, 1, 0, 1), "%s", simulationSaveMessage_.c_str());
 		}
 
 		ImGui::Separator();
-		ImGui::Text("=== 敵のリスト (総数: %d) ===", (int)enemies_.size());
-		int index = 0;
-		for (const auto& enemy : enemies_) {
-			Vector3 pos = enemy->GetPosition();
-			ImGui::Text("[%d] 位置: (%.2f, %.2f, %.2f)", index, pos.x, pos.y, pos.z);
-			index++;
+		ImGui::Text("配置済みの敵 (総数: %d)", static_cast<int>(enemySpawns_.size()));
+		int spawnOrderSource = -1;
+		int spawnOrderTarget = -1;
+		for (size_t spawnIndex = 0; spawnIndex < enemySpawns_.size(); ++spawnIndex) {
+			EnemySpawnData &spawn = enemySpawns_[spawnIndex];
+			ImGui::PushID(static_cast<int>(spawnIndex));
+			if (ImGui::TreeNode(spawn.name.c_str())) {
+				ImGui::Text("初期スポーン順: %d", static_cast<int>(spawnIndex + 1));
+				if (spawnIndex > 0 && ImGui::SmallButton("上へ")) {
+					spawnOrderSource = static_cast<int>(spawnIndex);
+					spawnOrderTarget = static_cast<int>(spawnIndex - 1);
+				}
+				ImGui::SameLine();
+				if (spawnIndex + 1 < enemySpawns_.size() && ImGui::SmallButton("下へ")) {
+					spawnOrderSource = static_cast<int>(spawnIndex);
+					spawnOrderTarget = static_cast<int>(spawnIndex + 1);
+				}
+				float position[3] = { spawn.position.x, spawn.position.y, spawn.position.z };
+				float rotationDegrees[3] = {
+					spawn.rotation.x * 180.0f / 3.141592654f,
+					spawn.rotation.y * 180.0f / 3.141592654f,
+					spawn.rotation.z * 180.0f / 3.141592654f,
+				};
+				bool changed = ImGui::DragFloat3("座標 (Game X,Y,Z)", position, 0.1f);
+				changed |= ImGui::DragFloat3("回転 (度)", rotationDegrees, 1.0f);
+				if (changed) {
+					spawn.position = { position[0], position[1], position[2] };
+					const float degreesToRadians = 3.141592654f / 180.0f;
+					spawn.rotation = {
+						rotationDegrees[0] * degreesToRadians,
+						rotationDegrees[1] * degreesToRadians,
+						rotationDegrees[2] * degreesToRadians,
+					};
+					for (const auto &enemy : enemies_) {
+						if (enemy && enemy->GetSpawnPointIndex() == spawnIndex) {
+							enemy->SetPosition(spawn.position);
+							enemy->SetRotation(spawn.rotation);
+							break;
+						}
+					}
+				}
+				ImGui::TreePop();
+			}
+			ImGui::PopID();
+			if (spawnOrderTarget >= 0) {
+				break;
+			}
 		}
-		if (enemies_.empty()) {
-			ImGui::Text("現在、敵は存在しません。");
+
+		if (spawnOrderSource >= 0 && spawnOrderTarget >= 0) {
+			simulationManager_->MoveEnemySpawnInSceneJson(
+				"resources/scene.json", static_cast<size_t>(spawnOrderSource), static_cast<size_t>(spawnOrderTarget));
+		}
+
+		if (ImGui::Button("配置済みの敵の変更を scene.json に保存")) {
+			simulationManager_->SaveCurrentSimulationLayoutToSceneJson("resources/scene.json");
 		}
 
 		ImGui::Separator();
@@ -1119,7 +1244,8 @@ void GamePlayUIManager::UpdateUI() {
 		if (currentEngineSettingsTarget_ == 5) {
 			Input *input = Input::GetInstance();
 			ImGui::Text("プレイヤー操作設定");
-			ImGui::TextDisabled("キー変更を押してから、割り当てたいキーを押してください。");
+			ImGui::TextColored(ImVec4(0.45f, 0.85f, 1.0f, 1.0f), "射撃: 左クリック = 通常射撃 / 右クリック = ホーミング射撃");
+			ImGui::TextDisabled("変更後にキー、マウスボタン、またはホイールを操作して割り当てます。");
 			ImGui::TextColored(
 				input->IsControllerConnected() ? ImVec4(0.25f, 1.0f, 0.45f, 1.0f) : ImVec4(1.0f, 0.70f, 0.25f, 1.0f),
 				"コントローラー: %s (XInput Player 1)", input->IsControllerConnected() ? "接続済み" : "未接続");
@@ -1132,6 +1258,7 @@ void GamePlayUIManager::UpdateUI() {
 			ImGui::Separator();
 
 			static int waitingForKeyboardAction = -1;
+			static bool ignoreMouseCaptureUntilReleased = false;
 			for (size_t actionIndex = 0; actionIndex < Input::GetPlayerActionCount(); ++actionIndex) {
 				const PlayerAction action = static_cast<PlayerAction>(actionIndex);
 				const PlayerActionBinding &binding = input->GetActionBinding(action);
@@ -1139,7 +1266,7 @@ void GamePlayUIManager::UpdateUI() {
 				ImGui::Text("%s", Input::GetPlayerActionName(action));
 				ImGui::SameLine(155.0f);
 				if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
-					ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーを押してください");
+					ImGui::TextColored(ImVec4(1.0f, 0.82f, 0.20f, 1.0f), "キーまたはマウスを操作してください");
 					for (int keyNumber = 1; keyNumber < 256; ++keyNumber) {
 						if (!input->TriggerKey(static_cast<BYTE>(keyNumber))) continue;
 						if (keyNumber != DIK_ESCAPE) {
@@ -1149,11 +1276,40 @@ void GamePlayUIManager::UpdateUI() {
 						waitingForKeyboardAction = -1;
 						break;
 					}
+
+					const bool mouseReleased = !input->PushMouseButton(0) && !input->PushMouseButton(1) &&
+						!input->PushMouseButton(2) && !input->PushMouseButton(3);
+					if (ignoreMouseCaptureUntilReleased && mouseReleased) {
+						ignoreMouseCaptureUntilReleased = false;
+					}
+					if (waitingForKeyboardAction == static_cast<int>(actionIndex) && !ignoreMouseCaptureUntilReleased) {
+						for (int button = 0; button < 4; ++button) {
+							if (!input->TriggerMouseButton(button)) continue;
+							input->SetMouseBinding(action, static_cast<MouseInput>(static_cast<int>(MouseInput::LeftButton) + button));
+							input->SavePlayerActionBindings();
+							waitingForKeyboardAction = -1;
+							break;
+						}
+						if (waitingForKeyboardAction == static_cast<int>(actionIndex)) {
+							if (input->GetMouseWheel() > 0) {
+								input->SetMouseBinding(action, MouseInput::WheelUp);
+								input->SavePlayerActionBindings();
+								waitingForKeyboardAction = -1;
+							} else if (input->GetMouseWheel() < 0) {
+								input->SetMouseBinding(action, MouseInput::WheelDown);
+								input->SavePlayerActionBindings();
+								waitingForKeyboardAction = -1;
+							}
+						}
+					}
 				} else {
 					const std::string keyLabel = Input::GetKeyboardKeyName(binding.keyboardKey);
 					ImGui::Text("キー: %s", keyLabel.c_str());
 					ImGui::SameLine();
-					if (ImGui::SmallButton("変更")) waitingForKeyboardAction = static_cast<int>(actionIndex);
+					if (ImGui::SmallButton("変更")) {
+						waitingForKeyboardAction = static_cast<int>(actionIndex);
+						ignoreMouseCaptureUntilReleased = true;
+					}
 				}
 
 				ImGui::SameLine(320.0f);
@@ -1170,7 +1326,51 @@ void GamePlayUIManager::UpdateUI() {
 					}
 					ImGui::EndCombo();
 				}
+
+				ImGui::TextDisabled("マウス:");
+				ImGui::SameLine(320.0f);
+				ImGui::SetNextItemWidth(155.0f);
+				if (ImGui::BeginCombo("##mouse", Input::GetMouseInputName(binding.mouseInput))) {
+					for (size_t mouseIndex = 0; mouseIndex < Input::GetMouseInputCount(); ++mouseIndex) {
+						const MouseInput mouseInput = static_cast<MouseInput>(mouseIndex);
+						const bool selected = mouseInput == binding.mouseInput;
+						if (ImGui::Selectable(Input::GetMouseInputName(mouseInput), selected)) {
+							input->SetMouseBinding(action, mouseInput);
+							input->SavePlayerActionBindings();
+						}
+						if (selected) ImGui::SetItemDefaultFocus();
+					}
+					ImGui::EndCombo();
+				}
 				ImGui::PopID();
+			}
+		}
+
+		if (currentEngineSettingsTarget_ == 6) {
+			static std::string packageMessage;
+			const bool projectFound = !FindProjectRoot().empty();
+			const bool runningRelease = IsCurrentExecutableReleaseBuild();
+			ImGui::Text("実行ファイル生成");
+			ImGui::TextWrapped("Release版のCG2.exe、DLL、resourcesをまとめて、配布用ZIPを作成します。");
+			ImGui::Separator();
+			if (!projectFound) {
+				ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "プロジェクトフォルダーから起動した場合のみ利用できます。");
+			} else if (runningRelease) {
+				ImGui::TextDisabled("現在Release版を実行中です。ビルドは行わず、現在のRelease版をZIPにします。");
+				if (ImGui::Button("現在のRelease版をZIP作成")) {
+					packageMessage = CreateExecutablePackage(true)
+						? "PowerShellでZIP作成を開始しました。完了後に generated/packages を確認してください。"
+						: "ZIP作成を開始できませんでした。";
+				}
+			} else if (ImGui::Button("ReleaseビルドしてZIP作成")) {
+				packageMessage = CreateExecutablePackage(false)
+					? "PowerShellでReleaseビルドとZIP作成を開始しました。完了後に generated/packages を確認してください。"
+					: "実行ファイル生成を開始できませんでした。";
+			}
+			ImGui::TextDisabled("出力先: generated/packages/CG2_Playable-Release.zip");
+			if (!packageMessage.empty()) {
+				ImGui::Spacing();
+				ImGui::TextWrapped("%s", packageMessage.c_str());
 			}
 		}
 
