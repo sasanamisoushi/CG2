@@ -20,6 +20,7 @@
 #include "externals/json.hpp"
 #include "Game/editor/EditorReceiver.h"
 #include "Game/enemy/Boss.h"
+#include "Game/base/GameSettings.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -140,6 +141,10 @@ void GamePlayScene::Initialize() {
 	bossCutInBandSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	bossCutInPanelSprite_ = std::make_unique<Sprite>();
 	bossCutInPanelSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	pauseOverlaySprite_ = std::make_unique<Sprite>();
+	pauseOverlaySprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	pausePanelSprite_ = std::make_unique<Sprite>();
+	pausePanelSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	hudHpLabelSprite_ = std::make_unique<Sprite>();
 	hudHpLabelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[1]);
 	hudAmmoLabelSprite_ = std::make_unique<Sprite>();
@@ -343,6 +348,8 @@ void GamePlayScene::Initialize() {
 
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
+	isPaused_ = false;
+	isPauseTitleSelected_ = false;
 	// 通常のゲーム起動では、編集ツールの再生ボタンを押さなくても最初から操作できる。
 	// シミュレーション専用起動だけは下で停止状態にする。
 	isEditorPreviewPlaying_ = !IsSimulationMode();
@@ -834,6 +841,29 @@ void GamePlayScene::Update() {
 	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
 	const bool canUseMouseInput = !IsImGuiMouseCaptureActive();
 	const bool canUsePlayerInput = canUseKeyboardInput && canUseMouseInput;
+	if (!IsSimulationMode() && !isGameOver_ && bossIntroTimer_ <= 0 && canUseKeyboardInput) {
+		if (Input::GetInstance()->TriggerKey(DIK_ESCAPE)) {
+			// Esc はいつでも素早くゲームへ戻れるショートカットにする。
+			isPaused_ = !isPaused_;
+			if (isPaused_) {
+				isPauseTitleSelected_ = false;
+			}
+		} else if (isPaused_) {
+			if (Input::GetInstance()->TriggerKey(DIK_UP) ||
+				Input::GetInstance()->TriggerKey(DIK_DOWN) ||
+				Input::GetInstance()->TriggerKey(DIK_W) ||
+				Input::GetInstance()->TriggerKey(DIK_S)) {
+				isPauseTitleSelected_ = !isPauseTitleSelected_;
+			}
+			if (Input::GetInstance()->TriggerKey(DIK_RETURN)) {
+				if (isPauseTitleSelected_) {
+					SceneManager::GetInstance()->ChangeScene("TITLE");
+					return;
+				}
+				isPaused_ = false;
+			}
+		}
+	}
 
 	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_0)) {
 		OutputDebugStringA("HIt 0\n");
@@ -853,7 +883,7 @@ void GamePlayScene::Update() {
 	}
 
 
-	if (canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_R)) {
+	if (!isPaused_ && canUseKeyboardInput && Input::GetInstance()->TriggerKey(DIK_R)) {
 		SceneManager::GetInstance()->ChangeScene(IsSimulationMode() ? "SIMULATION" : "GAMEPLAY");
 		return;
 	}
@@ -875,7 +905,7 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	bool shouldUpdateGame = true;
+	bool shouldUpdateGame = !isPaused_;
 
 	if (isGameOver_) {
 		gameOverTimer_++;
@@ -956,7 +986,8 @@ void GamePlayScene::Update() {
 	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 3);
 	const bool allowWeaponInput = shouldUpdateGame && canUsePlayerInput && (!isSimulation || isFullFlowPreview);
-	const bool allowLockOnBehavior = !isGameOver_ && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1 || uiManager_->currentSimulationTarget_ == 2);
+	const bool allowLockOnBehavior = !isPaused_ && bossIntroTimer_ <= 0 && !isGameOver_ &&
+		(isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1 || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
 	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
 
@@ -1638,7 +1669,8 @@ void GamePlayScene::Update() {
 	}
 
 
-	if ((!isSimulation || updateSelectedMissiles || updateSelectedParticles || (shouldUpdateGame && isFullFlowPreview)) && explosionManager_) {
+	if (((shouldUpdateGame && !isSimulation) || updateSelectedMissiles || updateSelectedParticles ||
+		(shouldUpdateGame && isFullFlowPreview)) && explosionManager_) {
 		explosionManager_->Update();
 	}
 
@@ -2242,6 +2274,62 @@ void GamePlayScene::DrawOverlay() {
 		hudText->AddText(toGameView(statusPanelX + 30.0f, songGaugeY + 1.0f), songTextColor, "SONG");
 		const char *songState = isSongActive_ ? "LIVE" : (songGauge_ >= 100.0f ? "READY" : "CHG");
 		hudText->AddText(toGameView(gaugeX + songGaugeWidth + 26.0f, songGaugeY + 1.0f), songTextColor, songState);
+
+		// 常時確認できる操作ガイド。レーダーと重ならない左上に置き、
+		// 操作名とキーを列で分けて、戦闘中でも一目で確認できるようにする。
+		if (!isPaused_ && !isGameOver_ && GameSettings::GetInstance().IsControlGuideVisible()) {
+			constexpr float kGuideX = 24.0f;
+			constexpr float kGuideY = 24.0f;
+			constexpr float kGuideWidth = 400.0f;
+			constexpr float kGuideHeight = 238.0f;
+			hudText->AddRectFilled(
+				toGameView(kGuideX, kGuideY),
+				toGameView(kGuideX + kGuideWidth, kGuideY + kGuideHeight),
+				IM_COL32(3, 14, 30, 202),
+				8.0f);
+			hudText->AddRect(
+				toGameView(kGuideX, kGuideY),
+				toGameView(kGuideX + kGuideWidth, kGuideY + kGuideHeight),
+				IM_COL32(60, 205, 245, 210),
+				8.0f);
+			hudText->AddRectFilled(
+				toGameView(kGuideX + 1.0f, kGuideY + 1.0f),
+				toGameView(kGuideX + kGuideWidth - 1.0f, kGuideY + 36.0f),
+				IM_COL32(8, 54, 84, 210),
+				8.0f);
+			hudText->AddLine(
+				toGameView(kGuideX + 12.0f, kGuideY + 42.0f),
+				toGameView(kGuideX + kGuideWidth - 12.0f, kGuideY + 42.0f),
+				IM_COL32(55, 175, 215, 180),
+				1.0f);
+
+			const PlayerMode playerMode = player_ ? player_->GetCurrentMode() : PlayerMode::Fighter;
+			const char *modeName = playerMode == PlayerMode::Fighter ? "FIGHTER"
+				: (playerMode == PlayerMode::Gerwalk ? "GERWALK" : "BATTROID");
+			const char *lateralKey = playerMode == PlayerMode::Gerwalk ? "A / D  STRAFE"
+				: (playerMode == PlayerMode::Fighter ? "A / D  DODGE" : "-" );
+			const ImU32 guideTitleColor = IM_COL32(125, 236, 255, 255);
+			const ImU32 guideModeColor = IM_COL32(255, 218, 105, 255);
+			const ImU32 guideLabelColor = IM_COL32(158, 207, 226, 245);
+			const ImU32 guideKeyColor = IM_COL32(244, 250, 255, 255);
+			constexpr float kGuideFontSize = 14.0f;
+			hudText->AddText(nullptr, 16.0f, toGameView(kGuideX + 14.0f, kGuideY + 10.0f), guideTitleColor, "CONTROLS");
+			const ImVec2 modeSize = ImGui::CalcTextSize(modeName);
+			hudText->AddText(nullptr, kGuideFontSize, toGameView(kGuideX + kGuideWidth - 18.0f - modeSize.x, kGuideY + 12.0f), guideModeColor, modeName);
+
+			const auto drawGuideRow = [&](float y, const char *label, const char *key) {
+				hudText->AddText(nullptr, kGuideFontSize, toGameView(kGuideX + 16.0f, y), guideLabelColor, label);
+				hudText->AddText(nullptr, kGuideFontSize, toGameView(kGuideX + 170.0f, y), guideKeyColor, key);
+			};
+			drawGuideRow(kGuideY + 54.0f, "MOVE", "W / S");
+			drawGuideRow(kGuideY + 76.0f, "UP / DOWN", "SPACE / SHIFT");
+			drawGuideRow(kGuideY + 98.0f, "LATERAL", lateralKey);
+			drawGuideRow(kGuideY + 124.0f, "GUN FIRE", "LEFT MOUSE");
+			drawGuideRow(kGuideY + 146.0f, "MISSILE LOCK", "HOLD RIGHT MOUSE");
+			drawGuideRow(kGuideY + 168.0f, "LOCK / RELEASE", "TAB / X");
+			drawGuideRow(kGuideY + 190.0f, "TRANSFORM", "1 / 2 / 3");
+			drawGuideRow(kGuideY + 212.0f, "PAUSE", "ESC");
+		}
 	}
 #endif
 
@@ -2294,6 +2382,7 @@ void GamePlayScene::DrawOverlay() {
 			}
 		}
 	}
+	DrawPauseOverlay(screenWidth, screenHeight);
 }
 
 void GamePlayScene::DrawBossIntroCutIn(float screenWidth, float screenHeight) {
@@ -2337,6 +2426,64 @@ void GamePlayScene::DrawBossIntroCutIn(float screenWidth, float screenHeight) {
 			ImVec2((screenWidth - textSize.x) * 0.5f, panelY + (panelHeight - textSize.y) * 0.5f),
 			IM_COL32(255, 235, 220, 255),
 			message);
+	}
+#endif
+}
+
+void GamePlayScene::DrawPauseOverlay(float screenWidth, float screenHeight) {
+	if (!isPaused_ || !pauseOverlaySprite_ || !pausePanelSprite_) {
+		return;
+	}
+
+	pauseOverlaySprite_->SetPosition({ 0.0f, 0.0f });
+	pauseOverlaySprite_->SetSize({ screenWidth, screenHeight });
+	pauseOverlaySprite_->SetColor({ 0.01f, 0.02f, 0.06f, 0.70f });
+	pauseOverlaySprite_->Update();
+	pauseOverlaySprite_->Draw();
+
+	const float panelWidth = (std::min)(460.0f, screenWidth - 48.0f);
+	constexpr float kPanelHeight = 224.0f;
+	const float panelX = (screenWidth - panelWidth) * 0.5f;
+	const float panelY = (screenHeight - kPanelHeight) * 0.5f;
+	pausePanelSprite_->SetPosition({ panelX, panelY });
+	pausePanelSprite_->SetSize({ panelWidth, kPanelHeight });
+	pausePanelSprite_->SetColor({ 0.04f, 0.12f, 0.24f, 0.96f });
+	pausePanelSprite_->Update();
+	pausePanelSprite_->Draw();
+	pausePanelSprite_->SetPosition({ panelX, panelY + 8.0f });
+	pausePanelSprite_->SetSize({ panelWidth, 4.0f });
+	pausePanelSprite_->SetColor({ 0.05f, 0.82f, 1.0f, 1.0f });
+	pausePanelSprite_->Update();
+	pausePanelSprite_->Draw();
+
+#ifdef ENABLE_IMGUI
+	if (ImGui::GetCurrentContext()) {
+		ImDrawList* drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
+		const char* title = "PAUSED";
+		const char* guide = "UP / DOWN : SELECT     ENTER : CONFIRM";
+		const char* resume = isPauseTitleSelected_ ? "  RESUME GAME" : "> RESUME GAME";
+		const char* returnToTitle = isPauseTitleSelected_ ? "> RETURN TO TITLE" : "  RETURN TO TITLE";
+		const ImVec2 titleSize = ImGui::CalcTextSize(title);
+		const ImVec2 guideSize = ImGui::CalcTextSize(guide);
+		drawList->AddText(ImVec2((screenWidth - titleSize.x) * 0.5f, panelY + 30.0f), IM_COL32(120, 230, 255, 255), title);
+		drawList->AddText(ImVec2((screenWidth - guideSize.x) * 0.5f, panelY + 62.0f), IM_COL32(185, 220, 240, 255), guide);
+
+		const float optionX = panelX + 58.0f;
+		const float optionWidth = panelWidth - 116.0f;
+		const float resumeY = panelY + 104.0f;
+		const float titleY = panelY + 150.0f;
+		const ImU32 selectedColor = IM_COL32(12, 115, 170, 225);
+		const ImU32 unselectedColor = IM_COL32(5, 28, 55, 180);
+		drawList->AddRectFilled(ImVec2(optionX, resumeY), ImVec2(optionX + optionWidth, resumeY + 32.0f),
+			isPauseTitleSelected_ ? unselectedColor : selectedColor, 4.0f);
+		drawList->AddRectFilled(ImVec2(optionX, titleY), ImVec2(optionX + optionWidth, titleY + 32.0f),
+			isPauseTitleSelected_ ? selectedColor : unselectedColor, 4.0f);
+		drawList->AddText(ImVec2(optionX + 14.0f, resumeY + 8.0f),
+			isPauseTitleSelected_ ? IM_COL32(205, 220, 230, 230) : IM_COL32(255, 255, 255, 255), resume);
+		drawList->AddText(ImVec2(optionX + 14.0f, titleY + 8.0f),
+			isPauseTitleSelected_ ? IM_COL32(255, 255, 255, 255) : IM_COL32(205, 220, 230, 230), returnToTitle);
+		drawList->AddText(ImVec2((screenWidth - ImGui::CalcTextSize("ESC : RESUME").x) * 0.5f, panelY + 198.0f),
+			IM_COL32(185, 220, 240, 255), "ESC : RESUME");
 	}
 #endif
 }

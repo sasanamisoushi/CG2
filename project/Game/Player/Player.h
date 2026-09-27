@@ -187,8 +187,8 @@ private:
     float specialAttackCameraYaw_ = 0.0f;
     float specialAttackCameraPitch_ = 0.0f;
     bool isSongActive_ = false;
-    static constexpr int kDodgeDurationFrames = 24;
-    static constexpr int kDodgeCooldownFrames = 45;
+    static constexpr int kDodgeDurationFrames = 16;
+    static constexpr int kDodgeCooldownFrames = 30;
     int dodgeTimer_ = 0;
     int dodgeCooldownTimer_ = 0;
     float dodgeDirection_ = 0.0f;

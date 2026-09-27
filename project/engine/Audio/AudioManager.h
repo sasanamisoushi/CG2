@@ -55,6 +55,10 @@ public:
 	//音声再生
 	IXAudio2SourceVoice *PlayWave(const SoundData &soundData, bool loop = false);
 
+	// アプリ全体の音量（0.0: ミュート / 1.0: 通常）
+	void SetMasterVolume(float volume);
+	float GetMasterVolume() const { return masterVolume_; }
+
 	//音声データの解放
 	void UnloadWave(SoundData &soundData);
 
@@ -69,6 +73,7 @@ private:
 	//XAudio2のインターフェース
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2_;
 	IXAudio2MasteringVoice *masterVoice_=nullptr;
+	float masterVolume_ = 1.0f;
 
 };
 

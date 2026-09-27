@@ -361,11 +361,11 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
             
             bulletManager->Shoot(muzzlePos, bulletVelocity);
             gatlingShotCount_++;
-            gatlingIntervalTimer_ = 4; // 4フレーム毎に連射
+            gatlingIntervalTimer_ = 10; // 弾幕が過密にならないよう、10フレーム毎に発射
 
-            if (gatlingShotCount_ >= 6) { // 6連射発射して終了
+            if (gatlingShotCount_ >= 4) { // 4連射で終了
                 attackSubState_ = GroundAttackState::Idle;
-                attackTimer_ = 90; // クールタイム
+                attackTimer_ = 120; // 次の射撃まで少し間を空ける
             }
         }
         return;
@@ -391,20 +391,9 @@ void GroundEnemy::UpdateAttackAI(const Vector3 &playerPos, EnemyBulletManager *b
         gatlingShotCount_ = 0;
         gatlingIntervalTimer_ = 0;
     } else {
-        // 3. 遠距離: 誘導ミサイル攻撃
-        if (bulletManager) {
-            Vector3 muzzlePos = { position_.x, position_.y + 0.45f, position_.z };
-            // 上空に向けてミサイルを放出し、プレイヤーを追尾させる
-            Vector3 missileVel1 = { forward_.x * 0.15f + 0.1f, 0.3f, forward_.z * 0.15f };
-            Vector3 missileVel2 = { forward_.x * 0.15f - 0.1f, 0.3f, forward_.z * 0.15f };
-            
-            bulletManager->ShootMissile(muzzlePos, missileVel1);
-            bulletManager->ShootMissile(muzzlePos, missileVel2);
-
-            attackSubState_ = GroundAttackState::Missile;
-            attackTimer_ = 120; // 2秒クールタイム
-            attackSubState_ = GroundAttackState::Idle;
-        }
+        // 3. 遠距離: VF3は誘導弾を使わない。距離を詰めるまで待機する。
+        attackSubState_ = GroundAttackState::Idle;
+        attackTimer_ = 90;
     }
 }
 

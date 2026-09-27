@@ -113,12 +113,12 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                         }
 
                         if (touchedGround) {
-                            missile->ResolveGroundContact(terrainY, bulletSphere.radius + 0.15f);
-                            mPos = missile->GetPosition();
-                            bulletSphere.center = mPos;
+                            missile->OnCollision();
+                            hitObstacle = true;
+                            break;
                         }
 
-                        // 上向きの地形面は消滅判定に回さず、上の回避処理で地表をなぞらせる。
+                        // 地形面は上向きでも弾着として扱う。
                         continue;
                     }
 
@@ -146,6 +146,10 @@ void MissileManager::Update(Camera *camera, std::list<std::unique_ptr<Enemy>> &e
                 }
             }
         }
+
+		if (hitObstacle) {
+			hitPositions.push_back(missile->GetPosition());
+		}
 
         if (!hitObstacle) {
             for (auto &enemy : enemies) {

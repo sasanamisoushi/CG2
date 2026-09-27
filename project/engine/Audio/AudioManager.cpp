@@ -3,6 +3,7 @@
 #include <cassert>
 #include "engine/base/StringUtility.h"
 #include <vector>
+#include <algorithm>
 
 #pragma comment(lib,"Mfplat.lib")
 #pragma comment(lib,"Mfreadwrite.lib")
@@ -47,6 +48,14 @@ void AudioManager::Initialize() {
 	//マスターボイスの生成
 	hr = xAudio2_->CreateMasteringVoice(&masterVoice_);
 	assert(SUCCEEDED(hr));
+	masterVoice_->SetVolume(masterVolume_);
+}
+
+void AudioManager::SetMasterVolume(float volume) {
+	masterVolume_ = (std::clamp)(volume, 0.0f, 1.0f);
+	if (masterVoice_) {
+		masterVoice_->SetVolume(masterVolume_);
+	}
 }
 
 SoundData AudioManager::LoadWave(const std::string &filename) {

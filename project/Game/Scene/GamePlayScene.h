@@ -71,6 +71,7 @@ private:
 	void DrawOverlay();
 	void DrawRadar();
 	void DrawBossIntroCutIn(float screenWidth, float screenHeight);
+	void DrawPauseOverlay(float screenWidth, float screenHeight);
 	void SetDebugCameraActive(bool isActive);
 	void ResetDebugCameraToPlayer();
 	void ResetDebugCameraToStageOverview();
@@ -116,6 +117,8 @@ private:
 	std::unique_ptr<Sprite> bossHpGaugeFillSprite_;
 	std::unique_ptr<Sprite> bossCutInBandSprite_;
 	std::unique_ptr<Sprite> bossCutInPanelSprite_;
+	std::unique_ptr<Sprite> pauseOverlaySprite_;
+	std::unique_ptr<Sprite> pausePanelSprite_;
 	std::unique_ptr<Sprite> hudHpLabelSprite_;
 	std::unique_ptr<Sprite> hudAmmoLabelSprite_;
 	std::unique_ptr<Sprite> hudSpLabelSprite_;
@@ -247,6 +250,9 @@ private:
 	bool bossSpawned_ = false;
 	int bossIntroTimer_ = 0;
 	Vector3 bossIntroPlayerPosition_ = { 0.0f, 0.0f, 0.0f };
+	bool isPaused_ = false;
+	// false: ゲームに戻る / true: タイトルに戻る
+	bool isPauseTitleSelected_ = false;
 
 
 	// 障害物

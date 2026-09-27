@@ -1,6 +1,7 @@
 ﻿#include "Player.h"
 #include "PlayerMovementController.h"
 #include "PlayerActionController.h"
+#include "Game/base/GameSettings.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
 #include "Game/obstacle/Obstacle.h"
@@ -574,6 +575,14 @@ void Player::UpdateTransformPlayerModel() {
 	transformModeBlend_ = (std::min)(1.0f, transformModeBlend_ + 0.10f);
 	const int from = static_cast<int>(transformFromMode_);
 	const int to = static_cast<int>(currentMode_);
+	// 可変機モデルも通常モデルと同じく、回避中は機体全体をロールさせる。
+	Quaternion bodyQuaternion = quaternion_;
+	if (dodgeTimer_ > 0) {
+		const float progress = 1.0f - static_cast<float>(dodgeTimer_) / static_cast<float>(kDodgeDurationFrames);
+		const float rollAngle = progress * 6.2831853f * dodgeDirection_;
+		bodyQuaternion = MyMath::Normalize(MyMath::Multiply(
+			quaternion_, MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, rollAngle)));
+	}
 	const auto updateObject = [&](Object3d* object, const std::string& name,
 		const std::array<TransformPlayerPose, 3>& poses) {
 		if (!object) return;
@@ -588,10 +597,10 @@ void Player::UpdateTransformPlayerModel() {
 			localPosition.z += 2.8f * guardPoseWeight_;
 		}
 
-		const Vector3 worldPosition = Add(position_, MyMath::RotateVector(Scale(localPosition, modelScale_.x), quaternion_));
+		const Vector3 worldPosition = Add(position_, MyMath::RotateVector(Scale(localPosition, modelScale_.x), bodyQuaternion));
 		object->SetTranslate(worldPosition);
 		object->SetScale(Scale(localScale, modelScale_.x));
-		object->SetQuaternionRotate(MyMath::Normalize(MyMath::Multiply(localRotation, quaternion_)));
+		object->SetQuaternionRotate(MyMath::Normalize(MyMath::Multiply(localRotation, bodyQuaternion)));
 		object->Update();
 	};
 
@@ -622,13 +631,13 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 		// 機体は固定したまま、視点だけはマウスと矢印キーで操作できる。
 		Input *input = Input::GetInstance();
 		constexpr float kSpecialCameraKeySpeed = 0.025f;
-		constexpr float kSpecialCameraMouseSensitivity = 0.002f;
+		const float specialCameraMouseSensitivity = GameSettings::GetInstance().GetMouseSensitivity();
 		if (input->PushAction(PlayerAction::TurnLeft)) specialAttackCameraYaw_ -= kSpecialCameraKeySpeed;
 		if (input->PushAction(PlayerAction::TurnRight)) specialAttackCameraYaw_ += kSpecialCameraKeySpeed;
 		if (input->PushAction(PlayerAction::PitchUp)) specialAttackCameraPitch_ -= kSpecialCameraKeySpeed;
 		if (input->PushAction(PlayerAction::PitchDown)) specialAttackCameraPitch_ += kSpecialCameraKeySpeed;
-		specialAttackCameraYaw_ += static_cast<float>(input->GetMouseDeltaX()) * kSpecialCameraMouseSensitivity;
-		specialAttackCameraPitch_ += static_cast<float>(input->GetMouseDeltaY()) * kSpecialCameraMouseSensitivity;
+		specialAttackCameraYaw_ += static_cast<float>(input->GetMouseDeltaX()) * specialCameraMouseSensitivity;
+		specialAttackCameraPitch_ += static_cast<float>(input->GetMouseDeltaY()) * specialCameraMouseSensitivity;
 		specialAttackCameraPitch_ = std::clamp(specialAttackCameraPitch_, -1.2f, 1.2f);
 	} else {
 		Move(lockOnTarget != nullptr);
@@ -1290,7 +1299,7 @@ void PlayerMovementController::Update(Player& player, bool rotationLocked) const
 	// マウス入力による回転（視点・機体回転）
 	long mouseDX = input->GetMouseDeltaX();
 	long mouseDY = input->GetMouseDeltaY();
-	float mouseSensitivity = 0.002f; // マウス感度
+	const float mouseSensitivity = GameSettings::GetInstance().GetMouseSensitivity();
 	if (!rotationLocked && mouseDX != 0) {
 		yaw += mouseDX * mouseSensitivity;
 	}
@@ -1331,6 +1340,8 @@ void PlayerMovementController::Update(Player& player, bool rotationLocked) const
 		// ガウォーク形態：全方位へのカニ歩き、ホバリング
 		if (moveForward) localMove.z += 1.0f;
 		if (moveBackward) localMove.z -= 1.0f;
+		if (input->PushAction(PlayerAction::DodgeLeft)) localMove.x -= 1.0f;
+		if (input->PushAction(PlayerAction::DodgeRight)) localMove.x += 1.0f;
 		if (moveUp) localMove.y += 1.0f;
 		if (moveDown) localMove.y -= 1.0f;
 		
@@ -1436,7 +1447,8 @@ void PlayerMovementController::Update(Player& player, bool rotationLocked) const
 	position_ = Add(position_, velocity_);
 	if (dodgeTimer_ > 0) {
 		const Vector3 dodgeRight = MyMath::RotateVector({ 1.0f, 0.0f, 0.0f }, quaternion_);
-		position_ = Add(position_, Scale(dodgeRight, dodgeDirection_ * 0.38f));
+		// 16フレームへ短縮しても、従来とほぼ同じ距離を一気に抜けられるようにする。
+		position_ = Add(position_, Scale(dodgeRight, dodgeDirection_ * 0.56f));
 	}
 
 	// 近接攻撃（Vキー）
@@ -1580,9 +1592,15 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 			const float minRequiredY = maxTerrainY + halfExtents.y;
 
 			if (foundTerrain && position_.y < minRequiredY) {
+				const float lift = minRequiredY - position_.y;
 				position_.y = minRequiredY;
 				if (velocity_.y < 0.0f) {
 					velocity_.y = 0.0f;
+				}
+				// 高さ補正後も判定球を旧位置に残さず、次の三角形判定で
+				// 横方向へ押し戻される一瞬の停止を防ぐ。
+				for (Sphere& playerSphere : playerSpheres) {
+					playerSphere.center.y += lift;
 				}
 				playerOBB = GetOBB();
 			}
@@ -1629,7 +1647,13 @@ void Player::CheckCollision(const std::list<std::unique_ptr<Obstacle>> &obstacle
 							if (groundNormal.y < 0.0f) {
 								groundNormal = MyMath::Multiply(-1.0f, groundNormal);
 							}
-							pushVector = MyMath::Multiply(pushLen, groundNormal);
+							// 低空ファイターは地形の斜面法線で横速度まで失わないよう、
+							// なだらかな地面では真上にだけ押し戻す。
+							if (currentMode_ == PlayerMode::Fighter && groundNormal.y >= 0.65f) {
+								pushVector = { 0.0f, pushLen, 0.0f };
+							} else {
+								pushVector = MyMath::Multiply(pushLen, groundNormal);
+							}
 						}
 
 						position_.x += pushVector.x;

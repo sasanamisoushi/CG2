@@ -3,10 +3,12 @@
 #include "Game/Player/Player.h"
 #include "Game/obstacle/Obstacle.h" // 追加
 #include <algorithm>
+#include <string>
 
 namespace {
-    constexpr float kEnemyBulletScale = 0.2f;
-    constexpr float kEnemyBulletRadius = 0.2f;
+    // プレイヤーの通常弾と同じ球モデルに合わせた標準サイズ。
+    constexpr float kEnemyBulletScale = 0.3f;
+    constexpr float kEnemyBulletRadius = 0.3f;
 }
 
 void EnemyBulletManager::Initialize() {
@@ -15,10 +17,10 @@ void EnemyBulletManager::Initialize() {
     for (auto &bullet : bullets_) {
         bullet.object = std::make_unique<Object3d>();
         bullet.object->Initialize(Object3dCommon::GetInstance());
-        bullet.object->SetModel("EnemyBox"); // 自機や敵と同じモデルを使い回し
-        bullet.object->SetScale({ kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale }); // 小さくする
+        bullet.object->SetModel("Sphere"); // プレイヤー弾と同じモデル
+        bullet.object->SetScale({ kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale });
         if (bullet.object->GetModel()) {
-            bullet.object->GetModel()->SetColor({ 1.0f, 0.2f, 0.2f, 1.0f }); // 赤色
+            bullet.object->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f }); // 通常弾と同じ黄色
         }
         bullet.isDead = true; // 最初は非アクティブに設定
         bullet.position = { -9999.0f, -9999.0f, -9999.0f }; // 中心(0,0,0)に残らないよう画面外に退避
@@ -145,14 +147,29 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
         bulletSphere.radius = bullet.collisionRadius;
 
         for (const auto& obstacle : obstacles) {
-            if (obstacle->IsStageBounds()) {
+            if (!obstacle || obstacle->IsStageBounds() || !obstacle->IsCollisionEnabled()) {
                 continue;
             }
 
-            OBB obsOBB = obstacle->GetOBB();
-            if (MyMath::IsCollision(bulletSphere, obsOBB)) {
+            bool collided = false;
+            if (obstacle->IsUseMeshCollider()) {
+                // 地形はモデル全体を囲むOBBではなく、実際の三角形の表面だけで判定する。
+                // これにより、地上敵(VF3)の弾が発射直後に地形の箱へ触れて消えるのを防ぐ。
+                for (const Triangle& triangle : obstacle->GetWorldTriangles()) {
+                    Vector3 pushOut;
+                    if (MyMath::IsCollision(bulletSphere, triangle, pushOut)) {
+                        collided = true;
+                        break;
+                    }
+                }
+            } else {
+                collided = MyMath::IsCollision(bulletSphere, obstacle->GetOBB());
+            }
+
+            if (collided) {
                 bullet.isDead = true;
                 hitObstacle = true;
+                hitPositions.push_back(bullet.position);
                 break;
             }
         }
@@ -198,7 +215,7 @@ void EnemyBulletManager::Draw() {
 
 void EnemyBulletManager::Shoot(const Vector3 &position, const Vector3 &velocity) {
     ShootConfigured(position, velocity, { kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale },
-                    kEnemyBulletRadius, 1, 120, "EnemyBox");
+                    kEnemyBulletRadius, 1, 120, "Sphere");
 }
 
 void EnemyBulletManager::ShootHeavyCannon(const Vector3 &position, const Vector3 &velocity) {
@@ -250,10 +267,11 @@ void EnemyBulletManager::ShootMissile(const Vector3 &position, const Vector3 &ve
             
             bullet.isDead = false;
 
-            bullet.object->SetModel("EnemyBox");
-            bullet.object->SetScale({ 0.35f, 0.35f, 0.7f });
+            // プレイヤーの誘導弾と同じ Sphere モデル・赤色・等方スケールに統一する。
+            bullet.object->SetModel("Sphere");
+            bullet.object->SetScale({ 0.5f, 0.5f, 0.5f });
             if (bullet.object->GetModel()) {
-                bullet.object->GetModel()->SetColor({ 1.0f, 0.5f, 0.0f, 1.0f }); // オレンジ色
+                bullet.object->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f }); // プレイヤー誘導弾と同じ赤色
             }
             bullet.object->SetTranslate(position);
             bullet.object->Update();
@@ -277,6 +295,9 @@ void EnemyBulletManager::ShootConfigured(const Vector3 &position, const Vector3 
 
             bullet.object->SetModel(modelName);
             bullet.object->SetScale(scale);
+            if (bullet.object->GetModel() && std::string(modelName) == "Sphere") {
+                bullet.object->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f });
+            }
             bullet.object->SetTranslate(position);
             bullet.object->Update();
             break; // 発射したので終了
