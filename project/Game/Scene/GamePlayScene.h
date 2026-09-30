@@ -27,6 +27,7 @@
 #include "GamePlayUIManager.h"
 #include "EnvironmentRenderer.h"
 #include "AmmoManager.h"
+#include "Game/base/GameStartTransition.h"
 #include <memory>
 #include <vector>
 #include <list>
@@ -42,7 +43,9 @@ public:
 public:
 	enum class Mode {
 		Gameplay,
-		Simulation
+		Simulation,
+		// タイトル画面の背面で本編の3Dシーンだけを動かす。操作とHUDは表示しない。
+		TitleBackground
 	};
 
 	explicit GamePlayScene(Mode mode = Mode::Gameplay);
@@ -59,6 +62,10 @@ public:
 	// 描画
 	void Draw() override;
 
+	// タイトル背景の地形を残したまま出撃演出へ移行する。
+	void BeginTitleLaunch();
+	Vector3 GetTitleLaunchForward() const { return titleLaunchForward_; }
+
 	// UIの更新
 
 private:
@@ -68,9 +75,9 @@ private:
 
 
 	bool IsSimulationMode() const { return mode_ == Mode::Simulation; }
+	bool IsTitleBackgroundMode() const { return mode_ == Mode::TitleBackground; }
 	void DrawOverlay();
 	void DrawRadar();
-	void DrawBossIntroCutIn(float screenWidth, float screenHeight);
 	void DrawPauseOverlay(float screenWidth, float screenHeight);
 	void SetDebugCameraActive(bool isActive);
 	void ResetDebugCameraToPlayer();
@@ -87,9 +94,10 @@ private:
 	void UpdateEnemyRespawns();
 	bool HasPendingEnemySpawns() const;
 	bool TryConsumeAmmo(MissileType type);
-	void UpdateReload();
-	void UpdateAmmoPickups();
+	void UpdateAutoReload();
 	void UpdateCinematicLockOnCamera();
+	void ClearEnemyReferences(Enemy* enemy);
+	void ClearAllEnemyReferences();
 	Mode mode_ = Mode::Gameplay;
 
 	// シーンリソース
@@ -115,10 +123,10 @@ private:
 	std::unique_ptr<Sprite> hpGaugeFillSprite_;
 	std::unique_ptr<Sprite> bossHpGaugeBackgroundSprite_;
 	std::unique_ptr<Sprite> bossHpGaugeFillSprite_;
-	std::unique_ptr<Sprite> bossCutInBandSprite_;
-	std::unique_ptr<Sprite> bossCutInPanelSprite_;
 	std::unique_ptr<Sprite> pauseOverlaySprite_;
 	std::unique_ptr<Sprite> pausePanelSprite_;
+	std::unique_ptr<Sprite> controlsGuideSprite_;
+	std::unique_ptr<Sprite> pauseMenuLabelsSprite_;
 	std::unique_ptr<Sprite> hudHpLabelSprite_;
 	std::unique_ptr<Sprite> hudAmmoLabelSprite_;
 	std::unique_ptr<Sprite> hudSpLabelSprite_;
@@ -248,8 +256,6 @@ private:
 	EnemyEventManager enemyEventManager_;
 	Enemy *lockedEnemy_ = nullptr;
 	bool bossSpawned_ = false;
-	int bossIntroTimer_ = 0;
-	Vector3 bossIntroPlayerPosition_ = { 0.0f, 0.0f, 0.0f };
 	bool isPaused_ = false;
 	// false: ゲームに戻る / true: タイトルに戻る
 	bool isPauseTitleSelected_ = false;
@@ -284,6 +290,16 @@ private:
 	std::unique_ptr<EnvironmentRenderer> environmentRenderer_;
 	std::unique_ptr<GamePlayUIManager> uiManager_;
 	std::unique_ptr<AmmoManager> ammoManager_;
+	int introBoostFrames_ = 0;
+	int introBoostInitialFrames_ = 0;
+	float introBoostYaw_ = 0.0f;
+	Vector3 introBoostVelocity_ = { 0.0f, 0.0f, 0.0f };
+	int titleBackgroundFrame_ = 0;
+	bool titleLaunchActive_ = false;
+	int titleLaunchFrame_ = 0;
+	Vector3 titleLaunchStartPosition_ = { 0.0f, 0.0f, 0.0f };
+	Vector3 titleLaunchStartForward_ = { 0.0f, 0.0f, 1.0f };
+	Vector3 titleLaunchForward_ = { 0.0f, 0.0f, 1.0f };
 
 	// JSONファイルが最後に更新された日時を記録する変数
 	std::filesystem::file_time_type lastJsonWriteTime_;
@@ -303,5 +319,8 @@ private:
 	float songGauge_ = 100.0f;
 	bool isSongActive_ = false;
 	int songFrame_ = 0;
+
+	// 通常弾の長押し連射用
+	int normalFireCooldownTimer_ = 0;
 
 };

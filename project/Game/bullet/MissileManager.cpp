@@ -200,3 +200,23 @@ void MissileManager::Shoot(const Vector3 &position, const Vector3 &velocity, Mis
 	missiles_.push_back(std::move(newMissile));
 }
 
+void MissileManager::ClearTarget(const Enemy* target) {
+    if (!target) {
+        return;
+    }
+
+    for (const auto& missile : missiles_) {
+        if (missile) {
+            missile->ClearTargetIfMatches(target);
+        }
+    }
+}
+
+void MissileManager::ClearAllTargets() {
+    for (const auto& missile : missiles_) {
+        if (missile) {
+            missile->ClearTargetIfMatches(missile->GetTarget());
+        }
+    }
+}
+

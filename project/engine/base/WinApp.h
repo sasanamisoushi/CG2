@@ -31,8 +31,8 @@ public:
 
 public: //定数
 	//クライアント領域のサイズ
-	static const int32_t kClientWidth = 1280;
-	static const int32_t kClientHeight = 720;
+	static const int32_t kClientWidth = 1920;
+	static const int32_t kClientHeight = 1080;
 	static int32_t currentClientWidth_;
 	static int32_t currentClientHeight_;
 

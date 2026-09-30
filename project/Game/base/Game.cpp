@@ -49,6 +49,12 @@ void Game::Initialize() {
 
 	Framework::Initialize();
 
+#ifdef ENABLE_IMGUI
+	// Game の初期値と ImGui 側の表示状態を揃える。非表示中は ImGui の
+	// フレーム生成・編集パネル描画を行わず、通常プレイの負荷を抑える。
+	ImGuiManager::SetVisible(showImGui_);
+#endif
+
 	renderWidth_ = static_cast<uint32_t>(WinApp::GetClientWidth());
 	renderHeight_ = static_cast<uint32_t>(WinApp::GetClientHeight());
 

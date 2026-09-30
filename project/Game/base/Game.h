@@ -40,7 +40,8 @@ private:
 	uint32_t depthSrvIndex_ = 0;
 
 	// ImGuiを表示するかどうか
-	bool showImGui_ = true;
+	// 通常プレイでは編集UIを描画しない。F1で必要なときだけ有効化する。
+	bool showImGui_ = false;
 
 	uint32_t renderWidth_ = 0;
 	uint32_t renderHeight_ = 0;

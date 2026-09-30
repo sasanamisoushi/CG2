@@ -1,8 +1,10 @@
 #pragma once
 #include "3D/Object3d.h"
 #include "engine/math/MyMath.h"
+#include <array>
 #include <memory>
 #include <string>
+#include <vector>
 
 class Obstacle {
 public:
@@ -27,6 +29,7 @@ public:
 
     // モデルの頂点からワールド座標系の三角形リストを生成して返す（キャッシュ版）
     const std::vector<Triangle>& GetWorldTriangles() const { return worldTriangles_; }
+    const std::vector<size_t>& GetNearbyWorldTriangleIndices(const Sphere& sphere) const;
     Vector3 GetWorldHalfExtents() const {
         auto absf = [](float value) { return value < 0.0f ? -value : value; };
         Vector3 absScale = { absf(scale_.x * collisionScale_.x), absf(scale_.y * collisionScale_.y), absf(scale_.z * collisionScale_.z) };
@@ -64,9 +67,17 @@ private:
 
     // メッシュコライダー用キャッシュ
     std::vector<Triangle> worldTriangles_;
+    static constexpr int kMeshGridDimension = 16;
+    std::array<std::vector<size_t>, kMeshGridDimension * kMeshGridDimension> meshTriangleGrid_;
+    std::vector<size_t> allTriangleIndices_;
+    mutable std::vector<size_t> nearbyTriangleIndices_;
+    Vector3 meshGridMin_ = { 0.0f, 0.0f, 0.0f };
+    Vector3 meshGridMax_ = { 0.0f, 0.0f, 0.0f };
+    bool hasMeshTriangleGrid_ = false;
     Vector3 prevPosition_ = { 0,0,0 };
     Vector3 prevRotation_ = { 0,0,0 };
     Vector3 prevScale_ = { 0,0,0 };
 
     void UpdateMeshCollider();
+    void RebuildMeshTriangleGrid();
 };

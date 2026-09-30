@@ -5,14 +5,20 @@
 #include "engine/Scene/SceneManager.h"
 #include "engine/Graphics/PostEffect.h"
 #include "engine/Audio/AudioManager.h"
+#include "engine/Debug/ImGuiManager.h"
 #include "engine/base/WinApp.h"
 #include "Game/base/GameSettings.h"
+#include "Game/base/GameStartTransition.h"
 #include <Windows.h>
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <shellapi.h>
+#include <externals/imgui/imgui.h>
 
 namespace {
+	constexpr int kLaunchDurationFrames = 84;
+
 	bool LaunchSimulationExecutable() {
 		wchar_t modulePath[MAX_PATH] = {};
 		const DWORD length = GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
@@ -50,10 +56,13 @@ void TitleScene::Initialize() {
 	Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
 
 	titleSprite = std::make_unique<Sprite>();
-	titleSprite->Initialize(SpriteCommon::GetInstance(), "resources/title.png");
+	titleSprite->Initialize(SpriteCommon::GetInstance(), "resources/title_logo.png");
 	titleSprite->SetPosition({ 640.0f, 360.0f });
 	titleSprite->SetAnchorPoint({ 0.5f, 0.5f });
-	titleSprite->SetSize({ 1280.0f, 720.0f });
+	// title_logo.png の透明余白を除き、文字だけを上部へ描く。
+	titleSprite->SetTextureLeftTop({ 81.0f, 572.0f });
+	titleSprite->SetTextureSize({ 1503.0f, 331.0f });
+	titleSprite->SetSize({ 920.0f, 203.0f });
 
 	// タイトルロゴの書体に合わせて作成したメニュー文字スプライト。
 	menuPanelSprite_ = std::make_unique<Sprite>();
@@ -75,27 +84,53 @@ void TitleScene::Initialize() {
 		}
 	}
 
-	// モデル
-	ModelManager::GetInstance()->LoadModel("plane.obj");
-
-	// オブジェクト
-	objA = std::make_unique<Object3d>();
-	objA->Initialize(Object3dCommon::GetInstance());
-	objA->SetModel("plane.obj");
-	objA->transform.translate = { -2.0f,0.0f,0.0f };
-	objects.push_back(objA.get());
+	// 本編と同じプレイヤー機を、タイトルでは入力なしの自動飛行として見せる。
+	titlePlayer_ = std::make_unique<Player>();
+	titlePlayer_->Initialize("vf-15c/scene.gltf");
+	launchSoundData_ = AudioManager::GetInstance()->LoadWave("resources/Alarm01.wav");
 
 	selectedMenuItem_ = MenuItem::Start;
 	selectedSettingsItem_ = SettingsItem::MasterVolume;
 	isSettingsOpen_ = false;
+	flightState_ = TitleFlightState::Cruising;
+	titleFlightFrame_ = 0;
+	launchFrame_ = 0;
+	launchFadeAlpha_ = 0.0f;
+	// 起動直後のタイトル背景は、専用の飛行デモではなく本編のプレイ背景にする。
+	backgroundMode_ = BackgroundMode::GameplayBackground;
+	gameplayBackground_ = std::make_unique<GamePlayScene>(GamePlayScene::Mode::TitleBackground);
+	gameplayBackground_->Initialize();
 	AudioManager::GetInstance()->SetMasterVolume(GameSettings::GetInstance().GetMasterVolume());
 }
 
 void TitleScene::Finalize() {
-
+	if (gameplayBackground_) {
+		gameplayBackground_->Finalize();
+		gameplayBackground_.reset();
+	}
+	if (launchVoice_) {
+		launchVoice_->Stop();
+		launchVoice_->DestroyVoice();
+		launchVoice_ = nullptr;
+	}
+	AudioManager::GetInstance()->UnloadWave(launchSoundData_);
 }
 
 void TitleScene::Update() {
+	if (flightState_ == TitleFlightState::Launching) {
+		if (backgroundMode_ == BackgroundMode::GameplayBackground && gameplayBackground_) {
+			// 出撃中もタイトルで表示していた地形を描画し続ける。
+			UpdateGameplayBackground();
+			if (++launchFrame_ >= kLaunchDurationFrames) {
+				GameStartTransition::Begin({ gameplayBackground_->GetTitleLaunchForward(), 0.78f, 54 });
+				SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+			}
+		} else {
+			UpdateTitleFlight();
+		}
+		return;
+	}
+
 	Input* input = Input::GetInstance();
 	if (isSettingsOpen_) {
 		UpdateSettingsInput();
@@ -112,7 +147,7 @@ void TitleScene::Update() {
 		if (input->TriggerKey(DIK_RETURN) || input->TriggerKey(DIK_SPACE)) {
 			switch (selectedMenuItem_) {
 			case MenuItem::Start:
-				SceneManager::GetInstance()->ChangeScene("LOADING");
+				BeginLaunchSequence();
 				return;
 			case MenuItem::Settings:
 				isSettingsOpen_ = true;
@@ -126,24 +161,171 @@ void TitleScene::Update() {
 			}
 		}
 	}
+	DrawBackgroundModeImGui();
 
-	// カメラの更新
-	camera->Update();
-	
 	if (titleSprite) {
 		float width = static_cast<float>(WinApp::GetClientWidth());
 		float height = static_cast<float>(WinApp::GetClientHeight());
-		// メインメニューはロゴの下に置けるよう、タイトル画像を上側へ収める。
-		const float titleScale = isSettingsOpen_ ? 1.0f : 0.74f;
-		const float titleCenterY = isSettingsOpen_ ? height * 0.5f : height * 0.37f;
+		// ロゴは画面上部へ固定し、中央の広い領域を機体の飛行演出に使う。
+		const float titleWidth = isSettingsOpen_ ? width * 0.72f : width * 0.78f;
+		const float titleHeight = titleWidth * (331.0f / 1503.0f);
+		const float titleCenterY = isSettingsOpen_ ? height * 0.22f : height * 0.17f;
 		titleSprite->SetPosition({ width * 0.5f, titleCenterY });
-		titleSprite->SetSize({ width * titleScale, height * titleScale });
+		titleSprite->SetSize({ titleWidth, titleHeight });
 		titleSprite->Update();
 	}
 
-	for (Object3d *object3d : objects) {
-		object3d->Update();
+	if (backgroundMode_ == BackgroundMode::GameplayBackground) {
+		UpdateGameplayBackground();
+	} else {
+		UpdateTitleFlight();
 	}
+}
+
+void TitleScene::ToggleBackgroundMode() {
+	if (backgroundMode_ == BackgroundMode::FlightDemo) {
+		backgroundMode_ = BackgroundMode::GameplayBackground;
+		gameplayBackground_ = std::make_unique<GamePlayScene>(GamePlayScene::Mode::TitleBackground);
+		gameplayBackground_->Initialize();
+	} else {
+		if (gameplayBackground_) {
+			gameplayBackground_->Finalize();
+			gameplayBackground_.reset();
+		}
+		backgroundMode_ = BackgroundMode::FlightDemo;
+		Object3dCommon::GetInstance()->SetDefaultCamera(camera.get());
+		UpdateTitleFlight();
+	}
+}
+
+void TitleScene::UpdateGameplayBackground() {
+	if (gameplayBackground_) {
+		gameplayBackground_->Update();
+	}
+}
+
+void TitleScene::DrawBackgroundModeImGui() {
+#ifdef ENABLE_IMGUI
+	if (!ImGuiManager::IsVisible() || ImGui::GetCurrentContext() == nullptr) {
+		return;
+	}
+
+	ImGui::SetNextWindowSize(ImVec2(330.0f, 0.0f), ImGuiCond_Once);
+	ImGui::SetNextWindowBgAlpha(0.88f);
+	if (ImGui::Begin("Title Background Preview")) {
+		ImGui::Text("Title background");
+		ImGui::Separator();
+
+		const bool isFlightDemo = backgroundMode_ == BackgroundMode::FlightDemo;
+		if (ImGui::RadioButton("FLIGHT DEMO", isFlightDemo) && !isFlightDemo) {
+			ToggleBackgroundMode();
+		}
+		ImGui::TextDisabled("Title-only aircraft flight sequence");
+
+		const bool isGameplayBackground = backgroundMode_ == BackgroundMode::GameplayBackground;
+		if (ImGui::RadioButton("GAMEPLAY BACKGROUND", isGameplayBackground) && !isGameplayBackground) {
+			ToggleBackgroundMode();
+		}
+		ImGui::TextDisabled("Run the gameplay world behind the title");
+	}
+	ImGui::End();
+#endif
+}
+
+void TitleScene::BeginLaunchSequence() {
+	// タイトル背景の地形を消さずに、そのまま出撃演出へ移る。
+	if (gameplayBackground_) {
+		gameplayBackground_->BeginTitleLaunch();
+	}
+	flightState_ = TitleFlightState::Launching;
+	launchFrame_ = 0;
+	launchFadeAlpha_ = 0.0f;
+	if (launchVoice_) {
+		launchVoice_->Stop();
+		launchVoice_->DestroyVoice();
+	}
+	// 手持ち素材は出撃警報として使い、ブーストの視覚演出と同期させる。
+	launchVoice_ = AudioManager::GetInstance()->PlayWave(launchSoundData_);
+}
+
+void TitleScene::UpdateTitleFlight() {
+	if (!titlePlayer_ || !camera) {
+		return;
+	}
+
+	Vector3 position{};
+	Vector3 rotation{};
+	Vector3 cameraPosition{};
+	Vector3 cameraTarget{};
+	float speed = 0.08f;
+	bool isBoosting = false;
+
+	if (flightState_ == TitleFlightState::Cruising) {
+		const float time = static_cast<float>(titleFlightFrame_++) * (1.0f / 60.0f);
+		position = {
+			std::sin(time * 0.45f) * 4.0f,
+			0.35f + std::sin(time * 0.82f) * 0.95f,
+			4.2f + std::cos(time * 0.30f) * 0.65f,
+		};
+		rotation = {
+			std::sin(time * 0.82f) * 0.09f,
+			std::sin(time * 0.45f) * 0.22f,
+			-std::sin(time * 0.45f) * 0.16f,
+		};
+		// 横方向は画面端近くまで見せ、縦方向は強めに追従させる。
+		// これにより飛行範囲を広く保ちながら、機体の大半が画面内に残る。
+		cameraPosition = { position.x * 0.25f, 1.15f + (position.y - 0.35f) * 0.20f, -5.2f };
+		cameraTarget = {
+			position.x * 0.50f,
+			0.60f + (position.y - 0.35f) * 0.80f,
+			4.2f,
+		};
+	} else {
+		const float progress = std::clamp(
+			static_cast<float>(launchFrame_) / static_cast<float>(kLaunchDurationFrames), 0.0f, 1.0f);
+		const float acceleration = progress * progress;
+		speed = 0.18f + acceleration * 1.35f;
+		position = {
+			(1.0f - progress) * std::sin(static_cast<float>(titleFlightFrame_) * 0.015f) * 1.6f,
+			0.35f + progress * 0.55f,
+			4.0f + acceleration * 112.0f,
+		};
+		rotation = {
+			-progress * 0.06f,
+			(1.0f - progress) * std::sin(static_cast<float>(titleFlightFrame_) * 0.015f) * 0.52f,
+			(1.0f - progress) * -std::sin(static_cast<float>(titleFlightFrame_) * 0.015f) * 0.32f,
+		};
+		cameraPosition = { 0.0f, 1.15f + progress * 0.45f, -5.2f + acceleration * 55.0f };
+		cameraTarget = position;
+		cameraTarget.y += 0.25f;
+		launchFadeAlpha_ = std::clamp((progress - 0.58f) / 0.42f, 0.0f, 1.0f);
+		isBoosting = true;
+
+		if (++launchFrame_ >= kLaunchDurationFrames) {
+			GameStartTransition::Begin({ { 0.0f, 0.0f, 1.0f }, 0.78f, 54 });
+			SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
+		}
+	}
+
+	titlePlayer_->UpdatePresentation(position, rotation, speed, isBoosting);
+
+	const Vector3 toTarget = {
+		cameraTarget.x - cameraPosition.x,
+		cameraTarget.y - cameraPosition.y,
+		cameraTarget.z - cameraPosition.z,
+	};
+	const float distance = std::sqrt(
+		toTarget.x * toTarget.x + toTarget.y * toTarget.y + toTarget.z * toTarget.z);
+	if (distance > 0.0001f) {
+		const Vector3 direction = { toTarget.x / distance, toTarget.y / distance, toTarget.z / distance };
+		const float pitch = -std::asin(std::clamp(direction.y, -1.0f, 1.0f));
+		const float yaw = std::atan2(direction.x, direction.z);
+		const Quaternion qPitch = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, pitch);
+		const Quaternion qYaw = MyMath::MakeAxisAngle({ 0.0f, 1.0f, 0.0f }, yaw);
+		camera->SetQuaternion(MyMath::Normalize(MyMath::Multiply(qYaw, qPitch)));
+	}
+	camera->SetTranslate(cameraPosition);
+	camera->Update();
 }
 
 void TitleScene::UpdateSettingsInput() {
@@ -183,28 +365,34 @@ void TitleScene::UpdateSettingsInput() {
 void TitleScene::Draw() {
 	// 3Dオブジェクトの描画準備
 	Object3dCommon::GetInstance()->SetCommonDrawSettings();
-	// 3Dオブジェクトの描画
-	for (Object3d *object3d : objects) {
-		object3d->Draw();
+	if (backgroundMode_ == BackgroundMode::GameplayBackground && gameplayBackground_) {
+		gameplayBackground_->Draw();
+	} else if (titlePlayer_) {
+		titlePlayer_->Draw(camera.get());
 	}
 
 	SpriteCommon::GetInstance()->SetCommonPipelineState();
-	// タイトル画像の外側も常に黒で塗り、画面クリア色が見えないようにする。
+	// 背景の飛行演出を見せるため、待機中は暗幕を半透明にする。
 	if (menuPanelSprite_) {
 		menuPanelSprite_->SetPosition({ 0.0f, 0.0f });
 		menuPanelSprite_->SetSize({
 			static_cast<float>(WinApp::GetClientWidth()),
 			static_cast<float>(WinApp::GetClientHeight())
 		});
-		menuPanelSprite_->SetColor({ 0.0f, 0.0f, 0.0f, 1.0f });
+		const float panelAlpha = flightState_ == TitleFlightState::Launching
+			? launchFadeAlpha_
+			: (isSettingsOpen_ ? 0.88f : 0.48f);
+		menuPanelSprite_->SetColor({ 0.0f, 0.0f, 0.0f, panelAlpha });
 		menuPanelSprite_->Update();
 		menuPanelSprite_->Draw();
 	}
-	if (titleSprite && !isSettingsOpen_) {
+	if (titleSprite && !isSettingsOpen_ && flightState_ == TitleFlightState::Cruising) {
 		titleSprite->Draw();
 	}
 
-	DrawMenuOverlay(static_cast<float>(WinApp::GetClientWidth()), static_cast<float>(WinApp::GetClientHeight()));
+	if (flightState_ == TitleFlightState::Cruising) {
+		DrawMenuOverlay(static_cast<float>(WinApp::GetClientWidth()), static_cast<float>(WinApp::GetClientHeight()));
+	}
 }
 
 void TitleScene::DrawMenuOverlay(float screenWidth, float screenHeight) {
@@ -253,9 +441,9 @@ void TitleScene::DrawMenuOverlay(float screenWidth, float screenHeight) {
 				topY - (labelHeight - 44.0f) * 0.5f, labelHeight,
 				selected ? 1.0f : 0.62f);
 		};
-		drawMainMenuLabel(0, MenuItem::Start, screenHeight - 180.0f);
-		drawMainMenuLabel(1, MenuItem::Settings, screenHeight - 123.0f);
-		drawMainMenuLabel(2, MenuItem::Exit, screenHeight - 66.0f);
+		drawMainMenuLabel(0, MenuItem::Start, screenHeight - 225.0f);
+		drawMainMenuLabel(1, MenuItem::Settings, screenHeight - 145.0f);
+		drawMainMenuLabel(2, MenuItem::Exit, screenHeight - 75.0f);
 		return;
 	}
 

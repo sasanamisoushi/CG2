@@ -124,13 +124,12 @@ void WinApp::Initialize() {
 		wc.hInstance,
 		nullptr);
 
+	//ウインドウを最大化表示する
+	ShowWindow(hwnd, SW_MAXIMIZE);
 	RECT clientRect{};
 	GetClientRect(hwnd, &clientRect);
 	currentClientWidth_ = clientRect.right - clientRect.left;
 	currentClientHeight_ = clientRect.bottom - clientRect.top;
-
-	//ウインドウを表示する
-	ShowWindow(hwnd, SW_SHOW);
 }
 
 void WinApp::Update() {

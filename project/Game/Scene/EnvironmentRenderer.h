@@ -16,7 +16,8 @@ public:
 	~EnvironmentRenderer() = default;
 
 	void Initialize();
-	void Update(Camera* camera);
+	// advanceEffects を false にすると描画用のカメラ行列のみ更新し、環境演出は停止する。
+	void Update(Camera* camera, bool advanceEffects = true);
 	void Draw();
 
 	Skybox* GetSkybox() const { return skybox_.get(); }

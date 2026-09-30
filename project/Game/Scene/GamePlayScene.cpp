@@ -38,7 +38,6 @@ namespace {
 	constexpr float kSpGaugeRecoveryPerFrame = 3.0f / 60.0f;
 	constexpr int kSpecialAttackDurationFrames = 180;
 	constexpr int kSpecialAttackFireIntervalFrames = 6;
-	constexpr int kBossIntroDurationFrames = 120;
 	constexpr int kBossMaxActiveMinions = 6;
 }
 
@@ -49,16 +48,57 @@ GamePlayScene::GamePlayScene(Mode mode)
 	: mode_(mode) {
 }
 
+void GamePlayScene::BeginTitleLaunch() {
+	if (!IsTitleBackgroundMode() || !player_ || titleLaunchActive_) {
+		return;
+	}
+
+	titleLaunchActive_ = true;
+	titleLaunchFrame_ = 0;
+	titleLaunchStartPosition_ = player_->GetPosition();
+	titleLaunchStartForward_ = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+	titleLaunchStartForward_.y = 0.0f;
+	titleLaunchStartForward_ = NormalizeOrVector3(titleLaunchStartForward_, { 0.0f, 0.0f, 1.0f });
+	// タイトルで飛んでいた向きを、そのまま本編開始時へ渡す。
+	titleLaunchForward_ = titleLaunchStartForward_;
+}
+
 bool GamePlayScene::TryConsumeAmmo(MissileType type) {
 	return ammoManager_ && ammoManager_->TryConsume(type);
 }
 
-void GamePlayScene::UpdateReload() {
-	if (ammoManager_) ammoManager_->UpdateReload(player_.get());
+void GamePlayScene::UpdateAutoReload() {
+	if (ammoManager_) ammoManager_->UpdateAutoReload();
 }
 
-void GamePlayScene::UpdateAmmoPickups() {
-	if (ammoManager_) ammoManager_->UpdatePickups(player_.get());
+void GamePlayScene::ClearEnemyReferences(Enemy* enemy) {
+	if (!enemy) {
+		return;
+	}
+
+	if (lockedEnemy_ == enemy) {
+		lockedEnemy_ = nullptr;
+		isCinematicLockOnCameraInitialized_ = false;
+	}
+	if (aimAssistEnemy_ == enemy) {
+		aimAssistEnemy_ = nullptr;
+	}
+	multiLockTargets_.erase(
+		std::remove(multiLockTargets_.begin(), multiLockTargets_.end(), enemy),
+		multiLockTargets_.end());
+	if (missileManager_) {
+		missileManager_->ClearTarget(enemy);
+	}
+}
+
+void GamePlayScene::ClearAllEnemyReferences() {
+	lockedEnemy_ = nullptr;
+	aimAssistEnemy_ = nullptr;
+	multiLockTargets_.clear();
+	isCinematicLockOnCameraInitialized_ = false;
+	if (missileManager_) {
+		missileManager_->ClearAllTargets();
+	}
 }
 
 void GamePlayScene::Initialize() {
@@ -125,6 +165,8 @@ void GamePlayScene::Initialize() {
 	for (const char *path : hudTexturePaths) {
 		TextureManager::GetInstance()->LoadTexture(path);
 	}
+	TextureManager::GetInstance()->LoadTexture("resources/gameplay_controls.png");
+	TextureManager::GetInstance()->LoadTexture("resources/pause_menu_labels.png");
 	hudPanelSprite_ = std::make_unique<Sprite>();
 	hudPanelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[0]);
 	hudAmmoPanelSprite_ = std::make_unique<Sprite>();
@@ -137,14 +179,14 @@ void GamePlayScene::Initialize() {
 	bossHpGaugeBackgroundSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	bossHpGaugeFillSprite_ = std::make_unique<Sprite>();
 	bossHpGaugeFillSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
-	bossCutInBandSprite_ = std::make_unique<Sprite>();
-	bossCutInBandSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
-	bossCutInPanelSprite_ = std::make_unique<Sprite>();
-	bossCutInPanelSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	pauseOverlaySprite_ = std::make_unique<Sprite>();
 	pauseOverlaySprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 	pausePanelSprite_ = std::make_unique<Sprite>();
 	pausePanelSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	controlsGuideSprite_ = std::make_unique<Sprite>();
+	controlsGuideSprite_->Initialize(SpriteCommon::GetInstance(), "resources/gameplay_controls.png");
+	pauseMenuLabelsSprite_ = std::make_unique<Sprite>();
+	pauseMenuLabelsSprite_->Initialize(SpriteCommon::GetInstance(), "resources/pause_menu_labels.png");
 	hudHpLabelSprite_ = std::make_unique<Sprite>();
 	hudHpLabelSprite_->Initialize(SpriteCommon::GetInstance(), hudTexturePaths[1]);
 	hudAmmoLabelSprite_ = std::make_unique<Sprite>();
@@ -214,10 +256,7 @@ void GamePlayScene::Initialize() {
 	ModelManager::GetInstance()->LoadModel("plane.obj");
 	ModelManager::GetInstance()->LoadModel("multiMesh.obj");
 	ModelManager::GetInstance()->CreateSphereModel("Sphere", 16);
-	ModelManager::GetInstance()->CreateSphereModel("AmmoPickupSphere", 16);
-	if (Model *pickupModel = ModelManager::GetInstance()->FindModel("AmmoPickupSphere")) {
-		pickupModel->SetColor({ 0.15f, 1.0f, 0.35f, 1.0f });
-	}
+	ModelManager::GetInstance()->CreateSphereModel("EnemyBulletSphere", 6);
 
 	//======================================================
 
@@ -297,10 +336,13 @@ void GamePlayScene::Initialize() {
 	soundData2 = AudioManager::GetInstance()->LoadAudio("resources/maou_bgm_fantasy15.mp3");
 	songSoundData = AudioManager::GetInstance()->LoadAudio("resources/song_bgm.mp3");
 
-	pVoice1=AudioManager::GetInstance()->PlayWave(soundData1, true);
-	pVoice2=AudioManager::GetInstance()->PlayWave(soundData2, true);
-	pSongVoice=AudioManager::GetInstance()->PlayWave(songSoundData, true);
-	if (pSongVoice) pSongVoice->SetVolume(0.0f);
+	// タイトル背景では、タイトル側の音と競合しないよう本編BGMを鳴らさない。
+	if (!IsTitleBackgroundMode()) {
+		pVoice1 = AudioManager::GetInstance()->PlayWave(soundData1, true);
+		pVoice2 = AudioManager::GetInstance()->PlayWave(soundData2, true);
+		pSongVoice = AudioManager::GetInstance()->PlayWave(songSoundData, true);
+		if (pSongVoice) pSongVoice->SetVolume(0.0f);
+	}
 
 
 	ModelManager::GetInstance()->CreateTrailModel("SmokeTrail");
@@ -355,6 +397,25 @@ void GamePlayScene::Initialize() {
 	isEditorPreviewPlaying_ = !IsSimulationMode();
 
 	ReloadSceneJson();
+	if (!IsSimulationMode() && !IsTitleBackgroundMode()) {
+		GameStartTransitionData titleTransition;
+		if (GameStartTransition::Consume(titleTransition) && player_) {
+			const float horizontalLength = std::sqrt(
+				titleTransition.forward.x * titleTransition.forward.x +
+				titleTransition.forward.z * titleTransition.forward.z);
+			if (horizontalLength > 0.0001f) {
+				const float yaw = std::atan2(titleTransition.forward.x, titleTransition.forward.z);
+				player_->SetRotation({ 0.0f, yaw, 0.0f });
+			}
+			introBoostVelocity_ = titleTransition.forward;
+			introBoostVelocity_.x *= titleTransition.initialSpeed;
+			introBoostVelocity_.y *= titleTransition.initialSpeed;
+			introBoostVelocity_.z *= titleTransition.initialSpeed;
+			introBoostFrames_ = titleTransition.boostFrames;
+			introBoostInitialFrames_ = titleTransition.boostFrames;
+			introBoostYaw_ = std::atan2(titleTransition.forward.x, titleTransition.forward.z);
+		}
+	}
 // 	simulationManager_->RefreshSimulationActionNames();
 // 	missilePresetManager_->RefreshMissilePresetNames();
 
@@ -501,17 +562,30 @@ void GamePlayScene::TryPlaceEnemyAtGameViewMouse() {
 
 void GamePlayScene::ReloadSceneJson() {
 	bossSpawned_ = false;
-	lockedEnemy_ = nullptr;
-	aimAssistEnemy_ = nullptr;
+	ClearAllEnemyReferences();
 	if (lockOnManager_) {
 		lockOnManager_->CancelMultiLock();
 	}
-	isCinematicLockOnCameraInitialized_ = false;
 	enemies_.clear();
 	obstacles_.clear();
 	enemySpawns_.clear();
 
 	StageLoader::LoadSceneJson("resources/scene.json", enemies_, obstacles_, player_.get(), &enemySpawns_);
+	if (IsTitleBackgroundMode()) {
+		// タイトル背景は戦闘の見せ場用なので、VF1 以外や増援条件付きの敵を持ち込まない。
+		// VF1 は最初から出しておき、タイトルを開いた瞬間からロックオン対象を作る。
+		enemySpawns_.erase(
+			std::remove_if(enemySpawns_.begin(), enemySpawns_.end(), [](const EnemySpawnData& spawn) {
+				return spawn.enemyType != "VF1";
+			}),
+			enemySpawns_.end());
+		for (EnemySpawnData& spawn : enemySpawns_) {
+			spawn.isInitialSpawn = true;
+			spawn.hasSpawned = false;
+			spawn.reinforcementTriggerNames.clear();
+			spawn.remainingReinforcementTriggers.clear();
+		}
+	}
 	enemyRespawnTimers_.assign(enemySpawns_.size(), kNoEnemyRespawnTimer);
 
 
@@ -545,12 +619,10 @@ void GamePlayScene::ResetEditorPreview() {
 	isEditorPreviewPlaying_ = false;
 	isGameOver_ = false;
 	gameOverTimer_ = 0;
-	lockedEnemy_ = nullptr;
-	aimAssistEnemy_ = nullptr;
+	ClearAllEnemyReferences();
 	if (lockOnManager_) {
 		lockOnManager_->CancelMultiLock();
 	}
-	isCinematicLockOnCameraInitialized_ = false;
 
 	if (PostEffect::GetInstance()) {
 		PostEffect::GetInstance()->SetEffectType(0);
@@ -820,6 +892,8 @@ void GamePlayScene::Update() {
 
 
 	if (EditorReceiver::GetInstance()->Update(player_.get(), enemies_, obstacles_, enemySpawns_)) {
+		// エディタからの差し替えでは敵リスト全体が再生成されるため、生ポインタの参照を残さない。
+		ClearAllEnemyReferences();
 		// Blenderで設定された初期スポーン設定(isInitialSpawn)をそのまま尊重する
 	}
 
@@ -828,7 +902,9 @@ void GamePlayScene::Update() {
 
 	// =========================================================
 	static uint32_t jsonCheckFrameCounter = 0;
-	if (++jsonCheckFrameCounter % 30 == 0) {
+	// scene.json の監視は編集用シミュレーションだけで行う。
+	// 通常プレイ中に OneDrive 上のファイルへ定期アクセスしないようにする。
+	if (IsSimulationMode() && ImGuiManager::IsVisible() && ++jsonCheckFrameCounter % 30 == 0) {
 		try {
 			auto currentTime = std::filesystem::last_write_time("resources/scene.json");
 			if (currentTime > lastJsonWriteTime_) {
@@ -838,10 +914,11 @@ void GamePlayScene::Update() {
 		} catch (...) {}
 	}
 
-	const bool canUseKeyboardInput = !IsImGuiKeyboardCaptureActive();
-	const bool canUseMouseInput = !IsImGuiMouseCaptureActive();
+	// タイトルメニューの入力を本編背景側へ渡さない。
+	const bool canUseKeyboardInput = !IsTitleBackgroundMode() && !IsImGuiKeyboardCaptureActive();
+	const bool canUseMouseInput = !IsTitleBackgroundMode() && !IsImGuiMouseCaptureActive();
 	const bool canUsePlayerInput = canUseKeyboardInput && canUseMouseInput;
-	if (!IsSimulationMode() && !isGameOver_ && bossIntroTimer_ <= 0 && canUseKeyboardInput) {
+	if (!IsSimulationMode() && !IsTitleBackgroundMode() && !isGameOver_ && canUseKeyboardInput) {
 		if (Input::GetInstance()->TriggerKey(DIK_ESCAPE)) {
 			// Esc はいつでも素早くゲームへ戻れるショートカットにする。
 			isPaused_ = !isPaused_;
@@ -891,7 +968,7 @@ void GamePlayScene::Update() {
 	// ==========================================
 
 	// ==========================================
-	if (!IsSimulationMode() && !isGameOver_ && player_ && player_->IsDead()) {
+	if (!IsSimulationMode() && !IsTitleBackgroundMode() && !isGameOver_ && player_ && player_->IsDead()) {
 		isGameOver_ = true;
 		gameOverTimer_ = 0;
 
@@ -939,8 +1016,9 @@ void GamePlayScene::Update() {
 					isBoosting = true;
 					float effectProgress = std::clamp((speed - maxSpeed * 1.5f) / (maxSpeed * 3.0f - maxSpeed * 1.5f), 0.0f, 1.0f);
 					float vignetteRadius = 0.5f - 0.1f * effectProgress;
-					float blurIntensity = effectProgress * 0.5f;
-					PostEffect::GetInstance()->SetVignetteSmoothing(vignetteRadius, 0.4f, blurIntensity);
+					// 加速中は爆発・トレイルと重なりやすいため、全画面を9回読む
+					// ぼかしではなく軽量なビネットだけを使う。
+					PostEffect::GetInstance()->SetVignette(vignetteRadius, 0.4f);
 				}
 			}
 			
@@ -964,17 +1042,11 @@ void GamePlayScene::Update() {
 		}
 	}
 
-	// ボス登場カットイン中は敵味方の更新を止め、プレイヤーを出現時の座標に固定する。
-	const bool isBossIntroActive = bossIntroTimer_ > 0;
-	if (isBossIntroActive) {
-		--bossIntroTimer_;
-		shouldUpdateGame = false;
-		if (player_) {
-			player_->SetPosition(bossIntroPlayerPosition_);
-		}
-	}
-	// 編集用のシミュレーションだけ再生／停止を反映する。通常ゲームは常に進行する。
-	shouldUpdateGame = shouldUpdateGame && (!IsSimulationMode() || isEditorPreviewPlaying_);
+	// 上部ツールバーの「再生／編集に戻す」は、通常ゲーム画面と
+	// シミュレーション画面のどちらでも共通の停止スイッチとして扱う。
+	// 以前は通常ゲーム画面ではこのフラグを無視していたため、
+	// 「編集モード（停止中）」でもゲームだけ進行してしまっていた。
+	shouldUpdateGame = shouldUpdateGame && isEditorPreviewPlaying_;
 	const bool isSimulation = IsSimulationMode();
 	const bool isFullFlowPreview = !isSimulation || uiManager_->simulationPlaybackMode_ == 1;
 	const bool isSelectedOnlyPreview = isSimulation && uiManager_->simulationPlaybackMode_ == 0;
@@ -986,10 +1058,10 @@ void GamePlayScene::Update() {
 	const bool updateSelectedEnemies = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateSelectedParticles = shouldUpdateGame && (isFullFlowPreview || uiManager_->currentSimulationTarget_ == 3);
 	const bool allowWeaponInput = shouldUpdateGame && canUsePlayerInput && (!isSimulation || isFullFlowPreview);
-	const bool allowLockOnBehavior = !isPaused_ && bossIntroTimer_ <= 0 && !isGameOver_ &&
+	const bool allowLockOnBehavior = shouldUpdateGame && !isGameOver_ &&
 		(isFullFlowPreview || uiManager_->currentSimulationTarget_ == 1 || uiManager_->currentSimulationTarget_ == 2);
 	const bool updateDebugWireframes = !isSimulation || isFullFlowPreview || updateSelectedPlayer || updateSelectedMissiles || updateSelectedEnemies || updateSelectedParticles;
-	const bool updateAnimationPreview = !isSimulation || isFullFlowPreview;
+	const bool updateAnimationPreview = shouldUpdateGame && (!isSimulation || isFullFlowPreview);
 
 	const bool isAnimationEditor = isSimulation && uiManager_->currentSimulationTarget_ == 5;
 	static bool wasAnimationEditor = false;
@@ -1007,7 +1079,7 @@ void GamePlayScene::Update() {
 	wasAnimationEditor = isAnimationEditor;
 
 	if (shouldUpdateGame && canUsePlayerInput && !isSpecialAttackActive_) {
-		UpdateReload();
+		UpdateAutoReload();
 	}
 
 
@@ -1019,6 +1091,25 @@ void GamePlayScene::Update() {
 		specialAttackFrame_ = 0;
 		if (player_) {
 			player_->SetSpecialAttackActive(true);
+		}
+		// 必殺技発動時にターゲット未選択の場合、最も近い生存敵を自動ロックオンする
+		if (!lockedEnemy_ || lockedEnemy_->IsDead()) {
+			lockedEnemy_ = nullptr;
+			float minDistanceSq = 100000000.0f;
+			Enemy* nearestEnemy = nullptr;
+			const Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+			for (const auto& enemy : enemies_) {
+				if (enemy && !enemy->IsDead()) {
+					const float dSq = LengthSqVector3(SubtractVector3(enemy->GetPosition(), playerPos));
+					if (dSq < minDistanceSq) {
+						minDistanceSq = dSq;
+						nearestEnemy = enemy.get();
+					}
+				}
+			}
+			if (nearestEnemy) {
+				lockedEnemy_ = nearestEnemy;
+			}
 		}
 	}
 
@@ -1050,11 +1141,32 @@ void GamePlayScene::Update() {
 	}
 
 	if (isSpecialAttackActive_) {
+		// 必殺技中にターゲット敵が死亡した場合、最寄りの次の生存敵へ自動的にターゲットを切り替えて追従を維持する
+		if (!lockedEnemy_ || lockedEnemy_->IsDead()) {
+			lockedEnemy_ = nullptr;
+			float minDistanceSq = 100000000.0f;
+			Enemy* nearestEnemy = nullptr;
+			const Vector3 playerPos = player_ ? player_->GetPosition() : Vector3{ 0.0f, 0.0f, 0.0f };
+			for (const auto& enemy : enemies_) {
+				if (enemy && !enemy->IsDead()) {
+					const float dSq = LengthSqVector3(SubtractVector3(enemy->GetPosition(), playerPos));
+					if (dSq < minDistanceSq) {
+						minDistanceSq = dSq;
+						nearestEnemy = enemy.get();
+					}
+				}
+			}
+			if (nearestEnemy) {
+				lockedEnemy_ = nearestEnemy;
+			}
+		}
+
 		if (specialAttackFrame_ % kSpecialAttackFireIntervalFrames == 0 && missilePresetManager_) {
 
-			missilePresetManager_->FirePlayerMissile(MissileType::Normal, nullptr, -0.3f);
+			// 必殺技は SP 消費で成立する攻撃なので、通常弾・誘導弾の残弾には依存させない。
+			missilePresetManager_->FirePlayerMissile(MissileType::Normal, nullptr, -0.3f, false);
 
-			missilePresetManager_->FirePlayerMissile(MissileType::MissileWithTrail, nullptr, 0.3f);
+			missilePresetManager_->FirePlayerMissile(MissileType::MissileWithTrail, nullptr, 0.3f, false);
 		}
 		++specialAttackFrame_;
 		if (specialAttackFrame_ >= kSpecialAttackDurationFrames) {
@@ -1180,16 +1292,134 @@ void GamePlayScene::Update() {
 
 
 	if (player_) {
-		if (updateSelectedPlayer) {
-			Vector3 lockOnTargetPosition;
-			const Vector3 *lockOnTarget = nullptr;
-			if (lockedEnemy_) {
-				lockOnTargetPosition = lockedEnemy_->GetPosition();
-				lockOnTarget = &lockOnTargetPosition;
+		if (IsTitleBackgroundMode() && titleLaunchActive_) {
+			// START GAME 後もタイトルで見えていた地形を維持し、機体だけを一度ロールさせて出撃させる。
+			constexpr int kTitleLaunchDurationFrames = 84;
+			const float progress = std::clamp(
+				static_cast<float>(titleLaunchFrame_) / static_cast<float>(kTitleLaunchDurationFrames), 0.0f, 1.0f);
+			// タイトル背景の巡航方向を変えずに加速する。カメラへ向かう補間や
+			// ベジェ旋回を入れないため、画面下へ沈む不自然な軌道にならない。
+			const float distance = progress * 8.0f + progress * progress * 30.0f;
+			const Vector3 position = AddVector3(
+				titleLaunchStartPosition_, ScaleVector3(titleLaunchForward_, distance));
+			const float yaw = std::atan2(titleLaunchForward_.x, titleLaunchForward_.z);
+			const float roll = progress * 6.28318531f;
+			player_->SetVelocity({
+				titleLaunchForward_.x * 0.78f,
+				titleLaunchForward_.y * 0.78f,
+				titleLaunchForward_.z * 0.78f,
+			});
+			player_->UpdatePresentation(position, { -0.05f, yaw, roll }, 2.2f, true);
+
+			// 地形の近くを抜けるタイミングだけ、薄い霧を散らして速度感を補う。
+			if (environmentRenderer_ && titleLaunchFrame_ % 12 == 0) {
+				environmentRenderer_->GetParticleManager()->Emit(
+					"smoke", position, 2, { 0.72f, 0.80f, 0.88f, 0.11f },
+					0.035f, 0.015f, 3.8f, 1.4f, 1.6f, 2.8f, 7.0f);
 			}
-			player_->Update(obstacles_, lockOnTarget);
+			++titleLaunchFrame_;
+		} else if (IsTitleBackgroundMode()) {
+			// StageBounds 内を「直線 + 壁際のUターン」で周回する。
+			// 壁の手前で大きくバンクして旋回するため、タイトルを放置しても
+			// フィールド外へ飛び出さず、直線飛行の見せ場も作れる。
+			Vector3 stageCenter = { 0.0f, 0.0f, 0.0f };
+			Vector3 stageHalfExtents = { 50.0f, 30.0f, 50.0f };
+			if (const auto stageBoundsIt = std::find_if(obstacles_.begin(), obstacles_.end(),
+				[](const std::unique_ptr<Obstacle>& obstacle) {
+					return obstacle && obstacle->IsStageBounds();
+				}); stageBoundsIt != obstacles_.end()) {
+				stageCenter = (*stageBoundsIt)->GetPosition();
+				stageHalfExtents = (*stageBoundsIt)->GetWorldHalfExtents();
+			}
+
+			const Vector3 playerHalfExtents = player_->GetWorldHalfExtents();
+			const float time = static_cast<float>(titleBackgroundFrame_++) * (1.0f / 60.0f);
+			// ふだんは安全な余白を保ち、約3周に1回だけ壁をかすめる近距離パスにする。
+			// 値を連続的に変えることで、コース切替時に機体がワープしない。
+			const float closePassBlend = std::pow((std::max)(0.0f, std::sin(time * 0.14f)), 6.0f);
+			const float stageMargin = 5.0f - 3.75f * closePassBlend;
+			const float usableX = (std::max)(2.0f, stageHalfExtents.x - playerHalfExtents.x - stageMargin);
+			const float usableZ = (std::max)(2.0f, stageHalfExtents.z - playerHalfExtents.z - stageMargin);
+			const float orbitRadiusX = (std::min)(38.0f, usableX * (0.88f + 0.10f * closePassBlend));
+			const float turnRadius = (std::min)(18.0f, usableZ * (0.88f + 0.10f * closePassBlend));
+			const float verticalRange = (std::min)(2.0f, (std::max)(0.0f, stageHalfExtents.y - playerHalfExtents.y - stageMargin));
+			const float baseHeight = stageCenter.y + (std::min)(3.5f, verticalRange);
+			const float verticalBob = verticalRange > 0.1f ? std::sin(time * 0.85f) * verticalRange * 0.28f : 0.0f;
+			const float straightHalfLength = (std::max)(0.0f, orbitRadiusX - turnRadius);
+			const float straightLength = straightHalfLength * 2.0f;
+			const float turnLength = 3.14159265f * turnRadius;
+			const float lapLength = (std::max)(1.0f, straightLength * 2.0f + turnLength * 2.0f);
+			constexpr float kCruiseSpeedPerSecond = 10.0f;
+			const float lapDistance = std::fmod(time * kCruiseSpeedPerSecond, lapLength);
+			Vector3 position = { stageCenter.x - straightHalfLength, baseHeight + verticalBob, stageCenter.z - turnRadius };
+			Vector3 horizontalVelocity = { kCruiseSpeedPerSecond, 0.0f, 0.0f };
+			float roll = 0.0f;
+			if (lapDistance < straightLength) {
+				position.x += lapDistance;
+			} else if (lapDistance < straightLength + turnLength) {
+				const float turnProgress = (lapDistance - straightLength) / (std::max)(0.001f, turnLength);
+				const float angle = -1.57079633f + turnProgress * 3.14159265f;
+				position.x = stageCenter.x + straightHalfLength + turnRadius * std::cos(angle);
+				position.z = stageCenter.z + turnRadius * std::sin(angle);
+				horizontalVelocity = { -std::sin(angle) * kCruiseSpeedPerSecond, 0.0f, std::cos(angle) * kCruiseSpeedPerSecond };
+				roll = -std::sin(turnProgress * 3.14159265f) * 0.56f;
+			} else if (lapDistance < straightLength * 2.0f + turnLength) {
+				position.x = stageCenter.x + straightHalfLength - (lapDistance - straightLength - turnLength);
+				position.z = stageCenter.z + turnRadius;
+				horizontalVelocity = { -kCruiseSpeedPerSecond, 0.0f, 0.0f };
+			} else {
+				const float turnProgress = (lapDistance - straightLength * 2.0f - turnLength) / (std::max)(0.001f, turnLength);
+				const float angle = 1.57079633f + turnProgress * 3.14159265f;
+				position.x = stageCenter.x - straightHalfLength + turnRadius * std::cos(angle);
+				position.z = stageCenter.z + turnRadius * std::sin(angle);
+				horizontalVelocity = { -std::sin(angle) * kCruiseSpeedPerSecond, 0.0f, std::cos(angle) * kCruiseSpeedPerSecond };
+				roll = std::sin(turnProgress * 3.14159265f) * 0.56f;
+			}
+			const Vector3 velocity = {
+				horizontalVelocity.x / 60.0f,
+				verticalRange > 0.1f ? std::cos(time * 0.85f) * verticalRange * 0.28f * 0.85f / 60.0f : 0.0f,
+				horizontalVelocity.z / 60.0f,
+			};
+			const float horizontalSpeed = std::sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+			const float yaw = std::atan2(velocity.x, velocity.z);
+			const float pitch = horizontalSpeed > 0.0001f ? -std::atan2(velocity.y, horizontalSpeed) : 0.0f;
+			player_->SetVelocity(velocity);
+			player_->UpdatePresentation(position, { pitch, yaw, roll }, (std::max)(0.9f, horizontalSpeed * 7.0f), true);
+			// タイトル地形にうっすら漂う霧。低頻度で少量だけ発生させ、視界を遮らない。
+			if (environmentRenderer_ && titleBackgroundFrame_ % 18 == 0) {
+				environmentRenderer_->GetParticleManager()->Emit(
+					"smoke", position, 1, { 0.70f, 0.78f, 0.86f, 0.07f },
+					0.018f, 0.008f, 4.8f, 1.6f, 2.5f, 4.0f, 9.0f);
+			}
+		} else if (updateSelectedPlayer) {
+			if (introBoostFrames_ > 0) {
+				const float progress = 1.0f - static_cast<float>(introBoostFrames_) /
+					static_cast<float>((std::max)(1, introBoostInitialFrames_));
+				Vector3 position = player_->GetPosition();
+				position.x += introBoostVelocity_.x;
+				position.y += introBoostVelocity_.y + std::sin(progress * 3.14159265f) * 0.02f;
+				position.z += introBoostVelocity_.z;
+				player_->SetVelocity(introBoostVelocity_);
+				player_->UpdatePresentation(position, { -0.05f, introBoostYaw_, progress * 6.28318531f }, 2.2f, true);
+				if (environmentRenderer_ && introBoostFrames_ % 8 == 0) {
+					environmentRenderer_->GetParticleManager()->Emit(
+						"smoke", position, 2, { 0.72f, 0.80f, 0.88f, 0.11f },
+						0.035f, 0.015f, 3.8f, 1.4f, 1.6f, 2.8f, 7.0f);
+				}
+				--introBoostFrames_;
+			} else {
+				Vector3 lockOnTargetPosition;
+				const Vector3 *lockOnTarget = nullptr;
+				if (lockedEnemy_) {
+					lockOnTargetPosition = lockedEnemy_->GetPosition();
+					lockOnTarget = &lockOnTargetPosition;
+				}
+				player_->Update(obstacles_, lockOnTarget);
+			}
 		} else {
-			player_->UpdateModel();
+			// UI がキー入力を捕捉している間は、モデル更新だけを行い入力は渡さない。
+			// 停止中もフリーカメラ用にWVPは更新するが、機体のアニメーションや補間は進めない。
+			player_->UpdateModel(canUseKeyboardInput, shouldUpdateGame);
 		}
 
 	}
@@ -1203,8 +1433,10 @@ void GamePlayScene::Update() {
 	if (updateSelectedEnemies) {
 
 		std::vector<Vector3> enemyBulletHits;
-		if (enemyBulletManager_ && player_) {
-			enemyBulletManager_->Update(player_.get(), enemyBulletHits, obstacles_);
+		if (enemyBulletManager_) {
+			// タイトル背景でも敵弾は必ず更新する。プレイヤーを nullptr にして、
+			// 動きは見せつつタイトル画面でダメージを受けないようにする。
+			enemyBulletManager_->Update(IsTitleBackgroundMode() ? nullptr : player_.get(), enemyBulletHits, obstacles_);
 		}
 
 
@@ -1263,7 +1495,7 @@ void GamePlayScene::Update() {
 
 			// 地上敵の近接攻撃当たり判定
 			GroundEnemy* groundEnemy = dynamic_cast<GroundEnemy*>(it->get());
-			if (groundEnemy && groundEnemy->IsMeleeActive() && player_ && !player_->IsDead()) {
+			if (!IsTitleBackgroundMode() && groundEnemy && groundEnemy->IsMeleeActive() && player_ && !player_->IsDead()) {
 				OBB meleeOBB = groundEnemy->GetMeleeBoxOBB();
 				OBB playerOBB = player_->GetOBB();
 				if (MyMath::IsCollision(meleeOBB, playerOBB)) {
@@ -1292,20 +1524,14 @@ void GamePlayScene::Update() {
 			if ((*it)->IsDead()) {
 				const bool defeatedBoss = (*it)->IsBoss();
 				const Vector3 defeatedPosition = (*it)->GetPosition();
-				if (!defeatedBoss) {
-					ammoManager_->RegisterSmallEnemyDefeat(defeatedPosition);
+				const size_t spawnPointIndex = (*it)->GetSpawnPointIndex();
+				if (IsTitleBackgroundMode()) {
+					// タイトル背景でも撃破された敵は残さない。次の VF1 をロックオン対象に切り替える。
+					ClearEnemyReferences(it->get());
+					it = enemies_.erase(it);
+					continue;
 				}
-				if (lockedEnemy_ == it->get()) {
-					lockedEnemy_ = nullptr;
-					isCinematicLockOnCameraInitialized_ = false;
-				}
-				if (aimAssistEnemy_ == it->get()) {
-					aimAssistEnemy_ = nullptr;
-				}
-				if (missileManager_) {
-// 					missileManager_->ClearTarget(it->get());
-				}
-				size_t spawnPointIndex = (*it)->GetSpawnPointIndex();
+				ClearEnemyReferences(it->get());
 				
 				if (spawnPointIndex < enemySpawns_.size()) {
 					const std::string& deadName = enemySpawns_[spawnPointIndex].name;
@@ -1319,7 +1545,7 @@ void GamePlayScene::Update() {
 				it = enemies_.erase(it);
 
 
-				if (defeatedBoss && !IsSimulationMode() && !isGameOver_) {
+				if (defeatedBoss && !IsSimulationMode() && !IsTitleBackgroundMode() && !isGameOver_) {
 					SceneManager::GetInstance()->ChangeScene("CLEAR");
 					return;
 				}
@@ -1327,7 +1553,86 @@ void GamePlayScene::Update() {
 				++it;
 			}
 		}
-		UpdateAmmoPickups();
+
+		if (IsTitleBackgroundMode() && player_) {
+			if (!lockedEnemy_ || lockedEnemy_->IsDead()) {
+				lockedEnemy_ = nullptr;
+				for (const auto& enemy : enemies_) {
+					if (enemy && !enemy->IsDead()) {
+						lockedEnemy_ = enemy.get();
+						break;
+					}
+				}
+			}
+
+			if (lockedEnemy_) {
+				// ロックオン対象は常に機体前方を横切らせ、タイトル上でも視認・照準できる距離に保つ。
+				const float time = static_cast<float>(titleBackgroundFrame_) * (1.0f / 60.0f);
+				const Vector3 forward = NormalizeOrVector3(player_->GetForwardVector(), { 0.0f, 0.0f, 1.0f });
+				const Vector3 right = NormalizeOrVector3(MyMath::Cross({ 0.0f, 1.0f, 0.0f }, forward), { 1.0f, 0.0f, 0.0f });
+				Vector3 targetPosition = player_->GetPosition();
+				const float forwardDistance = 25.0f + std::sin(time * 0.7f) * 4.0f;
+				const float lateralDistance = std::sin(time * 1.15f) * 7.0f;
+				targetPosition.x += forward.x * forwardDistance + right.x * lateralDistance;
+				// ロゴは画面上部にあるため、敵は機体より少し低い高度を横切らせる。
+				// 後段のスクリーン座標補正と合わせ、タイトルと重なりにくくする。
+				targetPosition.y -= 1.2f + std::sin(time * 1.6f) * 0.7f;
+				targetPosition.z += forward.z * forwardDistance + right.z * lateralDistance;
+
+				// 現在の追従カメラで画面上部（タイトルロゴの領域）に入る場合は、
+				// カメラの下方向へずらして中央の戦闘スペースに戻す。
+				player_->UpdateCamera(camera.get(), nullptr, false);
+				camera->Update();
+				const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
+				const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
+				const Vector3 screenPosition = MyMath::WorldToScreen(targetPosition, camera->GetViewProjectionMatrix(), screenWidth, screenHeight);
+				if (screenPosition.z > 0.0f && screenPosition.z < 1.0f) {
+					constexpr float kSafeTop = 0.35f;
+					constexpr float kSafeBottom = 0.63f;
+					const float desiredScreenY = std::clamp(screenPosition.y, screenHeight * kSafeTop, screenHeight * kSafeBottom);
+					const float screenDelta = desiredScreenY - screenPosition.y;
+					if (std::abs(screenDelta) > 1.0f) {
+						const Vector3 cameraForward = NormalizeOrVector3(
+							SubtractVector3(player_->GetOBB().center, camera->GetTranslate()),
+							forward);
+						const Vector3 cameraRight = NormalizeOrVector3(MyMath::Cross({ 0.0f, 1.0f, 0.0f }, cameraForward), right);
+						const Vector3 cameraUp = NormalizeOrVector3(MyMath::Cross(cameraForward, cameraRight), { 0.0f, 1.0f, 0.0f });
+						const float worldOffset = std::clamp(screenDelta / screenHeight * 18.0f, -4.0f, 4.0f);
+						targetPosition.x -= cameraUp.x * worldOffset;
+						targetPosition.y -= cameraUp.y * worldOffset;
+						targetPosition.z -= cameraUp.z * worldOffset;
+					}
+				}
+
+				if (const auto stageBoundsIt = std::find_if(obstacles_.begin(), obstacles_.end(),
+					[](const std::unique_ptr<Obstacle>& obstacle) {
+						return obstacle && obstacle->IsStageBounds();
+					}); stageBoundsIt != obstacles_.end()) {
+					const Vector3 center = (*stageBoundsIt)->GetPosition();
+					const Vector3 halfExtents = (*stageBoundsIt)->GetWorldHalfExtents();
+					const Vector3 enemyHalfExtents = lockedEnemy_->GetWorldHalfExtents();
+					auto clampInsideStage = [](float value, float centerValue, float stageHalfExtent, float objectHalfExtent) {
+						constexpr float kMargin = 1.5f;
+						const float minimum = centerValue - stageHalfExtent + objectHalfExtent + kMargin;
+						const float maximum = centerValue + stageHalfExtent - objectHalfExtent - kMargin;
+						return minimum <= maximum ? std::clamp(value, minimum, maximum) : centerValue;
+					};
+					targetPosition.x = clampInsideStage(targetPosition.x, center.x, halfExtents.x, enemyHalfExtents.x);
+					targetPosition.y = clampInsideStage(targetPosition.y, center.y, halfExtents.y, enemyHalfExtents.y);
+					targetPosition.z = clampInsideStage(targetPosition.z, center.z, halfExtents.z, enemyHalfExtents.z);
+				}
+
+				lockedEnemy_->SetPosition(targetPosition);
+				lockedEnemy_->SetRotation({ 0.0f, std::atan2(-forward.x, -forward.z), 0.0f });
+				lockedEnemy_->UpdateModel();
+				if (missilePresetManager_ && titleBackgroundFrame_ % 90 == 0) {
+					missilePresetManager_->FirePlayerMissile(MissileType::Normal, lockedEnemy_, -0.35f, false);
+				}
+				if (missilePresetManager_ && titleBackgroundFrame_ % 240 == 0) {
+					missilePresetManager_->FirePlayerMissile(MissileType::MissileWithTrail, lockedEnemy_, 0.35f, false);
+				}
+			}
+		}
 		UpdateEnemyRespawns();
 
 		bool hasAnyEnemySpawned = false;
@@ -1338,7 +1643,7 @@ void GamePlayScene::Update() {
 			}
 		}
 
-		if (!IsSimulationMode() && !isGameOver_ && hasAnyEnemySpawned && enemies_.empty() && !HasPendingEnemySpawns()) {
+		if (!IsSimulationMode() && !IsTitleBackgroundMode() && !isGameOver_ && hasAnyEnemySpawned && enemies_.empty() && !HasPendingEnemySpawns()) {
 			if (!bossSpawned_) {
 				OutputDebugStringA("[GamePlayScene] All enemies defeated! Spawning Boss...\n");
 				auto boss = std::make_unique<Boss>();
@@ -1371,8 +1676,6 @@ void GamePlayScene::Update() {
 			}
 				enemies_.push_back(std::move(boss));
 				bossSpawned_ = true;
-				bossIntroPlayerPosition_ = player_->GetPosition();
-				bossIntroTimer_ = kBossIntroDurationFrames;
 			} else {
 				OutputDebugStringA("[GamePlayScene] Boss defeated! Changing scene to CLEAR.\n");
 				SceneManager::GetInstance()->ChangeScene("CLEAR");
@@ -1577,13 +1880,22 @@ void GamePlayScene::Update() {
 		}
 	} else {
 		if (player_) {
-			Vector3* targetPos = nullptr;
-			Vector3 enemyPos;
-			if (lockedEnemy_) {
-				enemyPos = lockedEnemy_->GetPosition();
-				targetPos = &enemyPos;
+			if (IsTitleBackgroundMode()) {
+				// 出撃中もタイトル時と同じ追従カメラを使い、地形と飛行方向を連続させる。
+				// タイトル背景でも機体を見失わないよう、通常のプレイヤー追従カメラを使う。
+				// 視野角だけを緩やかに変化させ、飛行演出の速度感は維持する。
+				const float time = static_cast<float>(titleBackgroundFrame_) * (1.0f / 60.0f);
+				player_->UpdateCamera(camera.get(), nullptr, false);
+				camera->SetFovY(0.60f + std::sin(time * 0.55f) * 0.035f);
+			} else {
+				Vector3* targetPos = nullptr;
+				Vector3 enemyPos;
+				if (lockedEnemy_) {
+					enemyPos = lockedEnemy_->GetPosition();
+					targetPos = &enemyPos;
+				}
+				player_->UpdateCamera(camera.get(), targetPos);
 			}
-			player_->UpdateCamera(camera.get(), targetPos);
 		}
 		camera->Update();
 	}
@@ -1619,19 +1931,30 @@ void GamePlayScene::Update() {
 	if (allowWeaponInput && player_ && !isGameOver_ && !isSpecialAttackActive_) {
 		Input *input = Input::GetInstance();
 
-		// 以前どおり、左クリックは通常射撃として常に利用できる。
-		if (input->TriggerMouseButton(0) || input->TriggerAction(PlayerAction::NormalFire)) {
-			Enemy* aimTarget = nullptr;
-			if (lockedEnemy_ && lockOnManager_->IsLockedEnemyAlive()) {
-				aimTarget = lockedEnemy_;
-			} else if (aimAssistEnemy_) {
-				aimTarget = aimAssistEnemy_;
+		// 通常射撃（長押しで連射可能）
+		const bool isNormalFirePushed = input->PushMouseButton(0) || input->PushAction(PlayerAction::NormalFire);
+		if (isNormalFirePushed) {
+			if (normalFireCooldownTimer_ <= 0) {
+				Enemy* aimTarget = nullptr;
+				if (lockedEnemy_ && lockOnManager_->IsLockedEnemyAlive()) {
+					aimTarget = lockedEnemy_;
+				} else if (aimAssistEnemy_) {
+					aimTarget = aimAssistEnemy_;
+				}
+				if (missilePresetManager_->FirePlayerMissile(MissileType::Normal, aimTarget)) {
+					normalFireCooldownTimer_ = 8; // 8フレームごとに連続発射
+				}
 			}
-			missilePresetManager_->FirePlayerMissile(MissileType::Normal, aimTarget);
+		} else {
+			normalFireCooldownTimer_ = 0;
+		}
+
+		if (normalFireCooldownTimer_ > 0) {
+			--normalFireCooldownTimer_;
 		}
 
 
-		// 以前どおり、右クリックはホーミング射撃として常に利用できる。
+		// 右クリックはホーミングミサイル射撃 (全モード共通)
 		if (input->TriggerMouseButton(1) || input->TriggerAction(PlayerAction::HomingFire)) {
 			lockOnManager_->BeginMultiLock();
 		}
@@ -1868,7 +2191,8 @@ void GamePlayScene::Update() {
 	}
 
 	if (environmentRenderer_) {
-		environmentRenderer_->Update(activeCamera);
+		// 編集モード停止中は、パーティクル・UVスクロールを含む環境演出も止める。
+		environmentRenderer_->Update(activeCamera, shouldUpdateGame);
 	}
 
 #ifdef ENABLE_IMGUI
@@ -1889,7 +2213,9 @@ void GamePlayScene::Draw() {
 
 
 	if (player_) {
-		player_->Draw();
+		// スラスターのトレイルはカメラ向きの帯として頂点を組み立てるため、
+		// プレイヤー本体と同じ実際の描画カメラを渡す。
+		player_->Draw(renderCamera);
 	}
 
 	bool isAnimationEditor = IsSimulationMode() && uiManager_ && uiManager_->currentSimulationTarget_ == 5;
@@ -1909,7 +2235,7 @@ void GamePlayScene::Draw() {
 
 
 	if (enemyBulletManager_) {
-		enemyBulletManager_->Draw();
+		enemyBulletManager_->Draw(renderCamera);
 	}
 
 	Vector4 frustumPlanes[6];
@@ -1927,8 +2253,6 @@ void GamePlayScene::Draw() {
 			Object3dCommon::GetInstance()->SetCommonDrawSettings();
 		}
 	}
-	if (ammoManager_) ammoManager_->DrawPickups(renderCamera);
-
 
 	for (const auto &obstacle : obstacles_) {
 		Sphere obsSphere;
@@ -2046,6 +2370,14 @@ void GamePlayScene::DrawOverlay() {
 	Camera *activeCamera = isDebugCameraActive_ ? static_cast<Camera *>(debugFlyCamera_.get()) : camera.get();
 	if (!activeCamera) return;
 
+	if (IsTitleBackgroundMode()) {
+		// タイトルでは戦闘 HUD を出さず、ロックオン表示だけを残す。
+		if (lockedEnemy_ && !lockedEnemy_->IsDead()) {
+			DrawLockOnOverlaySprite(lockedEnemy_, activeCamera->GetViewProjectionMatrix(), lockOnReticleSprite_.get(), false, false);
+		}
+		return;
+	}
+
 	// HUD
 	const float screenWidth = static_cast<float>(WinApp::GetClientWidth());
 	const float screenHeight = static_cast<float>(WinApp::GetClientHeight());
@@ -2146,7 +2478,6 @@ void GamePlayScene::DrawOverlay() {
 		bossHpGaugeFillSprite_->Update();
 		bossHpGaugeFillSprite_->Draw();
 	}
-	DrawBossIntroCutIn(screenWidth, screenHeight);
 	if (hudNormalAmmoIconSprite_ && hudHomingAmmoIconSprite_) {
 		hudNormalAmmoIconSprite_->SetTextureLeftTop({ 0.0f, 0.0f });
 		hudNormalAmmoIconSprite_->SetTextureSize({ 887.0f, 887.0f });
@@ -2167,8 +2498,8 @@ void GamePlayScene::DrawOverlay() {
 	const Vector4 homingAmmoColor = ammoManager_->IsHomingReloading()
 		? Vector4{ 1.0f, 0.65f, 0.65f, 1.0f }
 		: Vector4{ 1.0f, 0.18f, 0.12f, 1.0f };
-	drawText(std::to_string(ammoManager_->GetNormalMagazine()) + "/" + std::to_string(ammoManager_->GetNormalReserve()), hudNormalAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 60.0f, normalAmmoColor);
-	drawText(std::to_string(ammoManager_->GetHomingMagazine()) + "/" + std::to_string(ammoManager_->GetHomingReserve()), hudHomingAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 98.0f, homingAmmoColor);
+	drawText(std::to_string(ammoManager_->GetNormalMagazine()), hudNormalAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 60.0f, normalAmmoColor);
+	drawText(std::to_string(ammoManager_->GetHomingMagazine()), hudHomingAmmoDigitSprites_, ammoPanelX + 365.0f, ammoPanelY + 98.0f, homingAmmoColor);
 	if (ammoManager_->IsNormalReloading() && hudNormalReloadGaugeSprite_) {
 		hudNormalReloadGaugeSprite_->SetPosition({ ammoPanelX + 90.0f, ammoPanelY + 89.0f });
 		hudNormalReloadGaugeSprite_->SetSize({ 275.0f * static_cast<float>(ammoManager_->GetNormalReloadFrame()) / static_cast<float>(AmmoManager::kReloadDurationFrames), 4.0f });
@@ -2253,6 +2584,15 @@ void GamePlayScene::DrawOverlay() {
 		songGaugeStateSprite_->Draw();
 	}
 
+	// ImGui の有無に関係なく、実行ファイルのゲーム画面にも操作方法を出す。
+	if (!isPaused_ && !isGameOver_ && GameSettings::GetInstance().IsControlGuideVisible() && controlsGuideSprite_) {
+		controlsGuideSprite_->SetPosition({ 18.0f, 18.0f });
+		controlsGuideSprite_->SetSize({ 320.0f, 213.0f });
+		controlsGuideSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 0.96f });
+		controlsGuideSprite_->Update();
+		controlsGuideSprite_->Draw();
+	}
+
 #ifdef ENABLE_IMGUI
 	// ImGuiの座標はアプリ全体、Spriteの座標はGame View内部なので、
 	// Game Viewの矩形へ変換してHUDの外へ文字がずれないようにする。
@@ -2277,7 +2617,7 @@ void GamePlayScene::DrawOverlay() {
 
 		// 常時確認できる操作ガイド。レーダーと重ならない左上に置き、
 		// 操作名とキーを列で分けて、戦闘中でも一目で確認できるようにする。
-		if (!isPaused_ && !isGameOver_ && GameSettings::GetInstance().IsControlGuideVisible()) {
+		if (false && !isPaused_ && !isGameOver_ && GameSettings::GetInstance().IsControlGuideVisible()) {
 			constexpr float kGuideX = 24.0f;
 			constexpr float kGuideY = 24.0f;
 			constexpr float kGuideWidth = 400.0f;
@@ -2385,51 +2725,6 @@ void GamePlayScene::DrawOverlay() {
 	DrawPauseOverlay(screenWidth, screenHeight);
 }
 
-void GamePlayScene::DrawBossIntroCutIn(float screenWidth, float screenHeight) {
-	if (bossIntroTimer_ <= 0 || !bossCutInBandSprite_ || !bossCutInPanelSprite_) {
-		return;
-	}
-
-	const float remaining = static_cast<float>(bossIntroTimer_) / static_cast<float>(kBossIntroDurationFrames);
-	const float pulse = 0.75f + 0.25f * std::sin((1.0f - remaining) * 18.0f);
-	const float bandHeight = 54.0f;
-	const float panelHeight = 102.0f + pulse * 10.0f;
-	const float panelY = (screenHeight - panelHeight) * 0.5f;
-
-	// 上下の帯と中央の警告帯で、ボス出現を明確に伝えるカットインにする。
-	bossCutInBandSprite_->SetPosition({ 0.0f, 0.0f });
-	bossCutInBandSprite_->SetSize({ screenWidth, bandHeight });
-	bossCutInBandSprite_->SetColor({ 0.01f, 0.02f, 0.06f, 0.92f });
-	bossCutInBandSprite_->Update();
-	bossCutInBandSprite_->Draw();
-	bossCutInBandSprite_->SetPosition({ 0.0f, screenHeight - bandHeight });
-	bossCutInBandSprite_->Update();
-	bossCutInBandSprite_->Draw();
-
-	bossCutInPanelSprite_->SetPosition({ 0.0f, panelY });
-	bossCutInPanelSprite_->SetSize({ screenWidth, panelHeight });
-	bossCutInPanelSprite_->SetColor({ 0.30f, 0.015f, 0.025f, 0.78f });
-	bossCutInPanelSprite_->Update();
-	bossCutInPanelSprite_->Draw();
-	bossCutInPanelSprite_->SetPosition({ 0.0f, panelY + panelHeight * 0.5f - 3.0f });
-	bossCutInPanelSprite_->SetSize({ screenWidth, 6.0f });
-	bossCutInPanelSprite_->SetColor({ 1.0f, 0.22f, 0.08f, pulse });
-	bossCutInPanelSprite_->Update();
-	bossCutInPanelSprite_->Draw();
-
-#ifdef ENABLE_IMGUI
-	if (ImGui::GetCurrentContext()) {
-		const char* message = "WARNING  BOSS APPROACH";
-		ImDrawList* drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
-		const ImVec2 textSize = ImGui::CalcTextSize(message);
-		drawList->AddText(
-			ImVec2((screenWidth - textSize.x) * 0.5f, panelY + (panelHeight - textSize.y) * 0.5f),
-			IM_COL32(255, 235, 220, 255),
-			message);
-	}
-#endif
-}
-
 void GamePlayScene::DrawPauseOverlay(float screenWidth, float screenHeight) {
 	if (!isPaused_ || !pauseOverlaySprite_ || !pausePanelSprite_) {
 		return;
@@ -2442,7 +2737,7 @@ void GamePlayScene::DrawPauseOverlay(float screenWidth, float screenHeight) {
 	pauseOverlaySprite_->Draw();
 
 	const float panelWidth = (std::min)(460.0f, screenWidth - 48.0f);
-	constexpr float kPanelHeight = 224.0f;
+	constexpr float kPanelHeight = 324.0f;
 	const float panelX = (screenWidth - panelWidth) * 0.5f;
 	const float panelY = (screenHeight - kPanelHeight) * 0.5f;
 	pausePanelSprite_->SetPosition({ panelX, panelY });
@@ -2456,8 +2751,44 @@ void GamePlayScene::DrawPauseOverlay(float screenWidth, float screenHeight) {
 	pausePanelSprite_->Update();
 	pausePanelSprite_->Draw();
 
+	// メニューの選択状態は、文字の周囲を発光枠で示す。画像の文字を隠さないため、
+	// 横線と左右のマーカーだけを最後に重ねる。
+	const float labelsX = panelX + 17.0f;
+	const float labelsY = panelY + 18.0f;
+	const float labelsWidth = panelWidth - 34.0f;
+	const float labelsHeight = labelsWidth * (2.0f / 3.0f);
+	const float selectedY = labelsY + (isPauseTitleSelected_ ? 181.0f : 135.0f);
+	const Vector4 selectedColor = { 0.08f, 0.90f, 1.0f, 0.95f };
+	const Vector4 selectedGlowColor = { 0.05f, 0.40f, 0.80f, 0.78f };
+	auto drawPauseSelection = [&](float y, const Vector4& color, const Vector2& size) {
+		pausePanelSprite_->SetPosition({ labelsX + 18.0f, y });
+		pausePanelSprite_->SetSize(size);
+		pausePanelSprite_->SetColor(color);
+		pausePanelSprite_->Update();
+		pausePanelSprite_->Draw();
+	};
+	drawPauseSelection(selectedY, selectedGlowColor, { labelsWidth - 36.0f, 3.0f });
+	drawPauseSelection(selectedY + 40.0f, selectedColor, { labelsWidth - 36.0f, 3.0f });
+	drawPauseSelection(selectedY, selectedColor, { 4.0f, 43.0f });
+	drawPauseSelection(selectedY, selectedColor, { 36.0f, 4.0f });
+	drawPauseSelection(selectedY + 39.0f, selectedColor, { 36.0f, 4.0f });
+
+	if (pauseMenuLabelsSprite_) {
+		pauseMenuLabelsSprite_->SetPosition({ labelsX, labelsY });
+		pauseMenuLabelsSprite_->SetSize({ labelsWidth, labelsHeight });
+		pauseMenuLabelsSprite_->SetColor({ 1.0f, 1.0f, 1.0f, 1.0f });
+		pauseMenuLabelsSprite_->Update();
+		pauseMenuLabelsSprite_->Draw();
+	}
+
+	// 文字より前面に小さな発光マーカーを置き、選択中の項目を常に判別可能にする。
+	drawPauseSelection(selectedY + 13.0f, selectedColor, { 9.0f, 17.0f });
+
 #ifdef ENABLE_IMGUI
-	if (ImGui::GetCurrentContext()) {
+	// 通常プレイでは ImGui のフレームを開始していない。コンテキストが残っていても
+	// フォントの描画準備は済んでいないため、非表示中に AddText / CalcTextSize を
+	// 呼ぶと ImGui 内部でアクセス違反になる。
+	if (false && ImGuiManager::IsVisible() && ImGui::GetCurrentContext()) {
 		ImDrawList* drawList = ImGui::GetForegroundDrawList(ImGui::GetMainViewport());
 		const char* title = "PAUSED";
 		const char* guide = "UP / DOWN : SELECT     ENTER : CONFIRM";

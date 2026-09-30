@@ -1,7 +1,9 @@
 #include "Obstacle.h"
 #include "3D/Object3dCommon.h"
 #include "3D/ModelManager.h"
+#include <algorithm>
 #include <cmath>
+#include <numeric>
 #include <vector>
 
 void Obstacle::Initialize(const std::string& modelName, const Vector3& position, const Vector3& rotation, const Vector3& scale) {
@@ -103,6 +105,42 @@ OBB Obstacle::GetOBB() const {
     return obb;
 }
 
+const std::vector<size_t>& Obstacle::GetNearbyWorldTriangleIndices(const Sphere& sphere) const {
+    if (!hasMeshTriangleGrid_) {
+        return allTriangleIndices_;
+    }
+
+    const float extentX = meshGridMax_.x - meshGridMin_.x;
+    const float extentZ = meshGridMax_.z - meshGridMin_.z;
+    const float sphereMinX = sphere.center.x - sphere.radius;
+    const float sphereMaxX = sphere.center.x + sphere.radius;
+    const float sphereMinZ = sphere.center.z - sphere.radius;
+    const float sphereMaxZ = sphere.center.z + sphere.radius;
+
+    nearbyTriangleIndices_.clear();
+    if (sphereMaxX < meshGridMin_.x || sphereMinX > meshGridMax_.x ||
+        sphereMaxZ < meshGridMin_.z || sphereMinZ > meshGridMax_.z) {
+        return nearbyTriangleIndices_;
+    }
+
+    const auto toCell = [](float coordinate, float minimum, float extent) {
+        const float normalized = (coordinate - minimum) / extent;
+        return std::clamp(static_cast<int>(std::floor(normalized * kMeshGridDimension)), 0, kMeshGridDimension - 1);
+    };
+    const int minCellX = toCell(sphereMinX, meshGridMin_.x, extentX);
+    const int maxCellX = toCell(sphereMaxX, meshGridMin_.x, extentX);
+    const int minCellZ = toCell(sphereMinZ, meshGridMin_.z, extentZ);
+    const int maxCellZ = toCell(sphereMaxZ, meshGridMin_.z, extentZ);
+
+    for (int cellZ = minCellZ; cellZ <= maxCellZ; ++cellZ) {
+        for (int cellX = minCellX; cellX <= maxCellX; ++cellX) {
+            const auto& cellTriangles = meshTriangleGrid_[static_cast<size_t>(cellZ * kMeshGridDimension + cellX)];
+            nearbyTriangleIndices_.insert(nearbyTriangleIndices_.end(), cellTriangles.begin(), cellTriangles.end());
+        }
+    }
+    return nearbyTriangleIndices_;
+}
+
 void Obstacle::UpdateMeshCollider() {
     if (!useMeshCollider_) return;
     
@@ -187,7 +225,66 @@ void Obstacle::UpdateMeshCollider() {
         }
     }
     
+    RebuildMeshTriangleGrid();
     prevPosition_ = position_;
     prevRotation_ = rotation_;
     prevScale_ = scale_;
+}
+
+void Obstacle::RebuildMeshTriangleGrid() {
+    for (auto& cell : meshTriangleGrid_) {
+        cell.clear();
+    }
+    allTriangleIndices_.resize(worldTriangles_.size());
+    std::iota(allTriangleIndices_.begin(), allTriangleIndices_.end(), size_t{ 0 });
+    nearbyTriangleIndices_.clear();
+    hasMeshTriangleGrid_ = false;
+    if (worldTriangles_.empty()) {
+        return;
+    }
+
+    meshGridMin_ = worldTriangles_[0].p[0];
+    meshGridMax_ = worldTriangles_[0].p[0];
+    for (const Triangle& triangle : worldTriangles_) {
+        for (const Vector3& point : triangle.p) {
+            meshGridMin_.x = (std::min)(meshGridMin_.x, point.x);
+            meshGridMin_.z = (std::min)(meshGridMin_.z, point.z);
+            meshGridMax_.x = (std::max)(meshGridMax_.x, point.x);
+            meshGridMax_.z = (std::max)(meshGridMax_.z, point.z);
+        }
+    }
+
+    const float extentX = meshGridMax_.x - meshGridMin_.x;
+    const float extentZ = meshGridMax_.z - meshGridMin_.z;
+    if (extentX <= 0.0001f || extentZ <= 0.0001f) {
+        return;
+    }
+
+    const auto toCell = [](float coordinate, float minimum, float extent) {
+        const float normalized = (coordinate - minimum) / extent;
+        return std::clamp(static_cast<int>(std::floor(normalized * kMeshGridDimension)), 0, kMeshGridDimension - 1);
+    };
+    for (size_t index = 0; index < worldTriangles_.size(); ++index) {
+        const Triangle& triangle = worldTriangles_[index];
+        float minX = triangle.p[0].x;
+        float maxX = triangle.p[0].x;
+        float minZ = triangle.p[0].z;
+        float maxZ = triangle.p[0].z;
+        for (int pointIndex = 1; pointIndex < 3; ++pointIndex) {
+            minX = (std::min)(minX, triangle.p[pointIndex].x);
+            maxX = (std::max)(maxX, triangle.p[pointIndex].x);
+            minZ = (std::min)(minZ, triangle.p[pointIndex].z);
+            maxZ = (std::max)(maxZ, triangle.p[pointIndex].z);
+        }
+        const int minCellX = toCell(minX, meshGridMin_.x, extentX);
+        const int maxCellX = toCell(maxX, meshGridMin_.x, extentX);
+        const int minCellZ = toCell(minZ, meshGridMin_.z, extentZ);
+        const int maxCellZ = toCell(maxZ, meshGridMin_.z, extentZ);
+        for (int cellZ = minCellZ; cellZ <= maxCellZ; ++cellZ) {
+            for (int cellX = minCellX; cellX <= maxCellX; ++cellX) {
+                meshTriangleGrid_[static_cast<size_t>(cellZ * kMeshGridDimension + cellX)].push_back(index);
+            }
+        }
+    }
+    hasMeshTriangleGrid_ = true;
 }

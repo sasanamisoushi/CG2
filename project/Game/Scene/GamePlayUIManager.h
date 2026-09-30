@@ -18,6 +18,7 @@ public:
 	void UpdateUI();
 
 	void DrawGameplayActionControls();
+	void DrawAmmoSettingsUI();
 
 private:
 	void DrawEditorToolbar();
@@ -44,4 +45,5 @@ private:
 	std::vector<std::string> missilePresetNames_[2];
 	int selectedMissilePresetIndex_[2] = { 0, 0 };
 	std::string missilePresetMessage_;
+	std::string ammoSettingsMessage_;
 };

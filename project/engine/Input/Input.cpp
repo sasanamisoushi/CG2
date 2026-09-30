@@ -1,6 +1,7 @@
 #include "Input.h"
 #include <fstream>
 #include <sstream>
+#include <externals/imgui/imgui.h>
 
 namespace {
 	constexpr SHORT kControllerStickDeadZone = 12000;
@@ -58,6 +59,7 @@ void Input::Initialize(WinApp* winApp) {
 
 	ResetPlayerActionBindings();
 	LoadPlayerActionBindings();
+	SetMouseCursorClipEnabled(false);
 }
 
 void Input::Update() {
@@ -182,8 +184,6 @@ void Input::ResetPlayerActionBindings() {
 	bind(PlayerAction::HomingFire, 0, ControllerInput::LeftTrigger, MouseInput::RightButton);
 	bind(PlayerAction::LockToggle, DIK_TAB, ControllerInput::RightThumb);
 	bind(PlayerAction::LockRelease, DIK_X, ControllerInput::LeftThumb);
-	bind(PlayerAction::ReloadNormal, DIK_F, ControllerInput::None);
-	bind(PlayerAction::ReloadHoming, DIK_G, ControllerInput::None);
 	bind(PlayerAction::SpecialAttack, DIK_C, ControllerInput::Back);
 	bind(PlayerAction::Song, DIK_V, ControllerInput::Start);
 }
@@ -290,7 +290,7 @@ const char* Input::GetPlayerActionName(PlayerAction action) {
 		"上向き", "下向き", "左ロール", "右ロール", "ガード",
 		"ファイター形態", "ガウォーク形態", "バトロイド形態", "左回避", "右回避",
 		"近接攻撃", "通常射撃", "ホーミング射撃", "ロックオン切替", "ロックオン解除",
-		"通常弾リロード", "誘導弾リロード", "SP攻撃", "歌"
+		"必殺技(SP攻撃)", "歌"
 	};
 	const size_t index = ToIndex(action);
 	return index < std::size(names) ? names[index] : "不明な操作";
@@ -373,6 +373,19 @@ void Input::ApplyMouseCursorClip() {
 	if (!winApp_) {
 		return;
 	}
+
+#ifdef ENABLE_IMGUI
+	if (ImGui::GetCurrentContext()) {
+		ImGuiIO &io = ImGui::GetIO();
+		if (io.WantCaptureMouse) {
+			if (isMouseCursorClipped_) {
+				ClipCursor(nullptr);
+				isMouseCursorClipped_ = false;
+			}
+			return;
+		}
+	}
+#endif
 
 	const HWND hwnd = winApp_->GetHwnd();
 	const bool canClip =

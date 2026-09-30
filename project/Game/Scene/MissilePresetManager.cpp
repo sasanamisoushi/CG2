@@ -83,6 +83,9 @@ bool MissilePresetManager::SaveMissilePreset(const std::string &filePath, int mi
 		preset["scale"] = scene_->missileNormalScale;
 		preset["collisionRadius"] = scene_->missileNormalCollisionRadius;
 		preset["lifeTime"] = scene_->missileNormalLifeTime;
+		if (scene_->ammoManager_) {
+			preset["magazineCapacity"] = scene_->ammoManager_->GetNormalMagazineCapacity();
+		}
 	} else {
 		preset["speed"] = scene_->missileSpeed;
 		preset["homingStrength"] = scene_->missileHomingStrength;
@@ -90,6 +93,9 @@ bool MissilePresetManager::SaveMissilePreset(const std::string &filePath, int mi
 		preset["collisionRadius"] = scene_->missileHomingCollisionRadius;
 		preset["trailWidth"] = scene_->missileTrailWidth;
 		preset["lifeTime"] = scene_->missileLifeTime;
+		if (scene_->ammoManager_) {
+			preset["magazineCapacity"] = scene_->ammoManager_->GetHomingMagazineCapacity();
+		}
 	}
 	preset["muzzleOffset"] = scene_->missileMuzzleOffset;
 
@@ -173,6 +179,10 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 		scene_->missileNormalScale = ReadJsonFloat(*preset, "scale", scene_->missileNormalScale);
 		scene_->missileNormalCollisionRadius = ReadJsonFloat(*preset, "collisionRadius", scene_->missileNormalCollisionRadius);
 		scene_->missileNormalLifeTime = ReadJsonInt(*preset, "lifeTime", scene_->missileNormalLifeTime);
+		if (scene_->ammoManager_ && preset->contains("magazineCapacity")) {
+			const int normCap = ReadJsonInt(*preset, "magazineCapacity", scene_->ammoManager_->GetNormalMagazineCapacity());
+			scene_->ammoManager_->SetMagazineCapacities(normCap, scene_->ammoManager_->GetHomingMagazineCapacity());
+		}
 	} else {
 		scene_->missileSpeed = ReadJsonFloat(*preset, "speed", scene_->missileSpeed);
 		scene_->missileHomingStrength = ReadJsonFloat(*preset, "homingStrength", scene_->missileHomingStrength);
@@ -180,6 +190,10 @@ bool MissilePresetManager::ApplyMissilePreset(const std::string &filePath, int m
 		scene_->missileHomingCollisionRadius = ReadJsonFloat(*preset, "collisionRadius", scene_->missileHomingCollisionRadius);
 		scene_->missileTrailWidth = ReadJsonFloat(*preset, "trailWidth", scene_->missileTrailWidth);
 		scene_->missileLifeTime = ReadJsonInt(*preset, "lifeTime", scene_->missileLifeTime);
+		if (scene_->ammoManager_ && preset->contains("magazineCapacity")) {
+			const int homCap = ReadJsonInt(*preset, "magazineCapacity", scene_->ammoManager_->GetHomingMagazineCapacity());
+			scene_->ammoManager_->SetMagazineCapacities(scene_->ammoManager_->GetNormalMagazineCapacity(), homCap);
+		}
 	}
 	scene_->missileMuzzleOffset = ReadJsonFloat(*preset, "muzzleOffset", scene_->missileMuzzleOffset);
 
@@ -192,6 +206,10 @@ void MissilePresetManager::DrawMissileSettingsUI() {
 #ifdef ENABLE_IMGUI
 	ImGui::Text("ミサイル設定");
 	ImGui::DragFloat("発射位置距離", &scene_->missileMuzzleOffset, 0.05f, 0.0f, 5.0f, "%.2f");
+
+	if (scene_ && scene_->uiManager_) {
+		scene_->uiManager_->DrawAmmoSettingsUI();
+	}
 
 	ImGui::Separator();
 	const char *presetTypes[] = { "通常弾", "ホーミング" };
@@ -263,11 +281,11 @@ void MissilePresetManager::DrawMissileSettingsUI() {
 #endif
 }
 
-bool MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, float horizontalOffset) {
+bool MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, float horizontalOffset, bool consumeAmmo) {
 	if (!scene_->player_ || !scene_->missileManager_) {
 		return false;
 	}
-	if (!scene_->TryConsumeAmmo(type)) {
+	if (consumeAmmo && !scene_->TryConsumeAmmo(type)) {
 		return false;
 	}
 
@@ -290,7 +308,7 @@ bool MissilePresetManager::FirePlayerMissile(MissileType type, Enemy *target, fl
 			shouldAim = true;
 		} else if (type == MissileType::Normal) {
 			PlayerMode mode = scene_->player_->GetCurrentMode();
-			if (mode == PlayerMode::Gerwalk || mode == PlayerMode::Battroid) {
+			if (scene_->IsTitleBackgroundMode() || mode == PlayerMode::Gerwalk || mode == PlayerMode::Battroid) {
 				shouldAim = true;
 			}
 		}

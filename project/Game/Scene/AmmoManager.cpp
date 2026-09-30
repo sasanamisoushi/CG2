@@ -1,120 +1,113 @@
 #include "AmmoManager.h"
 
-#include "3D/Object3d.h"
-#include "3D/Object3dCommon.h"
-#include "engine/Input/Input.h"
-#include "Game/Player/Player.h"
+#include <externals/json.hpp>
 
 #include <algorithm>
-#include <cmath>
+#include <fstream>
 
 namespace {
-constexpr int kKillsPerPickup = 5;
-constexpr int kPickupNormalAmmo = 60;
-constexpr int kPickupHomingAmmo = 12;
+constexpr const char* kDefaultAmmoSettingsPath = "resources/ammo_settings.json";
+constexpr int kMinimumMagazineCapacity = 1;
+constexpr int kMaximumMagazineCapacity = 999;
 }
 
 void AmmoManager::Initialize() {
-    normalMagazine_ = kNormalMagazineCapacity;
-    normalReserve_ = 90;
-    homingMagazine_ = kHomingMagazineCapacity;
-    homingReserve_ = 16;
+    normalMagazineCapacity_ = kDefaultNormalMagazineCapacity;
+    homingMagazineCapacity_ = kDefaultHomingMagazineCapacity;
     isNormalReloading_ = false;
     isHomingReloading_ = false;
     normalReloadFrame_ = 0;
     homingReloadFrame_ = 0;
-    defeatedSmallEnemyCount_ = 0;
-    pickups_.clear();
+    // 保存済みの弾数があれば起動時から反映し、なければ既定値を使う。
+    LoadSettings(kDefaultAmmoSettingsPath);
+    normalMagazine_ = normalMagazineCapacity_;
+    homingMagazine_ = homingMagazineCapacity_;
 }
 
 bool AmmoManager::TryConsume(MissileType type) {
-    if ((type == MissileType::Normal && isNormalReloading_) ||
-        (type == MissileType::MissileWithTrail && isHomingReloading_)) {
+    const bool isNormal = type == MissileType::Normal;
+    bool& isReloading = isNormal ? isNormalReloading_ : isHomingReloading_;
+    int& reloadFrame = isNormal ? normalReloadFrame_ : homingReloadFrame_;
+    int& magazine = isNormal ? normalMagazine_ : homingMagazine_;
+    if (isReloading || magazine <= 0) {
         return false;
     }
-    int& magazine = (type == MissileType::Normal) ? normalMagazine_ : homingMagazine_;
-    if (magazine <= 0) return false;
     --magazine;
+    // 使い切った瞬間に自動補充を開始する。予備弾や手動操作は使わない。
+    if (magazine == 0) {
+        isReloading = true;
+        reloadFrame = 0;
+    }
     return true;
 }
 
-void AmmoManager::UpdateReload(const Player* player) {
-    if (!player || player->IsDead()) return;
-    Input* input = Input::GetInstance();
-    if (!isNormalReloading_ && input->TriggerAction(PlayerAction::ReloadNormal) &&
-        normalMagazine_ < kNormalMagazineCapacity && normalReserve_ > 0) {
-        isNormalReloading_ = true;
-        normalReloadFrame_ = 0;
-    }
-    if (!isHomingReloading_ && input->TriggerAction(PlayerAction::ReloadHoming) &&
-        homingMagazine_ < kHomingMagazineCapacity && homingReserve_ > 0) {
-        isHomingReloading_ = true;
-        homingReloadFrame_ = 0;
-    }
+void AmmoManager::UpdateAutoReload() {
     if (isNormalReloading_ && ++normalReloadFrame_ >= kReloadDurationFrames) {
-        FinishReload(normalMagazine_, kNormalMagazineCapacity, normalReserve_);
+        normalMagazine_ = normalMagazineCapacity_;
         isNormalReloading_ = false;
         normalReloadFrame_ = 0;
     }
     if (isHomingReloading_ && ++homingReloadFrame_ >= kReloadDurationFrames) {
-        FinishReload(homingMagazine_, kHomingMagazineCapacity, homingReserve_);
+        homingMagazine_ = homingMagazineCapacity_;
         isHomingReloading_ = false;
         homingReloadFrame_ = 0;
     }
 }
 
-void AmmoManager::RegisterSmallEnemyDefeat(const Vector3& position) {
-    if (++defeatedSmallEnemyCount_ % kKillsPerPickup == 0) SpawnPickup(position);
+void AmmoManager::SetMagazineCapacities(int normalCapacity, int homingCapacity) {
+    normalMagazineCapacity_ = std::clamp(normalCapacity, kMinimumMagazineCapacity, kMaximumMagazineCapacity);
+    homingMagazineCapacity_ = std::clamp(homingCapacity, kMinimumMagazineCapacity, kMaximumMagazineCapacity);
+    normalMagazine_ = (std::min)(normalMagazine_, normalMagazineCapacity_);
+    homingMagazine_ = (std::min)(homingMagazine_, homingMagazineCapacity_);
 }
 
-void AmmoManager::UpdatePickups(const Player* player) {
-    if (!player) return;
-    const Vector3 playerPosition = player->GetPosition();
-    for (auto it = pickups_.begin(); it != pickups_.end();) {
-        it->phase += 0.05f;
-        Vector3 displayPosition = it->basePosition;
-        displayPosition.y += std::sin(it->phase) * 0.5f;
-        it->object->SetTranslate(displayPosition);
-        it->object->SetRotate({ 0.0f, it->phase, 0.0f });
-        it->object->Update();
-        const float dx = displayPosition.x - playerPosition.x;
-        const float dy = displayPosition.y - playerPosition.y;
-        const float dz = displayPosition.z - playerPosition.z;
-        if (dx * dx + dy * dy + dz * dz <= 9.0f) {
-            normalReserve_ = (std::min)(kNormalReserveCapacity, normalReserve_ + kPickupNormalAmmo);
-            homingReserve_ = (std::min)(kHomingReserveCapacity, homingReserve_ + kPickupHomingAmmo);
-            it = pickups_.erase(it);
-        } else {
-            ++it;
-        }
+void AmmoManager::ReloadAll() {
+    normalMagazine_ = normalMagazineCapacity_;
+    homingMagazine_ = homingMagazineCapacity_;
+    isNormalReloading_ = false;
+    isHomingReloading_ = false;
+    normalReloadFrame_ = 0;
+    homingReloadFrame_ = 0;
+}
+
+bool AmmoManager::SaveSettings(const std::string& filePath) const {
+    nlohmann::json root;
+    root["normalMagazineCapacity"] = normalMagazineCapacity_;
+    root["homingMagazineCapacity"] = homingMagazineCapacity_;
+
+    std::ofstream ofs(filePath, std::ios::trunc);
+    if (!ofs.is_open()) {
+        return false;
     }
+    ofs << root.dump(4);
+    return static_cast<bool>(ofs);
 }
 
-void AmmoManager::DrawPickups(Camera*) const {
-    for (const Pickup& pickup : pickups_) {
-        if (pickup.object) {
-            pickup.object->Draw();
-            Object3dCommon::GetInstance()->SetCommonDrawSettings();
-        }
+bool AmmoManager::LoadSettings(const std::string& filePath) {
+    std::ifstream ifs(filePath);
+    if (!ifs.is_open()) {
+        return false;
     }
-}
 
-void AmmoManager::SpawnPickup(const Vector3& position) {
-    Pickup pickup;
-    pickup.basePosition = { position.x, position.y + 2.0f, position.z };
-    pickup.phase = static_cast<float>(pickups_.size()) * 0.8f;
-    pickup.object = std::make_unique<Object3d>();
-    pickup.object->Initialize(Object3dCommon::GetInstance());
-    pickup.object->SetModel("AmmoPickupSphere");
-    pickup.object->SetScale({ 1.2f, 1.2f, 1.2f });
-    pickup.object->SetTranslate(pickup.basePosition);
-    pickup.object->Update();
-    pickups_.push_back(std::move(pickup));
-}
+    nlohmann::json root;
+    try {
+        ifs >> root;
+    } catch (...) {
+        return false;
+    }
+    if (!root.is_object()) {
+        return false;
+    }
 
-void AmmoManager::FinishReload(int& magazine, int capacity, int& reserve) {
-    const int required = capacity - magazine;
-    const int loaded = (std::min)(required, reserve);
-    magazine += loaded;
-    reserve -= loaded;
+    const int normalCapacity = root.value("normalMagazineCapacity", normalMagazineCapacity_);
+    const int homingCapacity = root.value("homingMagazineCapacity", homingMagazineCapacity_);
+    SetMagazineCapacities(normalCapacity, homingCapacity);
+    // 読み込みは設定の切り替えと同時に使えるよう、現在の弾も満タンに戻す。
+    normalMagazine_ = normalMagazineCapacity_;
+    homingMagazine_ = homingMagazineCapacity_;
+    isNormalReloading_ = false;
+    isHomingReloading_ = false;
+    normalReloadFrame_ = 0;
+    homingReloadFrame_ = 0;
+    return true;
 }

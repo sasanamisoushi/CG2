@@ -41,8 +41,6 @@ enum class PlayerAction : uint8_t {
 	HomingFire,
 	LockToggle,
 	LockRelease,
-	ReloadNormal,
-	ReloadHoming,
 	SpecialAttack,
 	Song,
 	Count,
@@ -133,6 +131,7 @@ public:
 	// マウスホイールの回転量（上=正, 下=負）
 	long GetMouseWheel() const { return mouseState_.lZ; }
 	void SetMouseCursorClipEnabled(bool enabled);
+	bool IsMouseCursorClipEnabled() const { return isMouseCursorClipEnabled_; }
 	void SetMouseCursorClipRect(float minX, float minY, float maxX, float maxY);
 	void ClearMouseCursorClipRect();
 

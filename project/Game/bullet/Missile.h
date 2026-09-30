@@ -51,6 +51,11 @@ public:
     Vector3 GetPosition() const { return position_; }
     Enemy* GetTarget() const { return target_; }
     float GetCollisionRadius() const { return collisionRadius_; }
+    void ClearTargetIfMatches(const Enemy* target) {
+        if (target_ == target) {
+            target_ = nullptr;
+        }
+    }
 
 private:
     std::unique_ptr<Object3d> object_;

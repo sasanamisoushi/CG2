@@ -1,4 +1,4 @@
-﻿#include "LockOnManager.h"
+#include "LockOnManager.h"
 #include "MissilePresetManager.h"
 #include "GamePlayScene.h"
 #include "GamePlaySceneHelpers.h"
@@ -79,12 +79,31 @@ bool LockOnManager::ShouldKeepCurrentLock(Camera *activeCamera, bool &outTooClos
 void LockOnManager::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 	Input *input = Input::GetInstance();
 	if (!input) return;
-	const bool canUsePlayerInput = !IsImGuiKeyboardCaptureActive() && !IsImGuiMouseCaptureActive();
+
+	const bool isFighterMode = scene_->player_ && scene_->player_->GetCurrentMode() == PlayerMode::Fighter;
+
+	// タイトル画面のキー・マウス操作はメニュー専用。本編背景のロックオンへ渡さない。
+	const bool canUsePlayerInput = !scene_->IsTitleBackgroundMode() &&
+		!IsImGuiKeyboardCaptureActive() && !IsImGuiMouseCaptureActive();
 	if (shouldUpdateGame && fighterReacquireCooldownFrames_ > 0) {
 		--fighterReacquireCooldownFrames_;
 		if (fighterReacquireCooldownFrames_ == 0) {
 			fighterRecentlyReleasedEnemy_ = nullptr;
 		}
+	}
+
+	if (isFighterMode) {
+		// ファイターモードでは手動固定ロックオン(lockedEnemy_)は行わない
+		if (scene_->lockedEnemy_) {
+			ReleaseCurrentLock(false);
+		}
+		// 機体前方の敵に対するエイムアシストおよびマルチロックは全モード共通で動作させる
+		scene_->aimAssistEnemy_ = nullptr;
+		if (shouldUpdateGame) {
+			scene_->aimAssistEnemy_ = FindAimAssistTarget(activeCamera);
+			UpdateMultiLock(activeCamera);
+		}
+		return;
 	}
 
 	if (!IsLockedEnemyAlive()) {
@@ -137,6 +156,9 @@ void LockOnManager::UpdateLockOn(Camera *activeCamera, bool shouldUpdateGame) {
 
 Enemy *LockOnManager::FindLockOnTarget(Camera *activeCamera) {
 	if (!scene_->player_ || !activeCamera || scene_->player_->IsDead()) {
+		return nullptr;
+	}
+	if (scene_->player_->GetCurrentMode() == PlayerMode::Fighter) {
 		return nullptr;
 	}
 

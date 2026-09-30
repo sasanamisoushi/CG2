@@ -515,6 +515,7 @@ void GamePlayUIManager::UpdateUI() {
 #define cameraManager_ scene_->cameraManager_
 #define levelManager_ scene_->levelManager_
 #define uiManager_ scene_->uiManager_
+#define ammoManager_ scene_->ammoManager_
 #define lastJsonWriteTime_ scene_->lastJsonWriteTime_
 #define aimAssistEnemy_ scene_->aimAssistEnemy_
 #define isMultiLockCharging_ scene_->isMultiLockCharging_
@@ -548,6 +549,7 @@ void GamePlayUIManager::UpdateUI() {
 			LaunchSimulationExecutable();
 		}
 		DrawGameplayActionControls();
+		DrawAmmoSettingsUI();
 		ImGui::End();
 		if (false) {
 
@@ -1249,6 +1251,12 @@ void GamePlayUIManager::UpdateUI() {
 			ImGui::TextColored(
 				input->IsControllerConnected() ? ImVec4(0.25f, 1.0f, 0.45f, 1.0f) : ImVec4(1.0f, 0.70f, 0.25f, 1.0f),
 				"コントローラー: %s (XInput Player 1)", input->IsControllerConnected() ? "接続済み" : "未接続");
+
+			bool isCursorClipped = input->IsMouseCursorClipEnabled();
+			if (ImGui::Checkbox("マウスカーソルを画面内に固定する (画面外へのはみ出し防止)", &isCursorClipped)) {
+				input->SetMouseCursorClipEnabled(isCursorClipped);
+			}
+
 			if (ImGui::Button("初期設定に戻す")) {
 				input->ResetPlayerActionBindings();
 				input->SavePlayerActionBindings();
@@ -1493,6 +1501,7 @@ void GamePlayUIManager::UpdateUI() {
 #undef cameraManager_
 #undef levelManager_
 #undef uiManager_
+#undef ammoManager_
 #undef lastJsonWriteTime_
 #undef aimAssistEnemy_
 #undef isMultiLockCharging_
@@ -1552,6 +1561,53 @@ void GamePlayUIManager::DrawGameplayActionControls() {
 
 	if (!simulationActionMessage_.empty()) {
 		ImGui::TextWrapped("%s", simulationActionMessage_.c_str());
+	}
+#endif
+}
+
+void GamePlayUIManager::DrawAmmoSettingsUI() {
+#ifdef ENABLE_IMGUI
+	if (!scene_ || !scene_->ammoManager_) {
+		return;
+	}
+
+	AmmoManager* ammoManager = scene_->ammoManager_.get();
+	ImGui::Separator();
+	ImGui::Text("弾薬・所持弾数設定");
+	ImGui::TextDisabled("プレイヤーの弾数（使い切ると自動補充されるマガジン容量）を設定します。");
+
+	int normalCapacity = ammoManager->GetNormalMagazineCapacity();
+	int homingCapacity = ammoManager->GetHomingMagazineCapacity();
+	bool changed = false;
+	changed |= ImGui::DragInt("通常弾の所持数(最大数)", &normalCapacity, 1, 1, 999);
+	changed |= ImGui::DragInt("ミサイルの所持数(最大数)", &homingCapacity, 1, 1, 999);
+	if (changed) {
+		ammoManager->SetMagazineCapacities(normalCapacity, homingCapacity);
+		ammoSettingsMessage_ = "弾薬数を更新しました。";
+	}
+
+	ImGui::Text("現在の残弾: 通常弾 %d / %d   ミサイル %d / %d",
+		ammoManager->GetNormalMagazine(), ammoManager->GetNormalMagazineCapacity(),
+		ammoManager->GetHomingMagazine(), ammoManager->GetHomingMagazineCapacity());
+
+	if (ImGui::Button("弾薬を全回復(リロード)")) {
+		ammoManager->ReloadAll();
+		ammoSettingsMessage_ = "弾薬を全回復しました。";
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("弾薬設定を保存")) {
+		ammoSettingsMessage_ = ammoManager->SaveSettings("resources/ammo_settings.json")
+			? "弾薬設定を resources/ammo_settings.json に保存しました。"
+			: "弾薬設定を保存できませんでした。";
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("保存設定を読込")) {
+		ammoSettingsMessage_ = ammoManager->LoadSettings("resources/ammo_settings.json")
+			? "保存した弾薬設定を読み込みました。"
+			: "保存した弾薬設定を読み込めませんでした。";
+	}
+	if (!ammoSettingsMessage_.empty()) {
+		ImGui::TextWrapped("%s", ammoSettingsMessage_.c_str());
 	}
 #endif
 }

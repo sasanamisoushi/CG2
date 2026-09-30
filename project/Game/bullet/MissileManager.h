@@ -27,6 +27,10 @@ public:
     // デバッグ表示用のゲッター
     const std::list<std::unique_ptr<Missile>>& GetMissiles() const { return missiles_; }
 
+    // 敵が破棄される前に、追尾中のミサイルから対象参照を外す。
+    void ClearTarget(const Enemy* target);
+    void ClearAllTargets();
+
 private:
     // ミサイルの実体を管理するリスト
     std::list<std::unique_ptr<Missile>> missiles_;

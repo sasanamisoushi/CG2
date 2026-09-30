@@ -1,4 +1,4 @@
-﻿#include "Player.h"
+#include "Player.h"
 #include "PlayerMovementController.h"
 #include "PlayerActionController.h"
 #include "Game/base/GameSettings.h"
@@ -324,19 +324,6 @@ void Player::Initialize(const std::string &modelName) {
 	guardBarrierRing_->Initialize(Object3dCommon::GetInstance());
 	guardBarrierRing_->SetModel("PlayerGuardShieldRing");
 
-	FILE* fpInit = nullptr;
-	fopen_s(&fpInit, "C:\\Users\\k024g\\.gemini\\antigravity\\brain\\7cca55d0-fd01-48ff-9ea7-7b27dd6bbc34\\debug_log.txt", "w"); // Create new log file
-	if (fpInit) {
-		fprintf(fpInit, "=== Initialize ===\n");
-		fprintf(fpInit, "DomeModel: %p, RingModel: %p\n",
-			ModelManager::GetInstance()->FindModel("PlayerGuardShieldDome"),
-			ModelManager::GetInstance()->FindModel("PlayerGuardShieldRing"));
-		fprintf(fpInit, "DomeObjModel: %p, RingObjModel: %p\n",
-			guardBarrier_->GetModel(),
-			guardBarrierRing_->GetModel());
-		fclose(fpInit);
-	}
-
 	position_ = { 0.0f, 0.0f, 0.0f };
 	velocity_ = { 0.0f, 0.0f, 0.0f };
 	quaternion_ = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -620,26 +607,40 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
 	isNearCeilingBoundary_ = false;
 	ceilingBoundaryWarningIntensity_ = 0.0f;
 
-	if (lockOnTarget) {
-		UpdateLockOnRotation(*lockOnTarget);
-	}
 	if (isSpecialAttackActive_) {
 		isGuarding_ = false;
 		// 必殺技中はその場に固定し、慣性による移動も止める。
 		velocity_ = { 0.0f, 0.0f, 0.0f };
 
-		// 機体は固定したまま、視点だけはマウスと矢印キーで操作できる。
-		Input *input = Input::GetInstance();
-		constexpr float kSpecialCameraKeySpeed = 0.025f;
-		const float specialCameraMouseSensitivity = GameSettings::GetInstance().GetMouseSensitivity();
-		if (input->PushAction(PlayerAction::TurnLeft)) specialAttackCameraYaw_ -= kSpecialCameraKeySpeed;
-		if (input->PushAction(PlayerAction::TurnRight)) specialAttackCameraYaw_ += kSpecialCameraKeySpeed;
-		if (input->PushAction(PlayerAction::PitchUp)) specialAttackCameraPitch_ -= kSpecialCameraKeySpeed;
-		if (input->PushAction(PlayerAction::PitchDown)) specialAttackCameraPitch_ += kSpecialCameraKeySpeed;
-		specialAttackCameraYaw_ += static_cast<float>(input->GetMouseDeltaX()) * specialCameraMouseSensitivity;
-		specialAttackCameraPitch_ += static_cast<float>(input->GetMouseDeltaY()) * specialCameraMouseSensitivity;
-		specialAttackCameraPitch_ = std::clamp(specialAttackCameraPitch_, -1.2f, 1.2f);
+		if (lockOnTarget) {
+			// 必殺技中はロックオンしている敵に向きとカメラ視点を自動追従・固定する
+			Vector3 toTarget = { lockOnTarget->x - position_.x, lockOnTarget->y - position_.y, lockOnTarget->z - position_.z };
+			if (LengthSq(toTarget) > 0.0001f) {
+				Vector3 dir = NormalizeOrZero(toTarget);
+				specialAttackCameraYaw_ = std::atan2(dir.x, dir.z);
+				specialAttackCameraPitch_ = CameraPitchFromForward(dir);
+				quaternion_ = MakeNoRollLookQuaternion(dir);
+			}
+		} else {
+			// 機体は固定したまま、ロックオン対象が無い場合のみ手動調整
+			Input *input = Input::GetInstance();
+			constexpr float kSpecialCameraKeySpeed = 0.025f;
+			const float specialCameraMouseSensitivity = GameSettings::GetInstance().GetMouseSensitivity();
+			if (input->PushAction(PlayerAction::TurnLeft)) specialAttackCameraYaw_ -= kSpecialCameraKeySpeed;
+			if (input->PushAction(PlayerAction::TurnRight)) specialAttackCameraYaw_ += kSpecialCameraKeySpeed;
+			if (input->PushAction(PlayerAction::PitchUp)) specialAttackCameraPitch_ -= kSpecialCameraKeySpeed;
+			if (input->PushAction(PlayerAction::PitchDown)) specialAttackCameraPitch_ += kSpecialCameraKeySpeed;
+			specialAttackCameraYaw_ += static_cast<float>(input->GetMouseDeltaX()) * specialCameraMouseSensitivity;
+			specialAttackCameraPitch_ += static_cast<float>(input->GetMouseDeltaY()) * specialCameraMouseSensitivity;
+			specialAttackCameraPitch_ = std::clamp(specialAttackCameraPitch_, -1.2f, 1.2f);
+
+			Vector3 aimDir = GetAttackDirection();
+			quaternion_ = MakeNoRollLookQuaternion(aimDir);
+		}
 	} else {
+		if (lockOnTarget) {
+			UpdateLockOnRotation(*lockOnTarget);
+		}
 		Move(lockOnTarget != nullptr);
 		CheckCollision(obstacles);
 	}
@@ -656,21 +657,42 @@ void Player::Update(const std::list<std::unique_ptr<Obstacle>> &obstacles, const
     UpdateModel();
 }
 
-void Player::UpdateModel() {
+void Player::UpdatePresentation(const Vector3& position, const Vector3& eulerRotation,
+	float speed, bool isBoosting) {
+	position_ = position;
+	SetRotation(eulerRotation);
+
+	if (boosterEffect_) {
+		const PlayerModeParams& params = modeParams_[static_cast<int>(currentMode_)];
+		const float speedRatio = speed / (std::max)(0.0001f, params.maxMoveSpeed);
+		boosterEffect_->Update(position_, quaternion_, static_cast<int>(currentMode_), speedRatio, isBoosting);
+	}
+
+	// タイトルなどの自動飛行演出は、変形・ガードなどのプレイヤー入力を受け付けない。
+	UpdateModel(false);
+}
+
+void Player::UpdateModel(bool allowInput, bool advanceState) {
     auto input = Input::GetInstance();
-    if (input->TriggerAction(PlayerAction::TransformFighter)) ChangeMode(PlayerMode::Fighter);
-    if (input->TriggerAction(PlayerAction::TransformGerwalk)) ChangeMode(PlayerMode::Gerwalk);
-    if (input->TriggerAction(PlayerAction::TransformBattroid)) ChangeMode(PlayerMode::Battroid);
+    if (advanceState && allowInput) {
+        if (input->TriggerAction(PlayerAction::TransformFighter)) ChangeMode(PlayerMode::Fighter);
+        if (input->TriggerAction(PlayerAction::TransformGerwalk)) ChangeMode(PlayerMode::Gerwalk);
+        if (input->TriggerAction(PlayerAction::TransformBattroid)) ChangeMode(PlayerMode::Battroid);
+    }
 
     // Bキーでの既存ガード状態に、左腕のポーズ用ブレンド値を同期する。
     // この時点で更新しておくことで、シールド・無敵判定・モデルの見た目が同じフレームで揃う。
-    isGuarding_ = input->PushAction(PlayerAction::Guard) && !isSpecialAttackActive_;
-    const float guardPoseTarget = isGuarding_ ? 1.0f : 0.0f;
-    guardPoseWeight_ += (guardPoseTarget - guardPoseWeight_) * 0.22f;
+    // ガードはバトロイドモード限定 (canGuard == true) で可能とする。
+    if (advanceState) {
+        const bool canGuardInCurrentMode = GetModeParams(currentMode_).canGuard;
+        isGuarding_ = allowInput && canGuardInCurrentMode && input->PushAction(PlayerAction::Guard) && !isSpecialAttackActive_;
+        const float guardPoseTarget = isGuarding_ ? 1.0f : 0.0f;
+        guardPoseWeight_ += (guardPoseTarget - guardPoseWeight_) * 0.22f;
+    }
 
     // アニメーションの更新と適用
     if (animationData_.duration > 0.0f && !skeleton_.joints.empty()) {
-        if (!isAnimDebugActive_) {
+        if (advanceState && !isAnimDebugActive_) {
             if (isPlayingAction_ && currentActionAnim_) {
                 actionAnimTime_ += 1.0f / 60.0f;
                 if (actionAnimTime_ > currentActionAnim_->duration) {
@@ -689,7 +711,7 @@ void Player::UpdateModel() {
                 float diff = modeTargetTime - animationTime_;
                 animationTime_ += diff * 0.1f;
             } 
-        } else {
+        } else if (advanceState) {
             if (overrideAnimation_ != nullptr) {
                 // アニメーション編集ツール(カテゴリー5)等でカスタムアクションをデバッグ中の場合、
                 // ベースアニメーション(変形)は現在のモード状態を維持する
@@ -743,9 +765,11 @@ void Player::UpdateModel() {
         }
     }
         // スケールの滑らかな補間（アニメーション変形のように見せる）
-    currentDrawScale_.x += (targetDrawScale_.x - currentDrawScale_.x) * 0.2f;
-    currentDrawScale_.y += (targetDrawScale_.y - currentDrawScale_.y) * 0.2f;
-    currentDrawScale_.z += (targetDrawScale_.z - currentDrawScale_.z) * 0.2f;
+    if (advanceState) {
+        currentDrawScale_.x += (targetDrawScale_.x - currentDrawScale_.x) * 0.2f;
+        currentDrawScale_.y += (targetDrawScale_.y - currentDrawScale_.y) * 0.2f;
+        currentDrawScale_.z += (targetDrawScale_.z - currentDrawScale_.z) * 0.2f;
+    }
 
 	Quaternion visualQuaternion = quaternion_;
 	if (dodgeTimer_ > 0) {
@@ -754,9 +778,9 @@ void Player::UpdateModel() {
 		visualQuaternion = MyMath::Normalize(MyMath::Multiply(
 			quaternion_, MyMath::MakeAxisAngle({ 0.0f, 0.0f, 1.0f }, rollAngle)));
 	}
-    if (IsTransformPlayerModel()) {
+	if (IsTransformPlayerModel() && advanceState) {
 		UpdateTransformPlayerModel();
-    } else if (object_) {
+	} else if (object_) {
 	    object_->SetScale(currentDrawScale_);
 	    object_->SetTranslate(position_);
 	    object_->SetQuaternionRotate(visualQuaternion);
@@ -764,8 +788,10 @@ void Player::UpdateModel() {
     }
 
 	// Bキーを押している間だけガードを展開する。
-	const float targetGuardScale = isGuarding_ ? 1.0f : 0.0f;
-	guardScale_ += (targetGuardScale - guardScale_) * 0.25f;
+	if (advanceState) {
+		const float targetGuardScale = isGuarding_ ? 1.0f : 0.0f;
+		guardScale_ += (targetGuardScale - guardScale_) * 0.25f;
+	}
 
 	// シールドが背景に溶けても状態を認識できるよう、ガード中は機体を青く発光させる。
 	if (object_ && object_->GetModel() && !IsTransformPlayerModel()) {
@@ -779,7 +805,9 @@ void Player::UpdateModel() {
 	}
 
 	if (guardScale_ > 0.01f) {
-		guardBarrierPulse_ += 0.15f;
+		if (advanceState) {
+			guardBarrierPulse_ += 0.15f;
+		}
 		const float pulse = 0.5f + 0.5f * std::sin(guardBarrierPulse_);
 
 		Vector3 forward = GetForwardVector();
@@ -808,19 +836,6 @@ void Player::UpdateModel() {
 			origin.y + forward.y * forwardDistance,
 			origin.z + forward.z * forwardDistance
 		};
-
-		static int logCounter = 0;
-		if (logCounter++ % 60 == 0) {
-			FILE* fp = nullptr;
-			fopen_s(&fp, "C:\\Users\\k024g\\.gemini\\antigravity\\brain\\7cca55d0-fd01-48ff-9ea7-7b27dd6bbc34\\debug_log.txt", "a");
-			if (fp) {
-				fprintf(fp, "Pos: (%.3f, %.3f, %.3f) Fwd: (%.3f, %.3f, %.3f) ShieldPos: (%.3f, %.3f, %.3f)\n",
-					position_.x, position_.y, position_.z,
-					forward.x, forward.y, forward.z,
-					shieldPos.x, shieldPos.y, shieldPos.z);
-				fclose(fp);
-			}
-		}
 
 		const float pulseScale = 1.0f + pulse * 0.06f;
 
@@ -962,7 +977,11 @@ void Player::Draw(Camera* camera) {
 		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 	}
 	if (boosterEffect_) {
+		// スラスターだけは加算合成で描く。機体本体の通常描画状態を
+		// 引き継がないことで、半透明の炎が暗く埋もれないようにする。
+		Object3dCommon::GetInstance()->SetEffectDrawSettings();
 		boosterEffect_->Draw(camera);
+		Object3dCommon::GetInstance()->SetCommonDrawSettings();
 	}
 }
 
@@ -1033,7 +1052,7 @@ OBB Player::GetOBB() const {
 	return obb;
 }
 
-void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
+void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos, bool allowInput) {
 	Vector3 playerForward = NormalizeOrZero(GetForwardVector());
 	if (LengthSq(playerForward) <= 0.0001f) {
 		playerForward = { 0.0f, 0.0f, 1.0f };
@@ -1136,17 +1155,21 @@ void Player::UpdateCamera(Camera *camera, const Vector3 *targetPos) {
 	Quaternion cameraRotation = MakeNoRollLookQuaternion(lookForward);
 
 	if (currentMode_ == PlayerMode::Fighter) {
-		auto input = Input::GetInstance();
-		float rollAngle = 0.0f;
-		if (input->PushAction(PlayerAction::DodgeLeft) || input->PushAction(PlayerAction::TurnLeft)) {
-			rollAngle = 0.35f;
-		} else if (input->PushAction(PlayerAction::DodgeRight) || input->PushAction(PlayerAction::TurnRight)) {
-			rollAngle = -0.35f;
-		}
-		
 		static float currentCameraRoll = 0.0f;
-		currentCameraRoll = currentCameraRoll + (rollAngle - currentCameraRoll) * 0.1f;
-		
+		if (!allowInput) {
+			// タイトル背景などではA/Dをカメラのバンクへ渡さない。
+			currentCameraRoll = 0.0f;
+		} else {
+			auto input = Input::GetInstance();
+			float rollAngle = 0.0f;
+			if (input->PushAction(PlayerAction::DodgeLeft) || input->PushAction(PlayerAction::TurnLeft)) {
+				rollAngle = 0.35f;
+			} else if (input->PushAction(PlayerAction::DodgeRight) || input->PushAction(PlayerAction::TurnRight)) {
+				rollAngle = -0.35f;
+			}
+			currentCameraRoll = currentCameraRoll + (rollAngle - currentCameraRoll) * 0.1f;
+		}
+
 		Quaternion rollQ = MyMath::MakeAxisAngle({0.0f, 0.0f, 1.0f}, currentCameraRoll);
 		cameraRotation = MyMath::Multiply(cameraRotation, rollQ);
 	}
@@ -1208,6 +1231,7 @@ void Player::SetRotation(const Vector3 &eulerRotation) {
 }
 
 void Player::OnCollision() {
+	if (isSpecialAttackActive_ || IsDodging() || IsGuarding()) return;
 	PlayerActionController{}.Destroy(*this);
 }
 

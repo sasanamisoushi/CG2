@@ -4,9 +4,11 @@
 #include <vector>
 #include <memory>
 #include <list>
+#include <array>
 
 class Player; // 前方宣言
 class Obstacle; // 前方宣言
+class Camera;
 
 class EnemyBulletManager {
 public:
@@ -14,7 +16,8 @@ public:
     // プレイヤーへのポインタを受け取って当たり判定を行う
     void Update(Player *player, std::vector<Vector3> &hitPositions, const std::list<std::unique_ptr<Obstacle>> &obstacles);
     void UpdateModels();
-    void Draw();
+    // 弾幕時は描画数を制限し、命中判定とは独立して描画負荷だけを抑える。
+    void Draw(Camera *camera = nullptr);
 
     // 弾を発射する
     void Shoot(const Vector3 &position, const Vector3 &velocity);
@@ -46,5 +49,6 @@ private:
     void ShootConfigured(const Vector3 &position, const Vector3 &velocity, const Vector3 &scale,
                          float collisionRadius, int damage, int lifeTimer, const char *modelName);
     static const size_t kMaxBullets = 200; // 弾の最大プール数
+    static const size_t kMaxVisibleBullets = 96;
     std::vector<Bullet> bullets_;
 };

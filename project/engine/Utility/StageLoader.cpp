@@ -103,6 +103,7 @@ EnemySpawnData BuildEnemySpawnData(const json &objData, const Vector3 &position,
 	} else if (objData.contains("enemy_type") && objData["enemy_type"].is_string()) {
 		typeStr = objData["enemy_type"].get<std::string>();
 	}
+	spawnData.enemyType = typeStr;
 
 	StageLoader::DetermineEnemyTypeFlags(typeStr, spawnData.name, spawnData.isGround, spawnData.isJammer, spawnData.isBoss);
 

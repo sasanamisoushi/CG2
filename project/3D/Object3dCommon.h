@@ -16,6 +16,9 @@ public:
 
 	//エフェクト用描画設定
 	void SetEffectDrawSettings();
+
+	// 常時見せたい発光用。深度テストを行わず、機体や地形の裏でも光を失わない。
+	void SetOverlayEffectDrawSettings();
 	
 	//アルファブレンド（半透明）用描画設定
 	void SetAlphaBlendDrawSettings();
@@ -54,6 +57,7 @@ private:
 
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> effectPipelineState_;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> overlayEffectPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> alphaBlendPipelineState_;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> linePipelineState_;
 

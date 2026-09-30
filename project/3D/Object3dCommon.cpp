@@ -36,6 +36,13 @@ void Object3dCommon::SetEffectDrawSettings() {
 	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
+void Object3dCommon::SetOverlayEffectDrawSettings() {
+	// RootSignature と加算合成は通常のエフェクトと共有し、深度比較だけを無効化する。
+	dxCommon_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
+	dxCommon_->GetCommandList()->SetPipelineState(overlayEffectPipelineState_.Get());
+	dxCommon_->GetCommandList()->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+}
+
 void Object3dCommon::SetAlphaBlendDrawSettings() {
 	//ルートシグネチャをセットするコマンド
 	dxCommon_->GetCommandList()->SetGraphicsRootSignature(rootSignature_.Get());
@@ -248,6 +255,14 @@ void Object3dCommon::CreateGraphicsPipeline() {
 	effectPipelineState_ = nullptr;
 	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&effectPipelineState_));
 	assert(SUCCEEDED(hr) && "エフェクト用パイプラインの作成に失敗しました。");
+
+	// 機体のノズル光のように、カメラ角度によらず常に認識させたい発光用。
+	// 深度値は参照も書き込みもしないので、機体・地形に隠れない。
+	graphicsPipelineStateDesc.DepthStencilState.DepthEnable = false;
+	overlayEffectPipelineState_ = nullptr;
+	hr = dxCommon_->GetDevice()->CreateGraphicsPipelineState(&graphicsPipelineStateDesc, IID_PPV_ARGS(&overlayEffectPipelineState_));
+	assert(SUCCEEDED(hr) && "常時発光用パイプラインの作成に失敗しました。");
+	graphicsPipelineStateDesc.DepthStencilState.DepthEnable = true;
 
 	// アルファブレンド（半透明）用
 	graphicsPipelineStateDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;

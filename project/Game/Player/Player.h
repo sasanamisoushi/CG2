@@ -50,12 +50,15 @@ public:
     void Draw(Camera* camera = nullptr);
 
     // 更新だけしてロジックを動かさない処理（シミュレーション時など用）
-    void UpdateModel();
+    // 演出用では入力を読まずにモデル・アニメーションだけ更新できる。
+	// advanceState を false にすると、編集モード停止中でも描画用の行列だけを更新し、
+	// アニメーション・ガード・補間などのゲーム時間は進めない。
+	void UpdateModel(bool allowInput = true, bool advanceState = true);
 
     // カメラへの追従（Debug用のカメラではなく、本番用カメラをプレイヤーの後ろに置く処理）
 
     
-    void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr);
+    void UpdateCamera(Camera *camera, const Vector3 *targetPos = nullptr, bool allowInput = true);
     void SyncRotationToLastCameraDirection();
 
     Vector3 GetPosition() const { return position_; }
@@ -96,6 +99,11 @@ public:
         if (object_) object_->SetScale(scale); 
     }
     void SetRotation(const Vector3 &eulerRotation);
+    void SetVelocity(const Vector3& velocity) { velocity_ = velocity; }
+
+    // タイトルなど、入力を受け付けない演出専用の更新。
+    void UpdatePresentation(const Vector3& position, const Vector3& eulerRotation,
+        float speed, bool isBoosting);
 
     void OnCollision();
     void TakeDamage(int damage);

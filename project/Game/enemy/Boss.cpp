@@ -7,6 +7,11 @@
 namespace {
 Vector3 AddVector(const Vector3 &a, const Vector3 &b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
 Vector3 ScaleVector(const Vector3 &v, float s) { return { v.x * s, v.y * s, v.z * s }; }
+
+// 元の戦闘用スケール (0.40) を基準に、プレイヤーの約4倍まで拡大する。
+// X/Z を少し大きくして、横に広く厚みのある艦体にする。
+constexpr Vector3 kBossScale = { 2.00f, 1.60f, 2.20f };
+constexpr float kBossSidewaysYaw = 1.57079632679f; // 90 degrees
 }
 
 void Boss::Initialize(const Vector3 &position) {
@@ -22,8 +27,9 @@ void Boss::Initialize(const Vector3 &position) {
 
     SetIsBoss(true);
     hp_ = kMaxHP;
-    // ステージ内で全体を確認できるよう、巨大戦艦モデルを戦闘用の大きさに縮小する。
-    SetScale({ 0.40f, 0.40f, 0.40f });
+    SetScale(kBossScale);
+    // 艦首をプレイヤーの進行方向に対して横へ向ける。
+    SetRotation({ 0.0f, kBossSidewaysYaw, 0.0f });
     actionTimer_ = 0;
     summonRequests_ = 0;
     UpdateModel();

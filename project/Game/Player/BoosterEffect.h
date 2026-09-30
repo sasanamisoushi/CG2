@@ -17,7 +17,11 @@ private:
     struct Burner {
         std::unique_ptr<Trail> trail;
         std::unique_ptr<Object3d> trailObject;
+        // 停止中でも見える、ノズル直後の発光コアと外炎。
+        std::unique_ptr<Object3d> coreObject;
+        std::unique_ptr<Object3d> flameObject;
         Vector3 offset;
+        Vector3 exhaustDirection;
         Vector3 defaultScale;
         Vector3 currentScale;
         Vector4 color;

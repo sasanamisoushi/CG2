@@ -69,13 +69,18 @@ void Missile::Initialize(const Vector3 &position, const Vector3 &velocity, Missi
 
 	if (type_ == MissileType::MissileWithTrail) {
 		Vector3 forward = NormalizeOr(velocity_, { 0.0f, 0.0f, 1.0f });
+		if (target_ && !target_->IsDead()) {
+			Vector3 toTarget = Subtract(target_->GetPosition(), position_);
+			forward = NormalizeOr(toTarget, forward);
+			const float speed = Length(velocity_);
+			velocity_ = Scale(forward, speed > 0.001f ? speed : (std::max)(0.01f, tuning_.speed));
+		}
 		Vector3 right = NormalizeOr(MyMath::Cross(forward, { 0.0f, 1.0f, 0.0f }), { 1.0f, 0.0f, 0.0f });
 		Vector3 up = NormalizeOr(MyMath::Cross(right, forward), { 0.0f, 1.0f, 0.0f });
 		float spreadX = ((float)(rand() % 100) / 100.0f - 0.5f) * 2.0f;
 		float spreadY = ((float)(rand() % 100) / 100.0f - 0.5f) * 2.0f;
-		// 初期の広がりを抑える (1.5f -> 0.5f)
-		velocity_ = Add(velocity_, Scale(right, spreadX * 0.5f));
-		velocity_ = Add(velocity_, Scale(up, spreadY * 0.5f));
+		velocity_ = Add(velocity_, Scale(right, spreadX * 0.2f));
+		velocity_ = Add(velocity_, Scale(up, spreadY * 0.2f));
 	}
 
 	lifeTimer_ = (std::max)(1, tuning_.lifeTime);

@@ -1,5 +1,6 @@
 ﻿#include "EnemyBulletManager.h"
 #include "3D/Object3dCommon.h"
+#include "engine/Camera/Camera.h"
 #include "Game/Player/Player.h"
 #include "Game/obstacle/Obstacle.h" // 追加
 #include <algorithm>
@@ -9,6 +10,21 @@ namespace {
     // プレイヤーの通常弾と同じ球モデルに合わせた標準サイズ。
     constexpr float kEnemyBulletScale = 0.3f;
     constexpr float kEnemyBulletRadius = 0.3f;
+
+    // 三角形との詳細判定の前に、安価なAABB判定で対象外を除外する。
+    // 形状そのものの判定は後段で行うため、命中精度は変わらない。
+    bool OverlapsTriangleBounds(const Sphere& sphere, const Triangle& triangle) {
+        const float minX = (std::min)({ triangle.p[0].x, triangle.p[1].x, triangle.p[2].x });
+        const float maxX = (std::max)({ triangle.p[0].x, triangle.p[1].x, triangle.p[2].x });
+        const float minY = (std::min)({ triangle.p[0].y, triangle.p[1].y, triangle.p[2].y });
+        const float maxY = (std::max)({ triangle.p[0].y, triangle.p[1].y, triangle.p[2].y });
+        const float minZ = (std::min)({ triangle.p[0].z, triangle.p[1].z, triangle.p[2].z });
+        const float maxZ = (std::max)({ triangle.p[0].z, triangle.p[1].z, triangle.p[2].z });
+
+        return sphere.center.x + sphere.radius >= minX && sphere.center.x - sphere.radius <= maxX &&
+               sphere.center.y + sphere.radius >= minY && sphere.center.y - sphere.radius <= maxY &&
+               sphere.center.z + sphere.radius >= minZ && sphere.center.z - sphere.radius <= maxZ;
+    }
 }
 
 void EnemyBulletManager::Initialize() {
@@ -17,7 +33,7 @@ void EnemyBulletManager::Initialize() {
     for (auto &bullet : bullets_) {
         bullet.object = std::make_unique<Object3d>();
         bullet.object->Initialize(Object3dCommon::GetInstance());
-        bullet.object->SetModel("Sphere"); // プレイヤー弾と同じモデル
+        bullet.object->SetModel("EnemyBulletSphere");
         bullet.object->SetScale({ kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale });
         if (bullet.object->GetModel()) {
             bullet.object->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f }); // 通常弾と同じ黄色
@@ -34,14 +50,14 @@ void EnemyBulletManager::Initialize() {
 }
 
 void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositions, const std::list<std::unique_ptr<Obstacle>> &obstacles) {
+    const bool canHitPlayer = player && !player->IsDead();
+    const OBB playerOBB = canHitPlayer ? player->GetOBB() : OBB{};
+
     for (auto &bullet : bullets_) {
         if (bullet.isDead) {
-            bullet.position = { -9999.0f, -9999.0f, -9999.0f };
-            if (bullet.object) {
-                bullet.object->SetTranslate(bullet.position);
-                bullet.object->Update();
-            }
-            continue; // 非アクティブな弾はスキップ
+            // 非アクティブ弾は Draw() されない。再利用時に座標と行列を更新するため、
+            // ここでプール全体の Object3d を更新する必要はない。
+            continue;
         }
 
         // 1. 移動処理
@@ -151,11 +167,23 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
                 continue;
             }
 
+            // メッシュ判定に入る前に障害物全体を弾の球と照合する。
+            // OBBで命中を確定させず、通過した弾だけ三角形との詳細判定へ進める。
+            const OBB obstacleOBB = obstacle->GetOBB();
+            if (!MyMath::IsCollision(bulletSphere, obstacleOBB)) {
+                continue;
+            }
+
             bool collided = false;
             if (obstacle->IsUseMeshCollider()) {
                 // 地形はモデル全体を囲むOBBではなく、実際の三角形の表面だけで判定する。
                 // これにより、地上敵(VF3)の弾が発射直後に地形の箱へ触れて消えるのを防ぐ。
-                for (const Triangle& triangle : obstacle->GetWorldTriangles()) {
+                const auto& triangles = obstacle->GetWorldTriangles();
+                for (const size_t triangleIndex : obstacle->GetNearbyWorldTriangleIndices(bulletSphere)) {
+                    const Triangle& triangle = triangles[triangleIndex];
+                    if (!OverlapsTriangleBounds(bulletSphere, triangle)) {
+                        continue;
+                    }
                     Vector3 pushOut;
                     if (MyMath::IsCollision(bulletSphere, triangle, pushOut)) {
                         collided = true;
@@ -163,7 +191,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
                     }
                 }
             } else {
-                collided = MyMath::IsCollision(bulletSphere, obstacle->GetOBB());
+                collided = true;
             }
 
             if (collided) {
@@ -178,8 +206,7 @@ void EnemyBulletManager::Update(Player *player, std::vector<Vector3> &hitPositio
             continue; // 障害物に当たったら以降の判定はスキップ
         }
 
-        if (!player->IsDead()) {
-            OBB playerOBB = player->GetOBB();
+        if (canHitPlayer && !player->IsDead()) {
             if (MyMath::IsCollision(bulletSphere, playerOBB)) {
                 bullet.isDead = true; // 弾を消す
 
@@ -205,17 +232,56 @@ void EnemyBulletManager::UpdateModels() {
     }
 }
 
-void EnemyBulletManager::Draw() {
-    for (auto &bullet : bullets_) {
-        if (!bullet.isDead) { // アクティブな弾のみ描画
-            bullet.object->Draw();
+void EnemyBulletManager::Draw(Camera *camera) {
+    if (!camera) {
+        for (auto &bullet : bullets_) {
+            if (!bullet.isDead && bullet.object) {
+                bullet.object->Draw();
+            }
         }
+        return;
+    }
+
+    Vector4 frustumPlanes[6];
+    MyMath::ExtractFrustumPlanes(camera->GetViewProjectionMatrix(), frustumPlanes);
+    const Vector3 cameraPosition = camera->GetTranslate();
+
+    // 距離順にして、弾が大量にある場合でもプレイヤーの近くにある弾を優先して描画する。
+    std::array<std::pair<float, Object3d *>, kMaxBullets> visibleBullets{};
+    size_t visibleCount = 0;
+    for (auto &bullet : bullets_) {
+        if (bullet.isDead || !bullet.object) {
+            continue;
+        }
+
+        const Sphere bulletSphere{ bullet.position, bullet.collisionRadius };
+        if (!MyMath::IsInFrustum(bulletSphere, frustumPlanes)) {
+            continue;
+        }
+
+        const float dx = bullet.position.x - cameraPosition.x;
+        const float dy = bullet.position.y - cameraPosition.y;
+        const float dz = bullet.position.z - cameraPosition.z;
+        visibleBullets[visibleCount++] = { dx * dx + dy * dy + dz * dz, bullet.object.get() };
+    }
+
+    const size_t drawCount = (std::min)(visibleCount, kMaxVisibleBullets);
+    if (visibleCount > drawCount) {
+        std::nth_element(
+            visibleBullets.begin(),
+            visibleBullets.begin() + static_cast<std::ptrdiff_t>(drawCount),
+            visibleBullets.begin() + static_cast<std::ptrdiff_t>(visibleCount),
+            [](const auto &left, const auto &right) { return left.first < right.first; });
+    }
+
+    for (size_t index = 0; index < drawCount; ++index) {
+        visibleBullets[index].second->Draw();
     }
 }
 
 void EnemyBulletManager::Shoot(const Vector3 &position, const Vector3 &velocity) {
     ShootConfigured(position, velocity, { kEnemyBulletScale, kEnemyBulletScale, kEnemyBulletScale },
-                    kEnemyBulletRadius, 1, 120, "Sphere");
+                    kEnemyBulletRadius, 1, 120, "EnemyBulletSphere");
 }
 
 void EnemyBulletManager::ShootHeavyCannon(const Vector3 &position, const Vector3 &velocity) {
@@ -268,7 +334,7 @@ void EnemyBulletManager::ShootMissile(const Vector3 &position, const Vector3 &ve
             bullet.isDead = false;
 
             // プレイヤーの誘導弾と同じ Sphere モデル・赤色・等方スケールに統一する。
-            bullet.object->SetModel("Sphere");
+            bullet.object->SetModel("EnemyBulletSphere");
             bullet.object->SetScale({ 0.5f, 0.5f, 0.5f });
             if (bullet.object->GetModel()) {
                 bullet.object->GetModel()->SetColor({ 1.0f, 0.0f, 0.0f, 1.0f }); // プレイヤー誘導弾と同じ赤色
@@ -295,7 +361,7 @@ void EnemyBulletManager::ShootConfigured(const Vector3 &position, const Vector3 
 
             bullet.object->SetModel(modelName);
             bullet.object->SetScale(scale);
-            if (bullet.object->GetModel() && std::string(modelName) == "Sphere") {
+            if (bullet.object->GetModel() && std::string(modelName) == "EnemyBulletSphere") {
                 bullet.object->GetModel()->SetColor({ 1.0f, 1.0f, 0.0f, 1.0f });
             }
             bullet.object->SetTranslate(position);

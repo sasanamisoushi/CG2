@@ -498,8 +498,8 @@ void DirectXCommon::PostDraw() {
 	//GPUとのosに画面の交換を行うよう通知する
 	swapChain->Present(1, 0);
 
-	//FPS固定
-	UpdateFixFPS();
+	// Present(1, 0) が垂直同期を行う。ここで別途スリープすると、
+	// OS のスケジューリング誤差によってフレーム間隔が不均一になる。
 
 	//Fenceの値を更新
 	fenceValue++;

@@ -19,6 +19,8 @@ struct EnemyFlightPath {
 
 struct EnemySpawnData {
 	std::string name; // Blenderでのオブジェクト名
+	// JSON の enemy.type を保持する。シーンごとに出現させる敵種を絞り込むために使う。
+	std::string enemyType;
 	bool isBoss = false; // ボスかどうか
 	bool isJammer = false; // ジャミング敵かどうか
 	bool isGround = false; // 地上雑魚敵かどうか

@@ -1210,7 +1210,8 @@ void SimulationManager::DrawAnimationEditorUI() {
 
 	ImGui::SliderFloat("全体の尺 (秒)", &customAnimation_.duration, 0.1f, 10.0f);
 
-	if (isAnimationPlaying_) {
+	// 編集モード停止中は、アニメーション編集のタイムラインも進めない。
+	if (isAnimationPlaying_ && scene_->isEditorPreviewPlaying_) {
 		currentFrameTime_ += 1.0f / 60.0f;
 		if (currentFrameTime_ > customAnimation_.duration) {
 			currentFrameTime_ = isLooping_ ? 0.0f : customAnimation_.duration;

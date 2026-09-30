@@ -8,6 +8,11 @@ public:
 
     int GetEffectType() const { return param_.effectType; }
     void SetEffectType(int type) { param_.effectType = type; }
+    void SetVignette(float radius, float softness) {
+        param_.effectType = 4;
+        param_.vignetteRadius = radius;
+        param_.vignetteSoftness = softness;
+    }
     void SetVignetteSmoothing(float radius, float softness, float blurIntensity) {
         param_.effectType = 12;
         param_.vignetteRadius = radius;

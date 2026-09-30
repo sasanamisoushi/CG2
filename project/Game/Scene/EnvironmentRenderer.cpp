@@ -39,14 +39,16 @@ void EnvironmentRenderer::Initialize() {
 	boundaryAlertPlane_->Initialize(Object3dCommon::GetInstance(), PrimitiveType::Plane);
 }
 
-void EnvironmentRenderer::Update(Camera* camera) {
+void EnvironmentRenderer::Update(Camera* camera, bool advanceEffects) {
 if (skybox_ && showSkybox_) {
 		skybox_->Update(camera);
 	}
 
 	if (myRing_ && showNormalRing_) {
 		static float ringTime = 0.0f;
-		ringTime += 0.05f;
+		if (advanceEffects) {
+			ringTime += 0.05f;
+		}
 
 		myRing_->SetRotate({ 0.0f, 0.0f, 0.0f });
 		myRing_->SetScale({ 2.0f, 2.0f, 1.0f });
@@ -66,7 +68,9 @@ if (skybox_ && showSkybox_) {
 
 	if (myPartialRing_ && showPartialRing_) {
 		static float pRingTime = 0.0f;
-		pRingTime += 0.05f;
+		if (advanceEffects) {
+			pRingTime += 0.05f;
+		}
 
 		myPartialRing_->SetRotate({ 0.0f, 0.0f, pRingTime * -0.5f });
 		myPartialRing_->SetScale({ 2.0f, 2.0f, 1.0f });
@@ -85,8 +89,10 @@ if (skybox_ && showSkybox_) {
 	}
 
 	if (myCylinder_ && showCylinder_) {
-		cylinderUVOffset_[0] += cylinderUVScrollSpeed_[0];
-		cylinderUVOffset_[1] += cylinderUVScrollSpeed_[1];
+		if (advanceEffects) {
+			cylinderUVOffset_[0] += cylinderUVScrollSpeed_[0];
+			cylinderUVOffset_[1] += cylinderUVScrollSpeed_[1];
+		}
 
 		Model* cModel = myCylinder_->GetModel();
 		if (cModel) {
@@ -106,8 +112,10 @@ if (skybox_ && showSkybox_) {
 		myCylinder_->Update();
 	}
 
-	particleManager_->Update(camera);
-	particleEmitter_->Update();
+	if (advanceEffects) {
+		particleManager_->Update(camera);
+		particleEmitter_->Update();
+	}
 }
 
 void EnvironmentRenderer::Draw() {

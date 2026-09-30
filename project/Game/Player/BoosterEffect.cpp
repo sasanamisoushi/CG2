@@ -4,92 +4,76 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+constexpr float kPlayerModelScale = 0.08f;
+}
+
 void BoosterEffect::Initialize() {
     lastMode_ = -1;
     time_ = 0.0f;
+
+    // 常時表示する炎は、トレイルとは別の軽量なプリミティブで作る。
+    // 1つのモデルを左右ノズルの Object3d から共有しているため、描画コストを抑えられる。
+    ModelManager* modelManager = ModelManager::GetInstance();
+    modelManager->CreateSphereModel("PlayerThrusterCore", 12);
+    if (Model* core = modelManager->FindModel("PlayerThrusterCore")) {
+        core->SetTextureFilePath("resources/white1x1.png");
+        core->SetEnableLighting(false);
+        core->SetAlphaReference(0.0f);
+        core->SetColor({ 0.92f, 0.98f, 1.0f, 1.0f });
+    }
+
+    // Y方向に細くなる円すい。各ノズルでは回転して、機体後方へ伸ばす。
+    modelManager->CreateCylinderModel("PlayerThrusterFlame", 16, 0.035f, 0.16f, 1.0f);
+    if (Model* flame = modelManager->FindModel("PlayerThrusterFlame")) {
+        flame->SetTextureFilePath("resources/white1x1.png");
+        flame->SetEnableLighting(false);
+        flame->SetAlphaReference(0.0f);
+        flame->SetColor({ 0.08f, 0.55f, 1.0f, 0.92f });
+    }
 }
 
 void BoosterEffect::SetupBurnersForMode(int playerMode) {
     burners_.clear();
     lastMode_ = playerMode;
 
-    const float scale = 0.08f; // vf-15cのスケール
+    const float scale = kPlayerModelScale;
 
-    if (playerMode == 0) { // Fighter
-        // 後ろノズル左右2箇所
-        Burner b1, b2;
-        
-        b1.trail = std::make_unique<Trail>();
-        b1.trail->Initialize(15);
-        b1.trailObject = std::make_unique<Object3d>();
-        b1.trailObject->Initialize(Object3dCommon::GetInstance());
-        b1.trailObject->SetModel("SmokeTrail");
-        b1.offset = { -1.2f * scale, 0.0f * scale, -4.5f * scale };
-        b1.defaultScale = { 0.25f * scale, 0.25f * scale, 1.5f * scale };
-        b1.currentScale = b1.defaultScale;
-        b1.color = { 0.2f, 0.5f, 1.0f, 0.9f }; // ファイターは青白い炎
-        burners_.push_back(std::move(b1));
+    const auto makeBurner = [](const Vector3& offset, const Vector3& defaultScale,
+        const Vector4& color, int trailLength) {
+        Burner burner;
+        burner.trail = std::make_unique<Trail>();
+        burner.trail->Initialize(trailLength);
+        burner.trailObject = std::make_unique<Object3d>();
+        burner.trailObject->Initialize(Object3dCommon::GetInstance());
+        burner.trailObject->SetModel("SmokeTrail");
 
-        b2.trail = std::make_unique<Trail>();
-        b2.trail->Initialize(15);
-        b2.trailObject = std::make_unique<Object3d>();
-        b2.trailObject->Initialize(Object3dCommon::GetInstance());
-        b2.trailObject->SetModel("SmokeTrail");
-        b2.offset = { 1.2f * scale, 0.0f * scale, -4.5f * scale };
-        b2.defaultScale = { 0.25f * scale, 0.25f * scale, 1.5f * scale };
-        b2.currentScale = b2.defaultScale;
-        b2.color = { 0.2f, 0.5f, 1.0f, 0.9f };
-        burners_.push_back(std::move(b2));
+        burner.coreObject = std::make_unique<Object3d>();
+        burner.coreObject->Initialize(Object3dCommon::GetInstance());
+        burner.coreObject->SetModel("PlayerThrusterCore");
+        burner.flameObject = std::make_unique<Object3d>();
+        burner.flameObject->Initialize(Object3dCommon::GetInstance());
+        burner.flameObject->SetModel("PlayerThrusterFlame");
 
-    } else if (playerMode == 1) { // Gerwalk
-        Burner b1, b2;
-        
-        b1.trail = std::make_unique<Trail>();
-        b1.trail->Initialize(12);
-        b1.trailObject = std::make_unique<Object3d>();
-        b1.trailObject->Initialize(Object3dCommon::GetInstance());
-        b1.trailObject->SetModel("SmokeTrail");
-        b1.offset = { -1.5f * scale, -3.5f * scale, -1.5f * scale };
-        b1.defaultScale = { 0.22f * scale, 0.22f * scale, 1.2f * scale };
-        b1.currentScale = b1.defaultScale;
-        b1.color = { 1.0f, 0.5f, 0.1f, 0.8f }; // ホバリングはオレンジ
-        burners_.push_back(std::move(b1));
+        burner.offset = offset;
+        // ゲーム内のプレイヤー前方はローカル +Z。三人称カメラはその反対側
+        // （-Z、機体後方）に置かれるため、噴射も -Z 側へ伸ばす。
+        burner.exhaustDirection = { 0.0f, 0.0f, -1.0f };
+        burner.defaultScale = defaultScale;
+        burner.currentScale = defaultScale;
+        burner.color = color;
+        return burner;
+    };
 
-        b2.trail = std::make_unique<Trail>();
-        b2.trail->Initialize(12);
-        b2.trailObject = std::make_unique<Object3d>();
-        b2.trailObject->Initialize(Object3dCommon::GetInstance());
-        b2.trailObject->SetModel("SmokeTrail");
-        b2.offset = { 1.5f * scale, -3.5f * scale, -1.5f * scale };
-        b2.defaultScale = { 0.22f * scale, 0.22f * scale, 1.2f * scale };
-        b2.currentScale = b2.defaultScale;
-        b2.color = { 1.0f, 0.5f, 0.1f, 0.8f };
-        burners_.push_back(std::move(b2));
-
-    } else { // Battroid
-        Burner b1, b2;
-        
-        b1.trail = std::make_unique<Trail>();
-        b1.trail->Initialize(10);
-        b1.trailObject = std::make_unique<Object3d>();
-        b1.trailObject->Initialize(Object3dCommon::GetInstance());
-        b1.trailObject->SetModel("SmokeTrail");
-        b1.offset = { -0.8f * scale, 1.5f * scale, -2.0f * scale };
-        b1.defaultScale = { 0.18f * scale, 0.18f * scale, 1.0f * scale };
-        b1.currentScale = b1.defaultScale;
-        b1.color = { 1.0f, 0.3f, 0.1f, 0.85f }; // バトロイドは赤みが強い炎
-        burners_.push_back(std::move(b1));
-
-        b2.trail = std::make_unique<Trail>();
-        b2.trail->Initialize(10);
-        b2.trailObject = std::make_unique<Object3d>();
-        b2.trailObject->Initialize(Object3dCommon::GetInstance());
-        b2.trailObject->SetModel("SmokeTrail");
-        b2.offset = { 0.8f * scale, 1.5f * scale, -2.0f * scale };
-        b2.defaultScale = { 0.18f * scale, 0.18f * scale, 1.0f * scale };
-        b2.currentScale = b2.defaultScale;
-        b2.color = { 1.0f, 0.3f, 0.1f, 0.85f };
-        burners_.push_back(std::move(b2));
+    if (playerMode == 0) { // Fighter: 胴体後部の左右ノズル
+        burners_.push_back(makeBurner({ -1.2f * scale, 0.0f, -4.5f * scale }, { 0.25f * scale, 0.25f * scale, 1.5f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 15));
+        burners_.push_back(makeBurner({  1.2f * scale, 0.0f, -4.5f * scale }, { 0.25f * scale, 0.25f * scale, 1.5f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 15));
+    } else if (playerMode == 1) { // Gerwalk: 脚部後方の左右ノズル
+        burners_.push_back(makeBurner({ -1.5f * scale, -3.5f * scale, -1.5f * scale }, { 0.22f * scale, 0.22f * scale, 1.2f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 12));
+        burners_.push_back(makeBurner({  1.5f * scale, -3.5f * scale, -1.5f * scale }, { 0.22f * scale, 0.22f * scale, 1.2f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 12));
+    } else { // Battroid: 背部の左右ノズル
+        burners_.push_back(makeBurner({ -0.8f * scale, 1.5f * scale, -2.0f * scale }, { 0.18f * scale, 0.18f * scale, 1.0f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 10));
+        burners_.push_back(makeBurner({  0.8f * scale, 1.5f * scale, -2.0f * scale }, { 0.18f * scale, 0.18f * scale, 1.0f * scale }, { 0.2f, 0.5f, 1.0f, 0.9f }, 10));
     }
 }
 
@@ -120,6 +104,30 @@ void BoosterEffect::Update(const Vector3& position, const Quaternion& rotation, 
 
         Vector3 worldOffset = MyMath::Transform(burner.offset, rotationMatrix);
         Vector3 worldPosition = { position.x + worldOffset.x, position.y + worldOffset.y, position.z + worldOffset.z };
+        const Vector3 worldExhaust = MyMath::RotateVector(burner.exhaustDirection, rotation);
+
+        // 移動していなくても見える白いコアと青い外炎。
+        const float flameLength = kPlayerModelScale * (5.2f + cappedSpeedRatio * 5.0f + (isAccelerating ? 7.0f : 0.0f) + noise * 3.0f);
+        const float flameRadius = kPlayerModelScale * (0.90f + cappedSpeedRatio * 0.28f + (isAccelerating ? 0.36f : 0.0f));
+        if (burner.coreObject) {
+            burner.coreObject->SetTranslate(worldPosition);
+            const float coreRadius = kPlayerModelScale * (0.64f + cappedSpeedRatio * 0.14f + (isAccelerating ? 0.20f : 0.0f));
+            burner.coreObject->SetScale({ coreRadius, coreRadius, coreRadius });
+            burner.coreObject->Update();
+        }
+        if (burner.flameObject) {
+            // 円すいのローカル +Y 軸をローカル -Z（機体後方）へ回してから、機体姿勢を重ねる。
+            const Quaternion localFlameAxis = MyMath::MakeAxisAngle({ 1.0f, 0.0f, 0.0f }, -1.57079632679f);
+            // 根元がノズルに埋まらないよう、後方へわずかに押し出す。
+            burner.flameObject->SetTranslate({
+                worldPosition.x + worldExhaust.x * kPlayerModelScale * 0.05f,
+                worldPosition.y + worldExhaust.y * kPlayerModelScale * 0.05f,
+                worldPosition.z + worldExhaust.z * kPlayerModelScale * 0.05f
+            });
+            burner.flameObject->SetScale({ flameRadius, flameLength, flameRadius });
+            burner.flameObject->SetQuaternionRotate(MyMath::Multiply(rotation, localFlameAxis));
+            burner.flameObject->Update();
+        }
 
         if (burner.trail) {
             burner.trail->Update(worldPosition);
@@ -132,6 +140,20 @@ void BoosterEffect::Update(const Vector3& position, const Quaternion& rotation, 
 void BoosterEffect::Draw(Camera* camera) {
     if (!camera) return;
 
+    // ノズル直後の光は、機体の陰に入っても完全には消えないよう深度なしで描く。
+    // 移動方向を示すトレイルだけは奥行きを保つため通常のエフェクト描画へ戻す。
+    Object3dCommon* object3dCommon = Object3dCommon::GetInstance();
+    object3dCommon->SetOverlayEffectDrawSettings();
+    for (auto& burner : burners_) {
+        if (burner.flameObject) {
+            burner.flameObject->Draw();
+        }
+        if (burner.coreObject) {
+            burner.coreObject->Draw();
+        }
+    }
+
+    object3dCommon->SetEffectDrawSettings();
     for (auto& burner : burners_) {
         if (burner.trail && burner.trailObject && burner.trailObject->GetModel()) {
             float width = burner.currentScale.x * 20.0f;
