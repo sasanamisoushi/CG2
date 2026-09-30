@@ -40,6 +40,7 @@ private:
 	void ToggleBackgroundMode();
 	void UpdateGameplayBackground();
 	void DrawBackgroundModeImGui();
+	void DrawFoldTransition(float screenWidth, float screenHeight);
 	std::unique_ptr<Camera> camera;
 
 	std::unique_ptr<Sprite> titleSprite;
@@ -48,6 +49,12 @@ private:
 	std::array<std::unique_ptr<Sprite>, 8> menuLabelSprites_;
 	std::array<std::unique_ptr<Sprite>, 40> settingMeterSegments_;
 	std::array<std::array<std::unique_ptr<Sprite>, 5>, 2> settingValueDigitSprites_;
+	// START GAME 後にフレームごとに生成する、中心へ吸い込まれるフォールド粒子・核・ビーム。
+	std::array<std::unique_ptr<Sprite>, 240> foldStreakSprites_;
+	std::unique_ptr<Sprite> foldVeilSprite_;
+	std::unique_ptr<Sprite> foldCoreSprite_;
+	std::unique_ptr<Sprite> foldBeamSprite_;
+	std::unique_ptr<Sprite> foldFlashSprite_;
 
 	std::unique_ptr<Player> titlePlayer_;
 	std::unique_ptr<GamePlayScene> gameplayBackground_;

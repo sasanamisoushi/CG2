@@ -83,6 +83,22 @@ void TitleScene::Initialize() {
 			digit->Initialize(SpriteCommon::GetInstance(), "resources/hud_digits.png");
 		}
 	}
+	for (auto& streak : foldStreakSprites_) {
+		streak = std::make_unique<Sprite>();
+		// 透明縁を持つ発光円。各粒子を重ねて、太い紫の渦を作る。
+		streak->Initialize(SpriteCommon::GetInstance(), "resources/circle2.png");
+		streak->SetAnchorPoint({ 0.5f, 0.5f });
+	}
+	foldVeilSprite_ = std::make_unique<Sprite>();
+	foldVeilSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	foldCoreSprite_ = std::make_unique<Sprite>();
+	foldCoreSprite_->Initialize(SpriteCommon::GetInstance(), "resources/circle2.png");
+	foldCoreSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+	foldBeamSprite_ = std::make_unique<Sprite>();
+	foldBeamSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
+	foldBeamSprite_->SetAnchorPoint({ 0.5f, 0.5f });
+	foldFlashSprite_ = std::make_unique<Sprite>();
+	foldFlashSprite_->Initialize(SpriteCommon::GetInstance(), "resources/white1x1.png");
 
 	// 本編と同じプレイヤー機を、タイトルでは入力なしの自動飛行として見せる。
 	titlePlayer_ = std::make_unique<Player>();
@@ -121,6 +137,12 @@ void TitleScene::Update() {
 		if (backgroundMode_ == BackgroundMode::GameplayBackground && gameplayBackground_) {
 			// 出撃中もタイトルで表示していた地形を描画し続ける。
 			UpdateGameplayBackground();
+			const float launchProgress = static_cast<float>(launchFrame_) /
+				static_cast<float>(kLaunchDurationFrames);
+			// フォールド開始後だけ背景を少し沈め、航法光を読み取りやすくする。
+			launchFadeAlpha_ = GameSettings::GetInstance().IsFoldTransitionEnabled()
+				? std::clamp((launchProgress - 0.24f) * 0.26f, 0.0f, 0.16f)
+				: 0.0f;
 			if (++launchFrame_ >= kLaunchDurationFrames) {
 				GameStartTransition::Begin({ gameplayBackground_->GetTitleLaunchForward(), 0.78f, 54 });
 				SceneManager::GetInstance()->ChangeScene("GAMEPLAY");
@@ -227,6 +249,13 @@ void TitleScene::DrawBackgroundModeImGui() {
 			ToggleBackgroundMode();
 		}
 		ImGui::TextDisabled("Run the gameplay world behind the title");
+
+		ImGui::Separator();
+		bool foldTransitionEnabled = GameSettings::GetInstance().IsFoldTransitionEnabled();
+		if (ImGui::Checkbox("Fold transition", &foldTransitionEnabled)) {
+			GameSettings::GetInstance().SetFoldTransitionEnabled(foldTransitionEnabled);
+		}
+		ImGui::TextDisabled("Saved automatically");
 	}
 	ImGui::End();
 #endif
@@ -389,10 +418,99 @@ void TitleScene::Draw() {
 	if (titleSprite && !isSettingsOpen_ && flightState_ == TitleFlightState::Cruising) {
 		titleSprite->Draw();
 	}
+	if (flightState_ == TitleFlightState::Launching && GameSettings::GetInstance().IsFoldTransitionEnabled()) {
+		DrawFoldTransition(
+			static_cast<float>(WinApp::GetClientWidth()),
+			static_cast<float>(WinApp::GetClientHeight()));
+	}
 
 	if (flightState_ == TitleFlightState::Cruising) {
 		DrawMenuOverlay(static_cast<float>(WinApp::GetClientWidth()), static_cast<float>(WinApp::GetClientHeight()));
 	}
+}
+
+void TitleScene::DrawFoldTransition(float screenWidth, float screenHeight) {
+	if (!foldVeilSprite_ || !foldCoreSprite_ || !foldBeamSprite_ || !foldFlashSprite_) {
+		return;
+	}
+
+	const float progress = std::clamp(
+		static_cast<float>(launchFrame_) / static_cast<float>(kLaunchDurationFrames), 0.0f, 1.0f);
+	// 0.22 から航法光が集まり、0.75 付近で跳躍光へ変化する。
+	const float streakProgress = std::clamp((progress - 0.22f) / 0.54f, 0.0f, 1.0f);
+	const float streakAlpha = std::clamp(streakProgress * 2.8f, 0.0f, 1.0f) *
+		std::clamp((0.86f - progress) * 7.0f, 0.0f, 1.0f);
+	const float flashAlpha = std::clamp((progress - 0.73f) / 0.22f, 0.0f, 1.0f);
+	const float centerX = screenWidth * 0.50f;
+	const float centerY = screenHeight * 0.47f;
+	const float maxRadius = (std::min)(screenWidth, screenHeight) * 0.78f;
+
+	// 静止画は使わず、薄い水色の空間色と多数の発光球を毎フレーム計算して重ねる。
+	foldVeilSprite_->SetPosition({ 0.0f, 0.0f });
+	foldVeilSprite_->SetAnchorPoint({ 0.0f, 0.0f });
+	foldVeilSprite_->SetSize({ screenWidth, screenHeight });
+	foldVeilSprite_->SetColor({ 0.02f, 0.34f, 0.58f, streakAlpha * 0.30f });
+	foldVeilSprite_->Update();
+	foldVeilSprite_->Draw();
+
+	for (size_t i = 0; i < foldStreakSprites_.size(); ++i) {
+		Sprite* particle = foldStreakSprites_[i].get();
+		if (!particle) {
+			continue;
+		}
+		constexpr size_t kParticlesPerSpiral = 10;
+		constexpr float kSpiralCount = 24.0f;
+		const float spiralIndex = static_cast<float>(i / kParticlesPerSpiral);
+		const float particleIndex = static_cast<float>(i % kParticlesPerSpiral);
+		const float radialSeed = (particleIndex + 0.35f) / static_cast<float>(kParticlesPerSpiral);
+		// 全粒子を外側から核へ寄せつつ、螺旋の位相を回す。遠い粒子ほど大きくして隙間を埋める。
+		const float inwardFactor = 1.0f - streakProgress * 0.84f;
+		const float radius = 16.0f + maxRadius * radialSeed * inwardFactor;
+		const float wavePhase = spiralIndex * 1.19f + radialSeed * 5.8f + progress * 10.5f;
+		const float angle = spiralIndex * (6.28318531f / kSpiralCount) + progress * 7.0f +
+			std::sin(wavePhase) * (0.20f + radialSeed * 0.22f);
+		const float curl = std::cos(wavePhase * 1.31f) * maxRadius * 0.052f * radialSeed;
+		const float x = centerX + std::cos(angle) * radius - std::sin(angle) * curl;
+		const float y = centerY + std::sin(angle) * radius + std::cos(angle) * curl;
+		const float diameter = 38.0f + radialSeed * 82.0f + std::sin(wavePhase * 1.9f) * 9.0f;
+		const float cyanVariation = 0.28f + std::fmod(spiralIndex * 0.11f, 0.24f);
+		particle->SetPosition({ x, y });
+		particle->SetSize({ diameter, diameter });
+		particle->SetRotation(0.0f);
+		particle->SetColor({ cyanVariation, 0.72f + radialSeed * 0.24f, 1.0f,
+			streakAlpha * (0.22f + radialSeed * 0.22f) });
+		particle->Update();
+		particle->Draw();
+	}
+
+	// 核と水平ビームを最後に重ね、太い光のうねりが一点へ収束しているように見せる。
+	const float coreSize = 54.0f + streakProgress * (screenHeight * 0.17f);
+	foldCoreSprite_->SetPosition({ centerX, centerY });
+	foldCoreSprite_->SetSize({ coreSize, coreSize });
+	foldCoreSprite_->SetRotation(progress * 2.2f);
+	foldCoreSprite_->SetColor({ 0.76f, 1.0f, 1.0f, streakAlpha * 0.76f });
+	foldCoreSprite_->Update();
+	foldCoreSprite_->Draw();
+
+	foldBeamSprite_->SetPosition({ centerX, centerY });
+	foldBeamSprite_->SetSize({ screenWidth * (0.08f + streakProgress * 1.04f), 2.0f + streakProgress * 11.0f });
+	foldBeamSprite_->SetRotation(std::sin(progress * 7.0f) * 0.025f);
+	foldBeamSprite_->SetColor({ 0.58f, 0.96f, 1.0f, streakAlpha * 0.74f });
+	foldBeamSprite_->Update();
+	foldBeamSprite_->Draw();
+
+	// 中心から外へ広がる水色の跳躍光。最後は白へ寄せて場面切替を隠す。
+	foldFlashSprite_->SetPosition({ 0.0f, 0.0f });
+	foldFlashSprite_->SetAnchorPoint({ 0.0f, 0.0f });
+	foldFlashSprite_->SetSize({ screenWidth, screenHeight });
+	foldFlashSprite_->SetColor({
+		0.46f + flashAlpha * 0.54f,
+		0.86f + flashAlpha * 0.14f,
+		1.00f,
+		flashAlpha * 0.88f,
+	});
+	foldFlashSprite_->Update();
+	foldFlashSprite_->Draw();
 }
 
 void TitleScene::DrawMenuOverlay(float screenWidth, float screenHeight) {
